@@ -152,7 +152,8 @@ class Messenger extends EventEmitter {
     this.port = await new Promise((resolve, reject) => {
       const tryListen = (port, fallback) => {
         const onError = (err) => {
-          if (fallback && err.code === 'EADDRINUSE') tryListen(0, false);
+          // Port taken, or reserved by Windows (EACCES): let the system pick one.
+          if (fallback && (err.code === 'EADDRINUSE' || err.code === 'EACCES')) tryListen(0, false);
           else reject(err);
         };
         this.server.once('error', onError);

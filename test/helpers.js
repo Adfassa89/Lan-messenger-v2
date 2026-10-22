@@ -4,7 +4,8 @@ const os = require('os');
 const path = require('path');
 const { Messenger } = require('../src/core/messenger');
 
-let portBase = 41000 + Math.floor(Math.random() * 2000) * 4;
+// Stay below the port ranges Windows reserves for Hyper-V and dynamic use.
+let portBase = 21000 + Math.floor(Math.random() * 2000) * 4;
 
 function tmpDir(label) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `lanmsg-${label}-`));

@@ -131,6 +131,7 @@ class FileTransfers {
     link.on('close', () => {
       clearTimeout(idle);
       this.uploads.delete(link);
+      if (link.stream) link.stream.destroy();
     });
     const error = (msg) => link.sendJson({ type: 'file-error', error: msg });
 
@@ -184,6 +185,7 @@ class FileTransfers {
   }
 
   _stream(link, rs, start, onProgress) {
+    link.stream = rs;
     let sent = start;
     rs.on('data', (chunk) => {
       sent += chunk.length;
@@ -200,7 +202,6 @@ class FileTransfers {
     rs.on('error', (err) => {
       if (!link.closed) link.sendJson({ type: 'file-error', error: err.message });
     });
-    link.on('close', () => rs.destroy());
   }
 
   // ---------- receiver side ----------
