@@ -1,0 +1,53 @@
+{
+  "name": "lan-messenger",
+  "productName": "LAN Messenger",
+  "version": "2.0.0",
+  "description": "Fast, secure, serverless messenger for your local network",
+  "main": "src/main/main.js",
+  "author": "LAN Messenger",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "dist": "electron-builder --win --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.0"
+  },
+  "build": {
+    "appId": "com.lanmessenger.v2",
+    "productName": "LAN Messenger",
+    "copyright": "LAN Messenger",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LAN Messenger",
+      "include": "build/installer.nsh",
+      "artifactName": "LAN-Messenger-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "LAN-Messenger-Portable-${version}.${ext}"
+    }
+  }
+}

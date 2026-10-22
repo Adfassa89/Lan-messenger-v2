@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; media-src 'self' data: blob:">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LAN Messenger</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar">
+      <div class="brand drag">
+        <div class="brand-logo">
+          <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.2 3.6c-.5.4-1.3.1-1.3-.6V16A2.5 2.5 0 0 1 4 13.5z"/></svg>
+        </div>
+        <span>LAN Messenger</span>
+      </div>
+
+      <button class="me" id="me" title="Change your status"></button>
+
+      <div class="search-box">
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="filter" type="text" placeholder="Search people and chats" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="side-actions">
+        <button class="chip" id="btnNewGroup">
+          <svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 19c.8-3.4 3.4-5 6.5-5s5.7 1.6 6.5 5"/><path d="M18 8v6M15 11h6"/></svg>
+          New group
+        </button>
+        <button class="chip" id="btnSearch">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="17.5" cy="16.5" r="3"/><path d="m22 21-2.3-2.3"/></svg>
+          Find messages
+        </button>
+      </div>
+
+      <div class="conv-list" id="convList"></div>
+
+      <div class="side-footer">
+        <div class="net" id="netInfo"></div>
+        <button class="icon-btn" id="btnSettings" title="Settings">
+          <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <main class="chat" id="chat">
+      <header class="chat-header drag" id="chatHeader"></header>
+      <div class="messages" id="messages"></div>
+      <div class="typing" id="typing"></div>
+      <div class="offline-hint" id="offlineHint"></div>
+      <footer class="composer" id="composer">
+        <button class="icon-btn" id="btnAttach" title="Send files">
+          <svg class="ico" viewBox="0 0 24 24"><path d="m21 11.5-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg>
+        </button>
+        <div class="input-wrap">
+          <textarea id="input" rows="1" placeholder="Write a message…"></textarea>
+          <button class="icon-btn" id="btnEmoji" title="Emoji">
+            <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><path d="M9 9.5h.01M15 9.5h.01" stroke-width="2.6"/></svg>
+          </button>
+        </div>
+        <button class="send-btn" id="btnSend" title="Send (Enter)">
+          <svg viewBox="0 0 24 24"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>
+        </button>
+      </footer>
+
+      <div class="welcome" id="welcome">
+        <div class="welcome-art">
+          <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.2 3.6c-.5.4-1.3.1-1.3-.6V16A2.5 2.5 0 0 1 4 13.5z"/></svg>
+        </div>
+        <h1>Welcome to LAN Messenger</h1>
+        <p>People on your network appear on the left automatically.<br>Pick someone to start chatting, or message <b>Everyone</b> at once.</p>
+        <div class="welcome-tips">
+          <div><b>Drag &amp; drop</b> files into a chat to send them</div>
+          <div><b>Ctrl + V</b> pastes screenshots straight into a chat</div>
+          <div><b>Ctrl + K</b> jumps to a person or group</div>
+        </div>
+      </div>
+
+      <div class="drop-overlay" id="dropOverlay">
+        <div>
+          <svg class="ico" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+          <div>Drop files to send</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="popover" class="popover hidden"></div>
+  <div id="modalRoot"></div>
+  <div id="toasts"></div>
+
+  <script src="emoji.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
