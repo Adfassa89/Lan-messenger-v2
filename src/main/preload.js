@@ -1,41 +1,70 @@
 'use strict';
-// Exposes a small, safe API to the user interface. The page itself has no
-// access to Node.js or the file system.
+// Exposes a small, safe API to the user interface. The pages themselves have
+// no access to Node.js or the file system.
 
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const invoke = (name) => (...args) => ipcRenderer.invoke(name, ...args);
 
-contextBridge.exposeInMainWorld('api', {
-  init: invoke('init'),
-  loadMessages: invoke('load-messages'),
-  sendText: invoke('send-text'),
-  sendFiles: invoke('send-files'),
-  pickFiles: invoke('pick-files'),
-  sendImageData: invoke('send-image-data'),
-  acceptFile: invoke('accept-file'),
-  cancelFile: invoke('cancel-file'),
-  openFile: invoke('open-file'),
-  showInFolder: invoke('show-in-folder'),
-  openExternal: invoke('open-external'),
-  copyText: invoke('copy-text'),
-  thumb: invoke('thumb'),
-  markRead: invoke('mark-read'),
-  typing: invoke('typing'),
-  setActiveConv: invoke('active-conv'),
-  setProfile: invoke('set-profile'),
-  setSettings: invoke('set-settings'),
-  pickFolder: invoke('pick-folder'),
-  createGroup: invoke('create-group'),
-  updateGroup: invoke('update-group'),
-  leaveGroup: invoke('leave-group'),
-  search: invoke('search'),
-  addPeer: invoke('add-peer'),
-  removePeer: invoke('remove-peer'),
-  forgetContact: invoke('forget-contact'),
-  deleteMessage: invoke('delete-message'),
-  clearConversation: invoke('clear-conversation'),
-  setBadge: invoke('set-badge'),
-  pathForFile: (file) => webUtils.getPathForFile(file),
-  on: (fn) => ipcRenderer.on('evt', (_e, data) => fn(data)),
-});
+const CHANNELS = {
+  init: 'init',
+  loadMessages: 'load-messages',
+  getMessage: 'get-message',
+  sendText: 'send-text',
+  sendFiles: 'send-files',
+  pickFiles: 'pick-files',
+  pickSendFolder: 'pick-send-folder',
+  sendImageData: 'send-image-data',
+  sendVoice: 'send-voice',
+  readMedia: 'read-media',
+  readImage: 'read-image',
+  acceptFile: 'accept-file',
+  cancelFile: 'cancel-file',
+  openFile: 'open-file',
+  showInFolder: 'show-in-folder',
+  openExternal: 'open-external',
+  copyText: 'copy-text',
+  thumb: 'thumb',
+  markRead: 'mark-read',
+  typing: 'typing',
+  setActiveConv: 'active-conv',
+  setProfile: 'set-profile',
+  pickAvatar: 'pick-avatar',
+  removeAvatar: 'remove-avatar',
+  setSettings: 'set-settings',
+  pickFolder: 'pick-folder',
+  createGroup: 'create-group',
+  updateGroup: 'update-group',
+  leaveGroup: 'leave-group',
+  search: 'search',
+  addPeer: 'add-peer',
+  removePeer: 'remove-peer',
+  forgetContact: 'forget-contact',
+  deleteMessage: 'delete-message',
+  clearConversation: 'clear-conversation',
+  react: 'react',
+  editMessage: 'edit-message',
+  unsendMessage: 'unsend-message',
+  pinMessage: 'pin-message',
+  createPoll: 'create-poll',
+  vote: 'vote',
+  ackUrgent: 'ack-urgent',
+  scheduleMessage: 'schedule-message',
+  cancelScheduled: 'cancel-scheduled',
+  exportChat: 'export-chat',
+  captureScreen: 'capture-screen',
+  shareSources: 'share-sources',
+  shareSelect: 'share-select',
+  rtcSend: 'rtc-send',
+  openViewer: 'open-viewer',
+  openConv: 'open-conv',
+  restartUpdate: 'restart-update',
+  setBadge: 'set-badge',
+};
+
+const api = {};
+for (const [name, channel] of Object.entries(CHANNELS)) api[name] = invoke(channel);
+api.pathForFile = (file) => webUtils.getPathForFile(file);
+api.on = (fn) => ipcRenderer.on('evt', (_e, data) => fn(data));
+
+contextBridge.exposeInMainWorld('api', api);

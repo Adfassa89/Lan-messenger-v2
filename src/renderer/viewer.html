@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; media-src 'self' blob: mediastream:">
+  <title>LAN Messenger</title>
+  <link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+  <video id="video" autoplay playsinline muted></video>
+  <div class="status" id="status"></div>
+  <div class="bar">
+    <span class="live"></span><b id="title"></b>
+    <span class="grow"></span>
+    <button id="btnFit"></button>
+    <button id="btnFull"></button>
+  </div>
+  <script src="../shared/i18n.js"></script>
+  <script src="viewer.js"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>LAN Messenger</title>
+  <link rel="stylesheet" href="alert.css">
+</head>
+<body>
+  <div class="head">
+    <div class="siren">🚨</div>
+    <div>
+      <div class="label" id="label"></div>
+      <div class="from" id="from"></div>
+    </div>
+  </div>
+  <div class="text" id="text"></div>
+  <div class="foot">
+    <button id="btnOpen"></button>
+    <button id="btnAck" class="primary"></button>
+  </div>
+  <script src="../shared/i18n.js"></script>
+  <script src="alert.js"></script>
+</body>
+</html>

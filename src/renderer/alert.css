@@ -1,0 +1,26 @@
+html, body { margin: 0; height: 100%; }
+body {
+  display: flex; flex-direction: column; box-sizing: border-box; padding: 24px 26px 22px;
+  background: linear-gradient(160deg, #dc2626, #991b1b); color: #fff;
+  font: 14px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; user-select: none;
+  -webkit-app-region: drag; border: 3px solid #fecaca; animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse { 50% { border-color: #7f1d1d; } }
+.head { display: flex; align-items: center; gap: 14px; }
+.siren { font-size: 44px; line-height: 1; animation: wobble 1s ease-in-out infinite; font-family: "Segoe UI Emoji", sans-serif; }
+@keyframes wobble { 25% { transform: rotate(-12deg); } 75% { transform: rotate(12deg); } }
+.label { font-size: 22px; font-weight: 800; letter-spacing: .5px; }
+.from { opacity: .9; margin-top: 2px; }
+.text {
+  flex: 1; margin: 18px 0; padding: 14px 16px; border-radius: 12px; overflow-y: auto;
+  background: rgba(0, 0, 0, .22); font-size: 19px; font-weight: 600; line-height: 1.4;
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-app-region: no-drag;
+}
+.foot { display: flex; justify-content: flex-end; gap: 10px; -webkit-app-region: no-drag; }
+button {
+  font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 12px 18px; cursor: pointer;
+  background: rgba(255, 255, 255, .18); color: #fff;
+}
+button:hover { background: rgba(255, 255, 255, .28); }
+button.primary { background: #fff; color: #b91c1c; font-size: 16px; padding: 12px 26px; }
+button.primary:hover { background: #fee2e2; }

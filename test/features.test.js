@@ -160,3 +160,29 @@ test('version comparison', () => {
   assert.strictEqual(compareVersions('2.0.10', '2.0.9'), 1);
   assert.strictEqual(compareVersions('1.9.9', '2.0.0'), -1);
 });
+
+test('folders with many files and slow disks never stall', () => withPair(async (alice, bob) => {
+  const src = path.join(alice.dir, 'Survey');
+  fs.mkdirSync(src);
+  const files = {};
+  for (let i = 0; i < 25; i++) {
+    files[`f${String(i).padStart(2, '0')}.bin`] = crypto.randomBytes(i % 3 === 0 ? 3 * 1024 * 1024 : 10 + i);
+  }
+  for (const [rel, data] of Object.entries(files)) fs.writeFileSync(path.join(src, rel), data);
+  // A tiny disk buffer makes every write report "buffer full", so the
+  // socket pauses after each chunk, like a slow network drive.
+  const origCreate = fs.createWriteStream;
+  fs.createWriteStream = (p, opts) => origCreate(p, { ...opts, highWaterMark: 1 });
+  try {
+    const msg = alice.sendFolder(bob.id, src);
+    const done = await waitFor(() => {
+      const m = msgAt(bob, alice.id, msg.id);
+      return m && m.file.state === 'done' && m;
+    }, 30000, 'folder done');
+    for (const [rel, data] of Object.entries(files)) {
+      assert.ok(fs.readFileSync(path.join(done.file.path, rel)).equals(data), rel);
+    }
+  } finally {
+    fs.createWriteStream = origCreate;
+  }
+}));

@@ -2,24 +2,38 @@
 
 A fast, modern and secure messenger for Windows PCs on the same office or site network.
 It needs **no server and no internet**. Install it on each PC, and the PCs find each other automatically.
+Available in **English** and **Монгол**.
 
 ![Icon](build/icon.png)
 
 ## Features
 
+### Big features
 | | |
 |---|---|
-| 🔎 **Finds people automatically** | Everyone running LAN Messenger on the network shows up within seconds, with their status (Available / Away / Busy). |
-| 💬 **Private and group chats** | Chat one-to-one, create groups (e.g. "Planning team"), or post to **Everyone** for site-wide announcements. |
-| ✅ **Reliable delivery** | Messages to someone who is offline wait on your PC and are delivered automatically when they come back. Ticks show *waiting → delivered → read*. |
-| 📎 **Fast file transfer** | Drag & drop any file (any size), see progress and speed. Interrupted downloads resume where they stopped. Images show a preview. |
-| 📋 **Paste screenshots** | Press `Ctrl + V` in a chat to send a screenshot. |
-| 🔒 **Encrypted** | All messages and files are encrypted (AES-256) between PCs. |
-| 🔍 **Search** | Find any old message with `Ctrl + F`; jump to people with `Ctrl + K`. |
-| 🔔 **Notifications** | Windows pop-ups, sound, unread counter on the taskbar icon and tray. *Busy* mutes them. |
-| 🌙 **Light & dark theme** | Follows Windows automatically, or choose one. |
-| 🕒 **Saved history** | All chats are saved on your PC. |
-| ⚙️ **Convenient** | Starts with Windows (optional), runs in the system tray, sets you *Away* when idle. |
+| 🚨 **Urgent alerts** | A red pop-up with an alarm sound appears on top of everything on the other PCs (even when they are set to *Busy*) and stays until each person clicks **Acknowledge**. You see who confirmed and who hasn't. Made for blasting notices, safety warnings and breakdowns. |
+| 🖥️ **Screen sharing** | Show your screen (or one window) live to a colleague or a whole group. It goes directly PC-to-PC over the network. Viewers can only watch; they can't control your PC. |
+| ✏️ **Screenshot with drawing** | `Ctrl + Shift + S` (or **＋ → Screenshot with drawing**) takes a screenshot. Crop it, add arrows, boxes, highlights and text, then send. Pasted pictures can be drawn on too. |
+| 🇲🇳 **Mongolian / English** | Switch language in **Settings → Language**. Every screen is translated. |
+| 🔄 **Automatic updates over the network** | When one PC gets a newer version, the others download it from that PC and offer a **Restart**. Updates are digitally signed, so nobody can push fake software. If an update ever fails to start, the PC goes back to the previous version automatically. |
+
+### Everyday features
+| | |
+|---|---|
+| 💬 **Private, group and "Everyone" chats** | Chat one-to-one, in groups, or post to the whole site. |
+| ✅ **Reliable delivery** | Messages to someone who is offline wait and are delivered when they're back. Ticks show *waiting → delivered → read*. |
+| ↩️ **Reply** | Hover a message and click reply to quote it. |
+| 👍 **Reactions** | 👍 ❤️ 😂 😮 😢 ✅ and any other emoji. |
+| ✏️ **Edit / delete for everyone** | Fix a typo (or press `↑` in an empty message box to edit your last message) or take back a message sent by mistake. |
+| 📌 **Pinned messages** | Keep shift handover notes or key info at the top of a chat. |
+| 📊 **Polls** | One-click voting, with single or multiple answers. |
+| ⏰ **Scheduled messages** | Write now, send automatically later (e.g. at 07:00 shift start). |
+| 🎤 **Voice messages** | Click the microphone, speak, click Send. |
+| 📁 **Files and whole folders** | Drag & drop files or folders of any size. Progress and speed are shown, and interrupted downloads resume. |
+| 🖼️ **Profile photos** | Settings → Change photo. |
+| 📄 **Export chat** | Save a conversation as PDF or text for records. |
+| 🔒 **Encrypted** | All messages, files and screen sharing are encrypted between PCs. |
+| 🔍 **Search**, 🔔 **notifications**, 🌙 **dark mode**, tray icon, auto-away, start with Windows | |
 
 ## How to get the app (no programming needed)
 
@@ -27,17 +41,30 @@ It needs **no server and no internet**. Install it on each PC, and the PCs find 
 2. Click the latest green ✅ **Build Windows app** run.
 3. At the bottom, under **Artifacts**, download **LAN-Messenger-Windows** (a .zip file).
 4. Unzip it. Inside are two files:
-   - `LAN-Messenger-Setup-2.0.0.exe` is the normal installer (recommended).
-   - `LAN-Messenger-Portable-2.0.0.exe` runs without installing, e.g. from a USB stick.
+   - `LAN-Messenger-Setup-<version>.exe` is the normal installer (recommended).
+   - `LAN-Messenger-Portable-<version>.exe` runs without installing, e.g. from a USB stick.
 
-> **Releases:** when a version tag such as `v2.0.0` is pushed, the same files are also attached to a GitHub **Release**, which is an easier link to share with IT.
+> **Releases:** when a version tag such as `v2.1.0` is pushed, the same files are also attached to a GitHub **Release**, which is an easier link to share with IT.
 
 ### Installing on each PC
 
-1. Run `LAN-Messenger-Setup-2.0.0.exe`.
+1. Run `LAN-Messenger-Setup-<version>.exe`.
 2. If Windows shows **"Windows protected your PC"**, click **More info → Run anyway**. This appears because the app is not signed with a paid certificate.
 3. Choose **"Install for all users"** if you can. The installer then also adds the Windows Firewall rule automatically.
    If you install "just for me", Windows will ask about the firewall the first time the app starts. Tick **both Private and Domain networks** and click **Allow**.
+
+After this first install, newer versions spread by themselves over the network (see below).
+
+### One-time setup: turn on network updates
+
+Network updates only work for builds signed with your private **update signing key**. You do this once:
+
+1. Open the file `UPDATE_SIGNING_KEY.txt` that was given to you. Copy **everything** in it, including the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines.
+2. On GitHub, open this repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**.
+3. Name: `UPDATE_SIGNING_KEY`. Secret: paste the text. Click **Add secret**.
+4. Keep the file somewhere safe (e.g. a password manager) and **never share it**. Anyone with this key could make updates that your PCs would accept.
+
+Without the secret, everything else works normally; builds just won't pass themselves on as updates.
 
 ### If people don't appear
 
@@ -66,16 +93,27 @@ npm run dist     # build Windows installer into dist/ (on Windows)
 Project layout:
 
 ```
-src/core/       networking, encryption, storage (no UI; fully tested)
-  protocol.js   encrypted framed TCP connections (X25519 + AES-256-GCM)
-  discovery.js  UDP broadcast discovery (port 50100)
-  messenger.js  peers, reliable message queue, groups, receipts
-  files.js      resumable pull-based file transfer
-  store.js      crash-safe JSON storage
-src/main/       Electron main process (window, tray, notifications)
-src/renderer/   user interface (HTML/CSS/JS, no build step)
-test/           automated tests (node --test)
+src/core/        networking, encryption, storage (no UI; fully tested)
+  protocol.js    encrypted framed TCP connections (X25519 + AES-256-GCM)
+  discovery.js   UDP broadcast discovery (port 50100)
+  messenger.js   peers, reliable queue, groups, receipts, reactions, edits,
+                 pins, polls, urgent alerts, scheduling, avatars
+  files.js       resumable pull-based file/folder transfer, update sharing
+  update.js      Ed25519 update signing and verification
+  store.js       crash-safe JSON storage
+src/main/        Electron main process
+  boot.js        starts the newest verified version (installed or LAN update)
+  updater.js     finds, downloads and verifies updates from other PCs
+  main.js        windows, tray, notifications, alerts, screen capture
+src/renderer/    user interface (HTML/CSS/JS, no build step)
+  app.js         chat UI · editor.js screenshot drawing · voice.js · share.js
+  alert.html     urgent alert window · viewer.html screen-share viewer
+src/shared/      i18n.js translations (English text is the key)
+build/           icons, installer firewall rule, after-pack update signing
+test/            automated tests (node --test)
 ```
+
+Adding UI text: wrap it in `t('...')`; `npm test` fails until a Mongolian translation is added to `src/shared/i18n.js`.
 
 To run two copies on one PC for testing, start the second with a separate profile folder:
 `set LANMSG_PROFILE=C:\temp\lm2 && npm start`.

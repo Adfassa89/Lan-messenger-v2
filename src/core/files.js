@@ -84,8 +84,14 @@ function request(link, ch, req, { part, append = false, onData, fsMod = fs } = {
         } else if (m.type === 'file-error') {
           fail(new Error(m.error || 'Transfer failed'));
         } else if (m.type === 'file-end') {
-          if (ws) ws.end(() => done(meta));
-          else done(meta);
+          // A full disk buffer may have paused the socket; 'drain' never comes
+          // once the stream is ending, so resume here for the next request.
+          const finish = () => {
+            link.socket.resume();
+            done(meta);
+          };
+          if (ws) ws.end(finish);
+          else finish();
         }
       },
       bin(b) {
