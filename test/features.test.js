@@ -1,0 +1,162 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { makePair, waitFor } = require('./helpers');
+const { signMeta, verifyMeta, compareVersions, sha256FileSync } = require('../src/core/update');
+
+// Starts two connected PCs, runs fn, always shuts them down.
+async function withPair(fn) {
+  const [alice, bob] = makePair();
+  await alice.start();
+  await bob.start();
+  try {
+    await waitFor(() => alice.peers.get(bob.id)?.online && bob.peers.get(alice.id)?.online, 8000, 'discovery');
+    await fn(alice, bob);
+  } finally {
+    await alice.stop();
+    await bob.stop();
+  }
+}
+
+const msgAt = (m, conv, id) => m.store.getMessage(conv, id);
+
+test('reply, reactions, edit and delete for everyone', () => withPair(async (alice, bob) => {
+  const first = alice.sendText(bob.id, 'Is the haul road open?');
+  await waitFor(() => msgAt(bob, alice.id, first.id), 5000, 'first');
+
+  const reply = bob.sendText(alice.id, 'Yes, since 7am', { replyTo: first.id });
+  const got = await waitFor(() => msgAt(alice, bob.id, reply.id), 5000, 'reply');
+  assert.strictEqual(got.replyTo.id, first.id);
+  assert.strictEqual(got.replyTo.preview, 'Is the haul road open?');
+
+  alice.react(bob.id, reply.id, '👍');
+  await waitFor(() => msgAt(bob, alice.id, reply.id).reactions?.['👍']?.includes(alice.id), 5000, 'reaction');
+  alice.react(bob.id, reply.id, '👍'); // toggles off
+  await waitFor(() => !msgAt(bob, alice.id, reply.id).reactions?.['👍'], 5000, 'reaction removed');
+
+  alice.editMessage(bob.id, first.id, 'Is the north haul road open?');
+  await waitFor(() => msgAt(bob, alice.id, first.id).text === 'Is the north haul road open?', 5000, 'edit');
+  assert.ok(msgAt(bob, alice.id, first.id).edited);
+
+  // Bob may not edit Alice's message.
+  assert.throws(() => bob.editMessage(alice.id, first.id, 'hacked'));
+
+  alice.unsendMessage(bob.id, first.id);
+  await waitFor(() => msgAt(bob, alice.id, first.id).deleted, 5000, 'unsend');
+  assert.strictEqual(msgAt(bob, alice.id, first.id).text, '');
+}));
+
+test('pins and polls are shared with everyone in a group', () => withPair(async (alice, bob) => {
+  const conv = alice.createGroup('Shift A', [bob.id]);
+  const poll = alice.createPoll(conv, 'Meeting day?', ['Monday', 'Tuesday', 'Wednesday']);
+  await waitFor(() => msgAt(bob, conv, poll.id), 5000, 'poll arrives');
+  assert.deepStrictEqual(msgAt(bob, conv, poll.id).poll.options, ['Monday', 'Tuesday', 'Wednesday']);
+
+  bob.vote(conv, poll.id, [1]);
+  alice.vote(conv, poll.id, [1]);
+  await waitFor(() => msgAt(alice, conv, poll.id).poll.votes[bob.id]?.[0] === 1, 5000, 'bob vote at alice');
+  await waitFor(() => msgAt(bob, conv, poll.id).poll.votes[alice.id]?.[0] === 1, 5000, 'alice vote at bob');
+
+  // Single-choice polls keep one answer only.
+  bob.vote(conv, poll.id, [0, 2]);
+  await waitFor(() => msgAt(alice, conv, poll.id).poll.votes[bob.id].join() === '0', 5000, 'single choice');
+
+  bob.pinMessage(conv, poll.id, true);
+  await waitFor(() => alice.convs[conv].pins?.some((p) => p.id === poll.id), 5000, 'pinned');
+  bob.pinMessage(conv, poll.id, false);
+  await waitFor(() => !alice.convs[conv].pins.length, 5000, 'unpinned');
+}));
+
+test('urgent alerts report who acknowledged them', () => withPair(async (alice, bob) => {
+  const alert = alice.sendText('broadcast', 'Blast in 15 minutes – clear zone B', { urgent: true });
+  const got = await waitFor(() => msgAt(bob, 'broadcast', alert.id), 5000, 'alert');
+  assert.strictEqual(got.urgent, true);
+  bob.ackUrgent('broadcast', alert.id);
+  await waitFor(() => msgAt(alice, 'broadcast', alert.id).acks.includes(bob.id), 5000, 'ack');
+  assert.ok(msgAt(bob, 'broadcast', alert.id).acked);
+}));
+
+test('scheduled messages are sent at the chosen time', () => withPair(async (alice, bob) => {
+  const item = alice.scheduleMessage(bob.id, 'Shift starts now', Date.now() + 500);
+  assert.strictEqual(alice.scheduled.length, 1);
+  const cancelled = alice.scheduleMessage(bob.id, 'never', Date.now() + 60000);
+  alice.cancelScheduled(cancelled.id);
+  await waitFor(() => bob.loadMessages(alice.id).some((m) => m.text === 'Shift starts now'), 10000, 'scheduled send');
+  assert.strictEqual(alice.scheduled.length, 0);
+  assert.ok(item.id);
+}));
+
+test('folders arrive complete with their structure', () => withPair(async (alice, bob) => {
+  const src = path.join(alice.dir, 'Pit design');
+  fs.mkdirSync(path.join(src, 'sections', 'north'), { recursive: true });
+  const files = {
+    'plan.dxf': crypto.randomBytes(300 * 1024),
+    'sections/s1.csv': Buffer.from('x,y,z\n1,2,3\n'),
+    'sections/north/s2.csv': crypto.randomBytes(1024 * 1024 + 7),
+    'empty.txt': Buffer.alloc(0),
+  };
+  for (const [rel, data] of Object.entries(files)) fs.writeFileSync(path.join(src, rel), data);
+
+  const msg = alice.sendFolder(bob.id, src);
+  assert.strictEqual(msg.file.count, 4);
+  const done = await waitFor(() => {
+    const m = msgAt(bob, alice.id, msg.id);
+    return m && m.file.state === 'done' && m;
+  }, 15000, 'folder done');
+  assert.strictEqual(path.basename(done.file.path), 'Pit design');
+  for (const [rel, data] of Object.entries(files)) {
+    assert.ok(fs.readFileSync(path.join(done.file.path, rel)).equals(data), rel);
+  }
+}));
+
+test('voice messages download automatically even when auto-download is off', () => withPair(async (alice, bob) => {
+  bob.setSettings({ autoAccept: false });
+  const voice = path.join(alice.dir, 'voice.webm');
+  fs.writeFileSync(voice, crypto.randomBytes(40000));
+  const [msg] = alice.sendFiles(bob.id, [voice], { voice: true, duration: 3200 });
+  const got = await waitFor(() => {
+    const m = msgAt(bob, alice.id, msg.id);
+    return m && m.file.state === 'done' && m;
+  }, 10000, 'voice done');
+  assert.strictEqual(got.file.voice, true);
+  assert.strictEqual(got.file.duration, 3200);
+}));
+
+test('profile pictures are shared', () => withPair(async (alice, bob) => {
+  const pic = `data:image/png;base64,${crypto.randomBytes(2000).toString('base64')}`;
+  alice.setAvatar(pic);
+  await waitFor(() => bob.contacts[alice.id].avatar === pic, 15000, 'avatar');
+  assert.strictEqual(bob.getState().avatars[alice.id], pic);
+}));
+
+test('signed app updates are fetched and verified', () => withPair(async (alice, bob) => {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+  const pub = publicKey.export({ type: 'spki', format: 'pem' });
+  const priv = privateKey.export({ type: 'pkcs8', format: 'pem' });
+
+  const pkg = path.join(alice.dir, 'app.asar');
+  fs.writeFileSync(pkg, crypto.randomBytes(2 * 1024 * 1024));
+  const meta = signMeta(priv, { version: '9.9.9', em: '44', sha256: sha256FileSync(pkg, fs), size: fs.statSync(pkg).size });
+  alice.updatePackage = { version: '9.9.9', meta, size: meta.size, open: () => fs.createReadStream(pkg) };
+
+  const dest = path.join(bob.dir, 'download.asar');
+  const res = await bob.fetchUpdate(alice.id, dest);
+  assert.ok(verifyMeta(pub, res.meta));
+  assert.strictEqual(sha256FileSync(dest, fs), meta.sha256);
+
+  // Any tampering breaks the signature.
+  assert.ok(!verifyMeta(pub, { ...res.meta, version: '10.0.0' }));
+  assert.ok(!verifyMeta(pub, { ...res.meta, sha256: '0'.repeat(64) }));
+  const other = crypto.generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'pem' });
+  assert.ok(!verifyMeta(other, res.meta));
+}));
+
+test('version comparison', () => {
+  assert.strictEqual(compareVersions('2.1.0', '2.0.9'), 1);
+  assert.strictEqual(compareVersions('2.0.0', '2.0'), 0);
+  assert.strictEqual(compareVersions('2.0.10', '2.0.9'), 1);
+  assert.strictEqual(compareVersions('1.9.9', '2.0.0'), -1);
+});

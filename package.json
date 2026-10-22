@@ -1,15 +1,15 @@
 {
   "name": "lan-messenger",
   "productName": "LAN Messenger",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Fast, secure, serverless messenger for your local network",
-  "main": "src/main/main.js",
+  "main": "src/main/boot.js",
   "author": "LAN Messenger",
   "license": "MIT",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/*.test.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js",
     "dist": "electron-builder --win --x64 --publish never"
   },
   "devDependencies": {
@@ -48,6 +48,7 @@
     },
     "portable": {
       "artifactName": "LAN-Messenger-Portable-${version}.${ext}"
-    }
+    },
+    "afterPack": "build/after-pack.js"
   }
 }

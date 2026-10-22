@@ -140,7 +140,10 @@ class Discovery extends EventEmitter {
       status: String(p.status || 'online'),
       host: rinfo.address,
       port: Number(p.port),
-      version: p.app || '',
+      app: String(p.app || ''),
+      av: typeof p.av === 'string' ? p.av : undefined,
+      upd: typeof p.upd === 'string' ? p.upd : '',
+      em: typeof p.em === 'string' ? p.em : '',
     });
   }
 

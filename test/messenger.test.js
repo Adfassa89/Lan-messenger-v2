@@ -2,52 +2,11 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { Messenger } = require('../src/core/messenger');
 
-let portBase = 41000 + Math.floor(Math.random() * 2000) * 4;
-
-function tmpDir(label) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), `lanmsg-${label}-`));
-}
-
-// Two "PCs" on one machine: different ports, each told where the other is.
-function makePair() {
-  const a = { udp: portBase++, tcp: portBase++ };
-  const b = { udp: portBase++, tcp: portBase++ };
-  const mk = (me, other, name) => {
-    const dir = tmpDir(name);
-    const m = new Messenger({
-      dataDir: dir,
-      downloadDir: path.join(dir, 'downloads'),
-      tcpPort: me.tcp,
-      udpPort: me.udp,
-      broadcast: false,
-      defaultName: name,
-    });
-    m.config.manualPeers = [`127.0.0.1:${other.udp}`];
-    m.dir = dir;
-    m.ports = me;
-    return m;
-  };
-  return [mk(a, b, 'Alice'), mk(b, a, 'Bob')];
-}
-
-function waitFor(fn, timeout = 8000, label = 'condition') {
-  return new Promise((resolve, reject) => {
-    const start = Date.now();
-    const tick = () => {
-      let v;
-      try { v = fn(); } catch { v = null; }
-      if (v) return resolve(v);
-      if (Date.now() - start > timeout) return reject(new Error(`Timed out waiting for ${label}`));
-      setTimeout(tick, 25);
-    };
-    tick();
-  });
-}
+const { makePair, waitFor, tmpDir, nextPort } = require('./helpers');
 
 test('peers discover each other and exchange messages with receipts', async () => {
   const [alice, bob] = makePair();
@@ -158,13 +117,13 @@ test('group chat reaches every member', async () => {
 
 test('history survives a restart', async () => {
   const dir = tmpDir('persist');
-  const m1 = new Messenger({ dataDir: dir, tcpPort: portBase++, udpPort: portBase++, broadcast: false });
+  const m1 = new Messenger({ dataDir: dir, tcpPort: nextPort(), udpPort: nextPort(), broadcast: false });
   await m1.start();
   m1.peers.set('someone', { id: 'someone', name: 'X', online: false });
   const msg = m1.sendText('someone', 'saved?');
   await m1.stop();
 
-  const m2 = new Messenger({ dataDir: dir, tcpPort: portBase++, udpPort: portBase++, broadcast: false });
+  const m2 = new Messenger({ dataDir: dir, tcpPort: nextPort(), udpPort: nextPort(), broadcast: false });
   assert.strictEqual(m2.loadMessages('someone')[0].id, msg.id);
   assert.strictEqual(m2.outbox.length, 1);
 });
