@@ -14,7 +14,8 @@ const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/i;
 
 // Never trust a file name that came over the network.
 function sanitizeFileName(name) {
-  let n = path.basename(String(name || 'file').replace(/\\/g, '/'));
+  // Keep only the last path segment, the same way on every OS.
+  let n = String(name || 'file').split(/[\\/]/).pop();
   n = n.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/[. ]+$/, '');
   if (!n) n = 'file';
   const ext = path.extname(n);
