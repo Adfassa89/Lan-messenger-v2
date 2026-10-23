@@ -25,4 +25,8 @@ PCs running LAN Messenger 2 find each other automatically. Later versions spread
 - 6 design styles in light and dark
 - Stays in the taskbar corner when closed, starts with Windows
 
+## Code signing
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org). See the project's [code signing policy](https://github.com/Adfassa89/Lan-messenger-v2#code-signing-policy) and [privacy policy](https://github.com/Adfassa89/Lan-messenger-v2#privacy-policy).
+
 See the [full feature list](https://github.com/Adfassa89/Lan-messenger-v2#features).

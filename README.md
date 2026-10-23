@@ -140,12 +140,12 @@ Windows builds are made automatically by GitHub Actions from the code in this re
 
 Free code signing is provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 
-**Team roles**
+### Team roles
 
 - Committers and reviewers: [Adfassa89](https://github.com/Adfassa89)
 - Approvers (approve every signed release): [Adfassa89](https://github.com/Adfassa89)
 
-**Privacy policy**
+### Privacy policy
 
 This program does not send any information to the internet. It only talks to other PCs running
 LAN Messenger 2 on the same local network, and only to deliver what the user sends (messages,
