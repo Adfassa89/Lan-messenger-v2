@@ -52,7 +52,7 @@ Available in **English** and **Монгол**.
    - `LAN-Messenger-2-Setup-<version>.exe` is the normal installer (recommended).
    - `LAN-Messenger-2-Portable-<version>.exe` runs without installing, e.g. from a USB stick.
 
-> **Releases:** when a version tag such as `v2.1.0` is pushed, the same files are also attached to a GitHub **Release**, which is an easier link to share with IT.
+> **Releases (public download page):** the newest version is also on the [Releases page](https://github.com/Adfassa89/Lan-messenger-v2/releases). To publish a new version there: **Actions → Build Windows app → Run workflow**, tick **Publish a release**, click **Run workflow**. The release is named after the version in `package.json`.
 
 ### Installing on each PC
 
