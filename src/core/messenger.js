@@ -41,7 +41,8 @@ function defaultSettings(downloadDir) {
     notifications: true,
     sound: true,
     minimizeToTray: true,
-    startWithWindows: false,
+    startWithWindows: true,
+    trayHintShown: false,
     autoAway: true,
     enterToSend: true,
     autoUpdate: true,
@@ -119,6 +120,12 @@ class Messenger extends EventEmitter {
     if (config.dept === undefined) config.dept = '';
     if (!config.status) config.status = 'online';
     config.settings = { ...defaultSettings(downloadDir), ...(config.settings || {}) };
+    // Starting with Windows became the default in 2.2: switch it on once for
+    // people who installed an earlier version (they can turn it off again).
+    if (!config.autostartDefaulted) {
+      config.settings.startWithWindows = true;
+      config.autostartDefaulted = true;
+    }
     if (!Array.isArray(config.manualPeers)) config.manualPeers = [];
     this.store.set('config', config);
     this.config = config;

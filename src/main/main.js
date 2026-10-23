@@ -123,6 +123,7 @@ function createWindow() {
     if (!quitting && messenger.settings.minimizeToTray) {
       e.preventDefault();
       win.hide();
+      trayHint();
     }
   });
   win.on('focus', () => win.flashFrame(false));
@@ -152,7 +153,7 @@ function updateTray() {
       click: () => { autoAway = false; messenger.setProfile({ status: s }); },
     })),
     { type: 'separator' },
-    { label: t('Quit'), click: () => { quitting = true; app.quit(); } },
+    { label: t('Exit'), click: () => { quitting = true; app.quit(); } },
   ]));
 }
 
@@ -490,9 +491,25 @@ function checkIdle() {
   }
 }
 
+// Starts quietly in the tray when Windows starts. The portable version runs
+// from a temporary folder, so it registers the original .exe instead.
 function applyLoginItem() {
-  if (process.platform === 'linux') return;
-  app.setLoginItemSettings({ openAtLogin: !!messenger.settings.startWithWindows, args: ['--hidden'] });
+  if (process.platform === 'linux' || !app.isPackaged) return;
+  const exe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+  app.setLoginItemSettings({ openAtLogin: !!messenger.settings.startWithWindows, path: exe, args: ['--hidden'] });
+}
+
+// The first time the window is closed, explain that the app keeps running.
+function trayHint() {
+  if (messenger.settings.trayHintShown || !Notification.isSupported()) return;
+  messenger.setSettings({ trayHintShown: true });
+  const n = new Notification({
+    title: t('LAN Messenger 2 is still running'),
+    body: t('It keeps receiving messages in the taskbar corner. To close it completely, right-click its icon there and choose Exit.'),
+    icon: appIcon(),
+  });
+  n.on('click', showWindow);
+  n.show();
 }
 
 function isImage(p) {

@@ -382,6 +382,23 @@ function convItem(i) {
     e.preventDefault();
     convMenu(i, e.clientX, e.clientY);
   });
+  // Files and folders dropped on a person or group are sent to them directly.
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  b.addEventListener('dragover', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    b.classList.add('drop-target');
+  });
+  b.addEventListener('dragleave', () => b.classList.remove('drop-target'));
+  b.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    b.classList.remove('drop-target');
+    const paths = [...e.dataTransfer.files].map((f) => api.pathForFile(f)).filter(Boolean);
+    if (!paths.length) return;
+    const sent = await call(api.sendFiles(i.conv, paths));
+    if (sent && sent.length) toast(t('Sent {n} item(s) to {name}', { n: sent.length, name: i.name }));
+  });
   return b;
 }
 

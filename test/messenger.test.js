@@ -142,3 +142,19 @@ test('broadcast reaches everyone in the shared "Everyone" chat', async () => {
     await bob.stop();
   }
 });
+
+test('starting with Windows is on by default, also after updating from an older version', () => {
+  const fresh = new Messenger({ dataDir: tmpDir('auto1'), broadcast: false });
+  assert.strictEqual(fresh.settings.startWithWindows, true);
+
+  // An older install that had it switched off is switched on once...
+  const dir = tmpDir('auto2');
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ id: 'x', name: 'Old', settings: { startWithWindows: false } }));
+  const upgraded = new Messenger({ dataDir: dir, broadcast: false });
+  assert.strictEqual(upgraded.settings.startWithWindows, true);
+  // ...but if the person then turns it off, it stays off.
+  upgraded.setSettings({ startWithWindows: false });
+  upgraded.store.flush();
+  const again = new Messenger({ dataDir: dir, broadcast: false });
+  assert.strictEqual(again.settings.startWithWindows, false);
+});
