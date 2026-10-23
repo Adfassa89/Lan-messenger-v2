@@ -7,10 +7,11 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', 'src');
 const FILES = [
   'renderer/app.js', 'renderer/editor.js', 'renderer/voice.js', 'renderer/share.js',
-  'renderer/viewer.js', 'renderer/alert.js', 'renderer/call.js', 'renderer/ring.js', 'renderer/index.html', 'main/main.js',
+  'renderer/viewer.js', 'renderer/alert.js', 'renderer/call.js', 'renderer/ring.js', 'renderer/game.js', 'renderer/index.html', 'main/main.js',
 ];
 // Texts translated through a variable, e.g. t(label).
-const EXTRA = ['Smileys', 'Gestures', 'Work', 'Things', 'Indigo', 'Office', 'Ocean', 'Minimal', 'Mine Site', 'Emerald'];
+const EXTRA = ['Smileys', 'Gestures', 'Work', 'Things', 'Indigo', 'Office', 'Ocean', 'Minimal', 'Mine Site', 'Emerald', 'Chess', 'Tic-tac-toe', 'Connect Four',
+  'Classic chess, colors drawn at random', 'Three in a row wins', 'Four in a row wins'];
 
 function decode(s) {
   return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');

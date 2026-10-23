@@ -198,3 +198,23 @@ test('calls are recorded in the chat history', () => withPair(async (alice) => {
   assert.strictEqual(alice.convs[bobId].unread, 1);
   assert.strictEqual(alice.convs[bobId].lastText, '📵');
 }));
+
+test('chess moves travel between PCs and illegal moves are refused', () => withPair(async (alice, bob) => {
+  const game = alice.createGame(bob.id, 'chess');
+  await waitFor(() => msgAt(bob, alice.id, game.id), 5000, 'game invite');
+  const [white, black] = game.game.players.map((id) => (id === alice.id ? alice : bob));
+  const convOf = (m) => (m === alice ? bob.id : alice.id);
+  white.gameMove(convOf(white), game.id, { from: 'e2', to: 'e4' });
+  await waitFor(() => msgAt(black, convOf(black), game.id).game.moves.length === 1, 5000, 'move 1');
+  assert.throws(() => white.gameMove(convOf(white), game.id, { from: 'd2', to: 'd4' }), /not allowed/);
+  assert.throws(() => black.gameMove(convOf(black), game.id, { from: 'e7', to: 'e3' }), /not allowed/);
+  black.gameMove(convOf(black), game.id, { from: 'e7', to: 'e5' });
+  await waitFor(() => msgAt(white, convOf(white), game.id).game.moves.length === 2, 5000, 'move 2');
+  black.gameMove(convOf(black), game.id, { resign: false, draw: 'offer' });
+  await waitFor(() => msgAt(white, convOf(white), game.id).game.moves.length === 3, 5000, 'draw offer');
+  // A tampered move sent directly is ignored by the other PC.
+  const before = msgAt(white, convOf(white), game.id).game.moves.length;
+  black._sendMeta(convOf(black), { type: 'game-move', id: game.id, m: { from: 'a7', to: 'a2' }, n: 3 });
+  await new Promise((r) => setTimeout(r, 400));
+  assert.strictEqual(msgAt(white, convOf(white), game.id).game.moves.length, before);
+}));

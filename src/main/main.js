@@ -12,6 +12,7 @@ const {
 const { Messenger, preview } = require('../core/messenger');
 const { Updater } = require('./updater');
 const I18N = require('../shared/i18n');
+const Games = require('../shared/games');
 
 const APP_ID = 'com.lanmessenger.v2';
 const APP_NAME = 'LAN Messenger 2';
@@ -675,6 +676,8 @@ function registerIpc() {
   h('rtc-send', (peerId, sid, data) => messenger.sendRtc(peerId, sid, data));
   h('open-viewer', (peerId, sid, name) => openViewer(peerId, sid, name));
   h('call-start', (conv, video) => startCall(conv, video));
+  h('create-game', (conv, type) => messenger.createGame(conv, type));
+  h('game-move', (conv, id, move) => messenger.gameMove(conv, id, move));
   h('call-info', (sid) => callInfo(sid));
   h('call-accept', (sid, video) => {
     const ring = endRing(sid, { log: false });
@@ -734,6 +737,24 @@ function wireEvents() {
   messenger.on('avatar', (a) => send('avatar', a));
   messenger.on('scheduled', (list) => send('scheduled', list));
   messenger.on('rtc', routeRtc);
+  messenger.on('game-turn', ({ conv, msg }) => {
+    const focused = win && win.isVisible() && win.isFocused();
+    if (focused && activeConv === conv) return;
+    if (win && !focused) win.flashFrame(true);
+    if (!messenger.settings.notifications || messenger.config.status === 'busy' || !Notification.isSupported()) return;
+    const who = messenger.peers.get(conv)?.name || t('Someone');
+    let over = false;
+    try { over = Games.replay(msg.game.type, msg.game.moves).status.over; } catch { /* ignore */ }
+    const n = new Notification({
+      title: `${t(Games.RULES[msg.game.type].title)} – ${who}`,
+      body: over ? t('The game is over') : t('Your turn'),
+      icon: appIcon(),
+      silent: true,
+    });
+    n.on('click', () => { showWindow(); send('open-game', { conv, id: msg.id }); });
+    n.show();
+    if (messenger.settings.sound) send('play-sound');
+  });
   messenger.on('me', (me) => { send('me', me); updateTray(); });
   messenger.on('warning', (w) => console.warn(w));
   messenger.on('message', (e) => {

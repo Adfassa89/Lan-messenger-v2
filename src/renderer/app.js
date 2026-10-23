@@ -1,5 +1,5 @@
 'use strict';
-/* global api, EMOJI, I18N, openEditor, Voice, Share */
+/* global api, EMOJI, I18N, openEditor, Voice, Share, Game */
 
 // ------------------------------------------------------------------ state
 const S = {
@@ -184,6 +184,7 @@ function msgPreview(m) {
   if (!m) return '';
   if (m.deleted) return t('This message was deleted');
   if (m.kind === 'call') return `📞 ${callText(m.call)}`;
+  if (m.kind === 'game') return `🎮 ${t('Game')}`;
   if (m.kind === 'poll') return `📊 ${m.poll.question}`;
   if (m.kind === 'file') {
     if (m.file.voice) return `🎤 ${t('Voice message')}`;
@@ -356,6 +357,7 @@ function convItem(i) {
     if (text === '🚫') text = t('This message was deleted');
     else if (text === '📞') text = `📞 ${t('Call')}`;
     else if (text === '📵') text = `📵 ${t('Missed call')}`;
+    else if (text === '🎮') text = `🎮 ${t('Game')}`;
     else if (text === '🎤') text = `🎤 ${t('Voice message')}`;
     const who = i.meta.lastFrom === S.me.id ? `${t('You')}: ` : (i.kind !== 'direct' && i.meta.lastFrom ? `${peerName(i.meta.lastFrom).split(' ')[0]}: ` : '');
     prev = esc(who + text);
@@ -657,7 +659,7 @@ function msgNode(list, i) {
   }
 
   const jumbo = m.kind === 'text' && !m.deleted && !m.urgent && !m.replyTo && isJumbo(m.text);
-  const bubble = el('div', `bubble${jumbo ? ' jumbo' : ''}${m.urgent ? ' urgent' : ''}${m.kind === 'poll' ? ' poll-bubble' : ''}`);
+  const bubble = el('div', `bubble${jumbo ? ' jumbo' : ''}${m.urgent ? ' urgent' : ''}${m.kind === 'poll' ? ' poll-bubble' : ''}${m.kind === 'game' ? ' game-bubble' : ''}`);
   let html = '';
   if (showSender) html += `<div class="sender" style="color:${senderColor(m.from)}">${esc(m.fromName || peerName(m.from))}</div>`;
   if (m.replyTo && !m.deleted) {
@@ -669,6 +671,8 @@ function msgNode(list, i) {
     html += urgentHtml(m, out);
   } else if (m.kind === 'poll') {
     html += pollHtml(m);
+  } else if (m.kind === 'game') {
+    html += Game.cardHtml(m);
   } else if (m.kind === 'file') {
     html += m.file.voice ? Voice.bubbleHtml(m, out) : fileHtml(m, out);
   } else {
@@ -857,6 +861,7 @@ async function onBubbleClick(e, m) {
     msgMenu(m, r.left, r.bottom + 4);
   } else if (act === 'vote') vote(m, Number(btn.dataset.i));
   else if (act === 'ack') call(api.ackUrgent(conv, m.id));
+  else if (act === 'game') Game.show(conv, m.id);
   else if (act === 'ack-info') ackInfo(m);
   else if (act === 'play') Voice.toggle(m);
   else if (act === 'seek') Voice.seek(m, e, btn);
@@ -1093,9 +1098,10 @@ function plusMenu() {
     { icon: ic('<path d="M6 3v12a3 3 0 0 0 3 3h12"/><path d="M3 6h12a3 3 0 0 1 3 3v12"/>'), label: t('Screenshot with drawing'), hint: 'Ctrl+Shift+S', action: screenshot },
     { icon: ic('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'), label: t('Share your screen'), action: () => Share.start(S.active) },
     { icon: ic('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'), label: t('Create a poll'), action: pollModal },
+    ...(convKind(S.active) === 'direct' ? [{ icon: ic('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>'), label: t('Play a game'), action: () => Game.newGameModal(S.active) }] : []),
     { icon: ic('<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>'), label: t('Urgent alert'), danger: true, action: urgentModal },
     { icon: ICONS.clock, label: t('Schedule a message'), action: () => scheduleModal() },
-  ], r.left, r.top - 330);
+  ], r.left, r.top - 370);
 }
 
 async function screenshot() {
@@ -1789,6 +1795,7 @@ function handleEvent({ type, payload }) {
       if (msg.kind === 'file' && msg.file.state !== 'downloading') S.progress.delete(msg.id);
       if (S.editing && S.editing.id === msg.id && msg.deleted) cancelEdit();
       upsertMessage(conv, msg, isNew);
+      if (msg.kind === 'game') Game.onMessage(conv, msg);
       if (isNew && conv === S.active && msg.from !== S.me.id) markReadIfVisible();
       break;
     }
@@ -1816,6 +1823,9 @@ function handleEvent({ type, payload }) {
       break;
     case 'open-conv':
       openConv(payload);
+      break;
+    case 'open-game':
+      openConv(payload.conv).then(() => Game.show(payload.conv, payload.id));
       break;
     case 'play-sound':
       playSound();

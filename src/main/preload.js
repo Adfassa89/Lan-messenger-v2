@@ -58,6 +58,8 @@ const CHANNELS = {
   rtcSend: 'rtc-send',
   openViewer: 'open-viewer',
   callStart: 'call-start',
+  createGame: 'create-game',
+  gameMove: 'game-move',
   callInfo: 'call-info',
   callAccept: 'call-accept',
   callDecline: 'call-decline',

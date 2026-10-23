@@ -15,6 +15,7 @@ const { Link, connect } = require('./protocol');
 const { Discovery, localAddresses, parseHost } = require('./discovery');
 const { Store } = require('./store');
 const { FileTransfers } = require('./files');
+const Games = require('../shared/games');
 
 const OFFLINE_AFTER = 17000;
 const ACK_TIMEOUT = 20000;
@@ -24,7 +25,7 @@ const MAX_AVATAR = 96 * 1024;
 const MAX_FOLDER_FILES = 20000;
 const VOICE_MAX = 25 * 1024 * 1024;
 // Message types that are queued until the other PC confirms them.
-const RELIABLE = new Set(['msg', 'read', 'react', 'edit', 'unsend', 'pin', 'vote', 'uack']);
+const RELIABLE = new Set(['msg', 'read', 'react', 'edit', 'unsend', 'pin', 'vote', 'uack', 'game-move']);
 
 const uuid = () => crypto.randomUUID();
 const hashOf = (s) => crypto.createHash('sha256').update(s).digest('hex').slice(0, 16);
@@ -50,6 +51,7 @@ function defaultSettings(downloadDir) {
 function preview(msg) {
   if (msg.deleted) return '🚫';
   if (msg.kind === 'call') return msg.call.missed ? '📵' : '📞';
+  if (msg.kind === 'game') return '🎮';
   if (msg.kind === 'poll') return `📊 ${msg.poll.question}`;
   if (msg.kind === 'file') {
     if (msg.file.voice) return '🎤';
@@ -629,7 +631,7 @@ class Messenger extends EventEmitter {
   }
 
   _onMsg(peerId, w) {
-    const kind = ['text', 'file', 'system', 'poll'].includes(w.kind) ? w.kind : 'text';
+    const kind = ['text', 'file', 'system', 'poll', 'game'].includes(w.kind) ? w.kind : 'text';
     let conv = peerId;
     let type = 'direct';
     if (w.broadcast) {
@@ -677,6 +679,14 @@ class Messenger extends EventEmitter {
       msg.poll = cleanPoll(w.poll);
       if (!msg.poll) return;
     }
+    if (kind === 'game') {
+      // Games are only between the two people of a private chat.
+      const g = w.game || {};
+      const players = Array.isArray(g.players) ? g.players : [];
+      if (type !== 'direct' || !Games.TYPES.includes(g.type) || players.length !== 2
+        || !players.includes(this.id) || !players.includes(peerId)) return;
+      msg.game = { type: g.type, players: [players[0], players[1]], moves: [] };
+    }
     this.store.addMessage(conv, msg);
     this._bumpConv(conv, type, msg, kind !== 'system');
     this.emit('message', { conv, msg, isNew: true, incoming: true });
@@ -723,6 +733,9 @@ class Messenger extends EventEmitter {
         break;
       case 'vote':
         this._applyVote(conv, msg, peerId, w.choices);
+        break;
+      case 'game-move':
+        this._applyGameMove(conv, msg, peerId, w.m, w.n);
         break;
       case 'uack':
         if (msg.from !== this.id || !msg.urgent) return;
@@ -784,6 +797,7 @@ class Messenger extends EventEmitter {
     if (msg.replyTo) wire.replyTo = msg.replyTo;
     if (msg.urgent) wire.urgent = true;
     if (msg.poll) wire.poll = { question: msg.poll.question, options: msg.poll.options, multi: msg.poll.multi };
+    if (msg.game) wire.game = { type: msg.game.type, players: msg.game.players };
     const type = this._convType(conv);
     if (type === 'broadcast') wire.broadcast = true;
     if (type === 'group') wire.group = this.groups[conv.slice(2)];
@@ -1087,6 +1101,55 @@ class Messenger extends EventEmitter {
     this.store.updateMessage(conv, msgId, { acked: Date.now() });
     this.emit('message', { conv, msg, isNew: false });
     this._enqueue(msg.from, { type: 'uack', id: msgId, ...this._scope(conv) }, uuid());
+  }
+
+  // ------------------------------------------------------------------ games
+  createGame(conv, type) {
+    if (this._convType(conv) !== 'direct') throw new Error('Games can be played in private chats');
+    if (!Games.TYPES.includes(type)) throw new Error('Unknown game');
+    // Chess colors are drawn at random; in the other games the inviter starts.
+    const players = type === 'chess' && Math.random() < 0.5 ? [conv, this.id] : [this.id, conv];
+    return this._sendMsg(conv, { kind: 'game', text: '', game: { type, players, moves: [] } });
+  }
+
+  // Adds a move after checking it against the game rules.
+  _applyGameMove(conv, msg, who, move, n) {
+    if (msg.kind !== 'game' || !msg.game) return false;
+    const g = msg.game;
+    const p = g.players.indexOf(who);
+    if (p < 0) return false;
+    if (Number.isInteger(n) && n < g.moves.length) return false; // already have it
+    const entry = { p, m: move && typeof move === 'object' ? move : {} };
+    try {
+      Games.play(g.type, g.moves, entry);
+    } catch (err) {
+      this.emit('warning', `Rejected game move from ${who}: ${err.message}`);
+      return false;
+    }
+    g.moves.push(entry);
+    this.store.updateMessage(conv, msg.id, {});
+    this.emit('message', { conv, msg, isNew: false });
+    if (who !== this.id) {
+      const c = this.convs[conv];
+      if (c) {
+        c.lastTs = Date.now();
+        c.lastText = '🎮';
+        c.lastFrom = who;
+        c.unread = (c.unread || 0) + 1;
+        this.store.touch('conversations');
+        this.emit('conv', c);
+      }
+      this.emit('game-turn', { conv, msg });
+    }
+    return true;
+  }
+
+  gameMove(conv, msgId, move) {
+    const msg = this.store.getMessage(conv, msgId);
+    if (!msg || msg.kind !== 'game') throw new Error('Game not found');
+    const n = msg.game.moves.length;
+    if (!this._applyGameMove(conv, msg, this.id, move, n)) throw new Error('That move is not allowed');
+    this._sendMeta(conv, { type: 'game-move', id: msgId, m: move, n });
   }
 
   // ------------------------------------------------------------------ scheduled messages
