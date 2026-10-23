@@ -1,4 +1,4 @@
-# LAN Messenger
+# LAN Messenger 2
 
 A fast, modern and secure messenger for Windows PCs on the same office or site network.
 It needs **no server and no internet**. Install it on each PC, and the PCs find each other automatically.
@@ -41,14 +41,14 @@ Available in **English** and **Монгол**.
 2. Click the latest green ✅ **Build Windows app** run.
 3. At the bottom, under **Artifacts**, download **LAN-Messenger-Windows** (a .zip file).
 4. Unzip it. Inside are two files:
-   - `LAN-Messenger-Setup-<version>.exe` is the normal installer (recommended).
-   - `LAN-Messenger-Portable-<version>.exe` runs without installing, e.g. from a USB stick.
+   - `LAN-Messenger-2-Setup-<version>.exe` is the normal installer (recommended).
+   - `LAN-Messenger-2-Portable-<version>.exe` runs without installing, e.g. from a USB stick.
 
 > **Releases:** when a version tag such as `v2.1.0` is pushed, the same files are also attached to a GitHub **Release**, which is an easier link to share with IT.
 
 ### Installing on each PC
 
-1. Run `LAN-Messenger-Setup-<version>.exe`.
+1. Run `LAN-Messenger-2-Setup-<version>.exe`.
 2. If Windows shows **"Windows protected your PC"**, click **More info → Run anyway**. This appears because the app is not signed with a paid certificate.
 3. Choose **"Install for all users"** if you can. The installer then also adds the Windows Firewall rule automatically.
    If you install "just for me", Windows will ask about the firewall the first time the app starts. Tick **both Private and Domain networks** and click **Allow**.

@@ -9,8 +9,11 @@ const { compareVersions, verifyMeta, sha256FileSync } = require('../core/update'
 const PUBLIC_KEY = require('./update-key');
 const INSTALLED_VERSION = require('../../package.json').version;
 
-// Lets developers run several copies on one PC for testing.
+// Chats and settings stay in the original "LAN Messenger" folder, so they
+// survive the rename to "LAN Messenger 2". Developers can run several copies
+// on one PC with separate profile folders.
 if (process.env.LANMSG_PROFILE) app.setPath('userData', path.resolve(process.env.LANMSG_PROFILE));
+else app.setPath('userData', path.join(app.getPath('appData'), 'LAN Messenger'));
 
 let target = path.join(__dirname, 'main.js');
 

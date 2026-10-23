@@ -192,10 +192,20 @@ function msgPreview(m) {
 }
 
 // ------------------------------------------------------------------ theme & language
+const STYLES = [
+  ['indigo', 'Indigo'], ['fluent', 'Office'], ['ocean', 'Ocean'],
+  ['graphite', 'Minimal'], ['safety', 'Mine Site'], ['emerald', 'Emerald'],
+];
+
 function applyTheme() {
   const th = S.settings.theme || 'system';
   const dark = th === 'dark' || (th === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  const root = document.documentElement;
+  root.dataset.theme = dark ? 'dark' : 'light';
+  root.dataset.style = STYLES.some(([k]) => k === S.settings.style) ? S.settings.style : 'indigo';
+  const css = getComputedStyle(root);
+  const v = (name) => css.getPropertyValue(name).trim();
+  api.setTitleBar(v('--panel'), v('--text'), v('--bg'));
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 
@@ -327,7 +337,7 @@ function renderListNow() {
   if (!items.length) {
     list.append(el('div', 'empty-note', f
       ? esc(t('Nobody matches your search.'))
-      : `${esc(t('Nobody here yet.'))}<br>${esc(t('Other PCs running LAN Messenger will appear automatically.'))}`));
+      : `${esc(t('Nobody here yet.'))}<br>${esc(t('Other PCs running LAN Messenger 2 will appear automatically.'))}`));
   }
   renderNet();
   updateBadge();
@@ -410,7 +420,7 @@ function updateBadge() {
     url = cv.toDataURL();
   }
   api.setBadge(n, url);
-  document.title = n ? `(${n}) LAN Messenger` : 'LAN Messenger';
+  document.title = n ? `(${n}) LAN Messenger 2` : 'LAN Messenger 2';
 }
 
 // ------------------------------------------------------------------ chat view
@@ -1530,7 +1540,10 @@ function settingsModal() {
     <div class="segmented" id="sLang">${I18N.LANGUAGES.map(([v, l]) => `<button data-v="${v}" class="${(S.settings.language || 'en') === v ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
 
     <div class="section-title">${esc(t('Appearance'))}</div>
-    <div class="segmented" id="sTheme">${themes.map(([v, l]) => `<button data-v="${v}" class="${S.settings.theme === v ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
+    <div class="style-grid" id="sStyle">${STYLES.map(([k, label]) => `<button class="style-card${(S.settings.style || 'indigo') === k ? ' on' : ''}" data-v="${k}">
+      <div class="style-preview" data-style="${k}"><div class="spv-side"><i></i><i></i><i></i></div><div class="spv-chat"><div class="spv-in"></div><div class="spv-out"></div><div class="spv-send"></div></div></div>
+      <span>${esc(t(label))}</span></button>`).join('')}</div>
+    <div class="segmented" id="sTheme" style="margin-top:12px">${themes.map(([v, l]) => `<button data-v="${v}" class="${S.settings.theme === v ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
 
     <div class="section-title">${esc(t('Notifications'))}</div>
     ${toggleRow('notifications', t('Desktop notifications'), t('Show a pop-up when a message arrives'))}
@@ -1584,6 +1597,13 @@ function settingsModal() {
         m.querySelectorAll('#sTheme button').forEach((x) => x.classList.toggle('on', x === b));
         applyTheme();
       });
+      $('#sStyle', m).addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-v]');
+        if (!b) return;
+        S.settings = await call(api.setSettings({ style: b.dataset.v })) || S.settings;
+        m.querySelectorAll('#sStyle .style-card').forEach((x) => x.classList.toggle('on', x === b));
+        applyTheme();
+      });
       $('#sLang', m).addEventListener('click', async (e) => {
         const b = e.target.closest('[data-v]');
         if (!b || b.dataset.v === S.settings.language) return;
@@ -1635,7 +1655,7 @@ function settingsModal() {
         drawPeers();
         toast(res
           ? t('Connected to {name}', { name: S.peers.get(res)?.name || v })
-          : t('Saved. Waiting for {host} to answer – make sure LAN Messenger is running there.', { host: v }));
+          : t('Saved. Waiting for {host} to answer – make sure LAN Messenger 2 is running there.', { host: v }));
       };
       $('#sPeerBtn', m).addEventListener('click', add);
       $('#sPeer', m).addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });

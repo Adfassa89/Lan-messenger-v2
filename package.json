@@ -1,10 +1,10 @@
 {
   "name": "lan-messenger",
-  "productName": "LAN Messenger",
-  "version": "2.1.0",
+  "productName": "LAN Messenger 2",
+  "version": "2.2.0",
   "description": "Fast, secure, serverless messenger for your local network",
   "main": "src/main/boot.js",
-  "author": "LAN Messenger",
+  "author": "LAN Messenger 2",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -18,8 +18,8 @@
   },
   "build": {
     "appId": "com.lanmessenger.v2",
-    "productName": "LAN Messenger",
-    "copyright": "LAN Messenger",
+    "productName": "LAN Messenger 2",
+    "copyright": "LAN Messenger 2",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -42,12 +42,12 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "LAN Messenger",
+      "shortcutName": "LAN Messenger 2",
       "include": "build/installer.nsh",
-      "artifactName": "LAN-Messenger-Setup-${version}.${ext}"
+      "artifactName": "LAN-Messenger-2-Setup-${version}.${ext}"
     },
     "portable": {
-      "artifactName": "LAN-Messenger-Portable-${version}.${ext}"
+      "artifactName": "LAN-Messenger-2-Portable-${version}.${ext}"
     },
     "afterPack": "build/after-pack.js"
   }

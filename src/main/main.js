@@ -14,6 +14,7 @@ const { Updater } = require('./updater');
 const I18N = require('../shared/i18n');
 
 const APP_ID = 'com.lanmessenger.v2';
+const APP_NAME = 'LAN Messenger 2';
 const VERSION = require('../../package.json').version;
 const ICON = path.join(__dirname, '..', '..', 'build', 'icon.png');
 const RENDERER = path.join(__dirname, '..', 'renderer');
@@ -77,15 +78,6 @@ function themeColors() {
     : { bg: '#f4f6fb', overlay: '#ffffff', symbol: '#1d2433' };
 }
 
-function applyTitleBar() {
-  if (!win || process.platform === 'darwin') return;
-  const c = themeColors();
-  try {
-    win.setTitleBarOverlay({ color: c.overlay, symbolColor: c.symbol, height: 44 });
-  } catch { /* not supported */ }
-  win.setBackgroundColor(c.bg);
-}
-
 const webPreferences = {
   preload: PRELOAD,
   contextIsolation: true,
@@ -109,7 +101,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 540,
     show: false,
-    title: 'LAN Messenger',
+    title: APP_NAME,
     icon: appIcon(),
     backgroundColor: c.bg,
     autoHideMenuBar: true,
@@ -142,10 +134,10 @@ function updateTray() {
   if (!tray) return;
   const status = messenger.config.status;
   tray.setToolTip(unreadTotal
-    ? `LAN Messenger – ${t('{n} unread', { n: unreadTotal })}`
-    : `LAN Messenger – ${statusLabel(status)}`);
+    ? `${APP_NAME} – ${t('{n} unread', { n: unreadTotal })}`
+    : `${APP_NAME} – ${statusLabel(status)}`);
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: t('Open LAN Messenger'), click: showWindow },
+    { label: t('Open LAN Messenger 2'), click: showWindow },
     ...(updateReady ? [{ label: t('Restart to update to {v}', { v: updateReady }), click: restartForUpdate }] : []),
     { type: 'separator' },
     ...['online', 'away', 'busy'].map((s) => ({
@@ -358,7 +350,7 @@ async function exportChat(conv, format) {
     .h{display:flex;gap:10px;align-items:baseline} .h span{color:#8a93a5;font-size:10.5px}
     .t{white-space:pre-wrap;margin-top:2px} .sys{color:#6b7487;text-align:center;padding:6px;font-style:italic}
   </style><h1>${escHtml(t('Chat with {name}', { name: title }))}</h1>
-  <div class="sub">LAN Messenger · ${escHtml(new Date().toLocaleString())} · ${msgs.length} ${escHtml(t('messages'))}</div>${rows}`;
+  <div class="sub">${APP_NAME} · ${escHtml(new Date().toLocaleString())} · ${msgs.length} ${escHtml(t('messages'))}</div>${rows}`;
   const tmp = path.join(app.getPath('temp'), `lanmsg-export-${crypto.randomUUID()}.html`);
   fs.writeFileSync(tmp, html, 'utf8');
   const pdfWin = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
@@ -489,10 +481,8 @@ function registerIpc() {
   h('set-settings', (patch) => {
     const s = messenger.setSettings(patch);
     if ('startWithWindows' in patch) applyLoginItem();
-    if ('theme' in patch) {
-      nativeTheme.themeSource = s.theme;
-      applyTitleBar();
-    }
+    // The page re-sends its title bar colors after a theme or style change.
+    if ('theme' in patch) nativeTheme.themeSource = s.theme;
     if ('language' in patch) updateTray();
     return s;
   });
@@ -526,7 +516,7 @@ function registerIpc() {
   h('share-sources', async () => {
     const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 200 } });
     return sources
-      .filter((s) => s.name !== 'LAN Messenger')
+      .filter((s) => !s.name.endsWith(APP_NAME))
       .map((s) => ({ id: s.id, name: s.name, screen: s.id.startsWith('screen'), thumb: s.thumbnail.toDataURL() }));
   });
   h('share-select', (id) => { shareSourceId = id; });
@@ -537,6 +527,15 @@ function registerIpc() {
     send('open-conv', conv);
   });
   h('restart-update', () => restartForUpdate());
+  // The page reports its current colors so the window buttons match the style.
+  h('set-title-bar', (panel, text, bg) => {
+    if (!win || process.platform === 'darwin') return;
+    const hex = /^#[0-9a-f]{3,8}$/i;
+    try {
+      if (hex.test(panel) && hex.test(text)) win.setTitleBarOverlay({ color: panel, symbolColor: text, height: 44 });
+      if (hex.test(bg)) win.setBackgroundColor(bg);
+    } catch { /* not supported */ }
+  });
   h('set-badge', (count, dataUrl) => {
     unreadTotal = count;
     updateTray();
@@ -577,11 +576,10 @@ app.on('second-instance', showWindow);
 app.whenReady().then(async () => {
   messenger = new Messenger({
     dataDir: app.getPath('userData'),
-    downloadDir: path.join(app.getPath('downloads'), 'LAN Messenger'),
+    downloadDir: path.join(app.getPath('downloads'), APP_NAME),
     appVersion: VERSION,
   });
   nativeTheme.themeSource = messenger.settings.theme;
-  nativeTheme.on('updated', applyTitleBar);
   setupMediaPermissions();
   registerIpc();
   wireEvents();
@@ -601,7 +599,7 @@ app.whenReady().then(async () => {
   try {
     await messenger.start();
   } catch (err) {
-    dialog.showErrorBox('LAN Messenger', `${t('Could not start networking')}: ${err.message}`);
+    dialog.showErrorBox(APP_NAME, `${t('Could not start networking')}: ${err.message}`);
   }
   createWindow();
   createTray();

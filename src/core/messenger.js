@@ -32,6 +32,7 @@ const hashOf = (s) => crypto.createHash('sha256').update(s).digest('hex').slice(
 function defaultSettings(downloadDir) {
   return {
     theme: 'system',
+    style: 'indigo',
     language: 'en',
     downloadDir,
     autoAccept: true,
@@ -96,7 +97,7 @@ function walkFolder(root) {
 class Messenger extends EventEmitter {
   constructor({
     dataDir,
-    downloadDir = path.join(os.homedir(), 'Downloads', 'LAN Messenger'),
+    downloadDir = path.join(os.homedir(), 'Downloads', 'LAN Messenger 2'),
     tcpPort = 50101,
     udpPort = 50100,
     broadcast = true,

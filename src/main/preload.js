@@ -60,6 +60,7 @@ const CHANNELS = {
   openConv: 'open-conv',
   restartUpdate: 'restart-update',
   setBadge: 'set-badge',
+  setTitleBar: 'set-title-bar',
 };
 
 const api = {};
