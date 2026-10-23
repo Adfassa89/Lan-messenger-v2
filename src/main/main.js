@@ -50,6 +50,7 @@ const alertWindows = new Map(); // msgId -> BrowserWindow
 const rtcRoutes = new Map(); // sid -> webContents of a viewer or call window
 const calls = new Map(); // sid -> call this PC is part of
 const rings = new Map(); // sid -> incoming call still ringing
+const tetrisWindows = new Map(); // game message id -> BrowserWindow
 const RING_TIMEOUT = 45000;
 const startHidden = process.argv.includes('--hidden');
 
@@ -184,6 +185,7 @@ function notify(conv, msg) {
   const title = conv.startsWith('g:') || conv === 'broadcast' ? `${msg.fromName} · ${convTitle(conv)}` : msg.fromName;
   let body = preview(msg);
   if (msg.kind === 'file') body = msg.file.voice ? `🎤 ${t('Voice message')}` : `${msg.file.folder ? '📁' : '📎'} ${msg.file.name}`;
+  if (msg.kind === 'game') body = `🎮 ${t('New game: {game}', { game: t(Games.RULES[msg.game.type].title) })}`;
   const n = new Notification({ title, body: body.slice(0, 200), icon: appIcon(), silent: true });
   n.on('click', () => {
     showWindow();
@@ -383,6 +385,54 @@ function finishCall(sid, { duration = 0 } = {}) {
   if (!call || call.logged) return;
   call.logged = true;
   messenger.logCall(call.conv, { video: call.video, outgoing: call.outgoing, duration, peerId: call.from });
+}
+
+// ------------------------------------------------------------------ tetris battle window
+function openTetris(conv, id) {
+  const existing = tetrisWindows.get(id);
+  if (existing && !existing.isDestroyed()) return existing.focus();
+  const msg = messenger.store.getMessage(conv, id);
+  if (!msg || !msg.game || msg.game.type !== 'tetris') throw new Error(t('Game not found'));
+  const w = new BrowserWindow({
+    width: 1120,
+    height: 780,
+    minWidth: 860,
+    minHeight: 600,
+    title: t('Tetris Battle'),
+    icon: appIcon(),
+    backgroundColor: '#0d0b14',
+    autoHideMenuBar: true,
+    webPreferences,
+  });
+  w.removeMenu();
+  w.loadFile(path.join(RENDERER, 'tetris.html'), { query: { conv, id, lang: messenger.settings.language } });
+  tetrisWindows.set(id, w);
+  rtcRoutes.set(id, w.webContents);
+  w.on('closed', () => {
+    tetrisWindows.delete(id);
+    if (rtcRoutes.get(id) === w.webContents || rtcRoutes.get(id)?.isDestroyed()) rtcRoutes.delete(id);
+  });
+  guardNavigation(w);
+}
+
+function tetrisInfo(conv, id) {
+  const msg = messenger.store.getMessage(conv, id);
+  if (!msg || !msg.game) return null;
+  const avatars = messenger.getState().avatars;
+  const people = {};
+  for (const pid of msg.game.players) {
+    const p = messenger.peers.get(pid);
+    people[pid] = {
+      name: pid === messenger.id ? messenger.config.name : (p ? p.name : t('Someone')),
+      avatar: avatars[pid] || null,
+    };
+  }
+  let over = false;
+  try { over = Games.replay('tetris', msg.game.moves).status.over; } catch { /* ignore */ }
+  return {
+    me: messenger.id, players: msg.game.players, people, over, language: messenger.settings.language,
+    sound: messenger.settings.sound,
+  };
 }
 
 function callInfo(sid) {
@@ -678,6 +728,8 @@ function registerIpc() {
   h('call-start', (conv, video) => startCall(conv, video));
   h('create-game', (conv, type) => messenger.createGame(conv, type));
   h('game-move', (conv, id, move) => messenger.gameMove(conv, id, move));
+  h('open-tetris', (conv, id) => openTetris(conv, id));
+  h('tetris-info', (conv, id) => tetrisInfo(conv, id));
   h('call-info', (sid) => callInfo(sid));
   h('call-accept', (sid, video) => {
     const ring = endRing(sid, { log: false });

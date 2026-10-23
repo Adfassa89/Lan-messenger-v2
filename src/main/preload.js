@@ -60,6 +60,8 @@ const CHANNELS = {
   callStart: 'call-start',
   createGame: 'create-game',
   gameMove: 'game-move',
+  openTetris: 'open-tetris',
+  tetrisInfo: 'tetris-info',
   callInfo: 'call-info',
   callAccept: 'call-accept',
   callDecline: 'call-decline',

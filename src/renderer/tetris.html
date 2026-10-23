@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Tetris Battle</title>
+  <link rel="stylesheet" href="tetris.css">
+</head>
+<body>
+  <header class="top">
+    <div class="vs"><span id="meName"></span><b>VS</b><span id="oppName"></span></div>
+    <div class="timer" id="timer">0:00</div>
+  </header>
+  <main class="arena">
+    <section class="player">
+      <div class="side">
+        <div class="label" data-t="HOLD"></div>
+        <canvas id="hold" width="120" height="80"></canvas>
+        <div class="stats" id="stats"></div>
+      </div>
+      <div class="meter"><div id="meter"></div></div>
+      <div class="board-wrap">
+        <canvas id="board"></canvas>
+        <div class="action" id="action"></div>
+        <div class="overlay" id="overlay"></div>
+      </div>
+      <div class="side">
+        <div class="label" data-t="NEXT"></div>
+        <canvas id="next" width="120" height="400"></canvas>
+      </div>
+    </section>
+    <section class="player opponent">
+      <div class="meter small"><div id="oppMeter"></div></div>
+      <div class="board-wrap">
+        <canvas id="oppBoard"></canvas>
+        <div class="overlay" id="oppOverlay"></div>
+      </div>
+      <div class="side">
+        <div class="label" data-t="NEXT"></div>
+        <canvas id="oppNext" width="80" height="250"></canvas>
+        <div class="stats" id="oppStats"></div>
+      </div>
+    </section>
+  </main>
+  <footer class="keys" id="keys"></footer>
+  <div class="result hidden" id="result">
+    <div class="result-title" id="resultTitle"></div>
+    <div class="result-sub" id="resultSub"></div>
+    <div class="result-btns">
+      <button id="btnRematch"></button>
+      <button id="btnClose" class="ghost"></button>
+    </div>
+  </div>
+  <script src="../shared/i18n.js"></script>
+  <script src="../shared/tetris.js"></script>
+  <script src="tetris-game.js"></script>
+</body>
+</html>

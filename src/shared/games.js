@@ -322,7 +322,138 @@
     height: C4H,
   };
 
-  const RULES = { chess, ttt, c4 };
+  // ------------------------------------------------------------------ checkers (English draughts)
+  // Squares are r * 8 + c with r = 0 on player 0's side; only dark squares
+  // ((r + c) even) are used. Player 0 ("Black") moves first, up the board.
+  // 'b' / 'B' are player 0's man / king, 'r' / 'R' player 1's.
+  const DRAW_PLIES = 80; // 40 moves each with no capture and no man moved
+
+  function ckOwner(p) {
+    if (!p) return null;
+    return p.toLowerCase() === 'b' ? 0 : 1;
+  }
+
+  function ckDirs(p) {
+    if (p === 'B' || p === 'R') return [[1, -1], [1, 1], [-1, -1], [-1, 1]];
+    return p === 'b' ? [[1, -1], [1, 1]] : [[-1, -1], [-1, 1]];
+  }
+
+  // All capture sequences for the piece on `from`. A man that reaches the far
+  // row during a capture is crowned and the turn ends there.
+  function ckJumps(board, from, piece, path, taken) {
+    const r = from >> 3;
+    const c = from & 7;
+    const out = [];
+    for (const [dr, dc] of ckDirs(piece)) {
+      const mr = r + dr;
+      const mc = c + dc;
+      const lr = r + 2 * dr;
+      const lc = c + 2 * dc;
+      if (lr < 0 || lr > 7 || lc < 0 || lc > 7) continue;
+      const mid = mr * 8 + mc;
+      const land = lr * 8 + lc;
+      if (taken.includes(mid) || board[land] || ckOwner(board[mid]) !== 1 - ckOwner(piece)) continue;
+      const next = path.concat(land);
+      const crowned = (piece === 'b' && lr === 7) || (piece === 'r' && lr === 0);
+      const more = crowned ? [] : ckJumps(board, land, piece, next, taken.concat(mid));
+      if (more.length) out.push(...more);
+      else out.push(next);
+    }
+    return out;
+  }
+
+  function ckMoves(st) {
+    const jumps = [];
+    const steps = [];
+    for (let s = 0; s < 64; s++) {
+      const p = st.board[s];
+      if (ckOwner(p) !== st.turn) continue;
+      // Clear the starting square so a king may jump back across it.
+      const board = st.board.slice();
+      board[s] = null;
+      jumps.push(...ckJumps(board, s, p, [s], []));
+      for (const [dr, dc] of ckDirs(p)) {
+        const r = (s >> 3) + dr;
+        const c = (s & 7) + dc;
+        if (r >= 0 && r < 8 && c >= 0 && c < 8 && !st.board[r * 8 + c]) steps.push([s, r * 8 + c]);
+      }
+    }
+    return jumps.length ? jumps : steps; // captures are compulsory
+  }
+
+  // Checkers square numbers 1-32: player 0 starts on 1-12, player 1 on 21-32.
+  function ckNumber(s) {
+    return (s >> 3) * 4 + Math.floor((s & 7) / 2) + 1;
+  }
+
+  const checkers = {
+    title: 'Checkers',
+    init() {
+      const board = new Array(64).fill(null);
+      for (let s = 0; s < 64; s++) {
+        const r = s >> 3;
+        if (((r + (s & 7)) % 2) !== 0) continue;
+        if (r <= 2) board[s] = 'b';
+        if (r >= 5) board[s] = 'r';
+      }
+      return { board, turn: 0, quiet: 0, last: null, log: [] };
+    },
+    legalMoves: ckMoves,
+    number: ckNumber,
+    // m = { path: [from, to, ...] }
+    apply(st, m, player) {
+      if (player !== st.turn) throw new Error('Not your turn');
+      const path = Array.isArray(m.path) ? m.path.map(Number) : [];
+      const legal = ckMoves(st).find((x) => x.length === path.length && x.every((v, i) => v === path[i]));
+      if (!legal) throw new Error('Illegal move');
+      const board = st.board.slice();
+      let piece = board[path[0]];
+      board[path[0]] = null;
+      let captured = 0;
+      for (let i = 1; i < path.length; i++) {
+        if (Math.abs((path[i] >> 3) - (path[i - 1] >> 3)) === 2) {
+          board[(path[i] + path[i - 1]) / 2] = null;
+          captured++;
+        }
+      }
+      const end = path[path.length - 1];
+      const manMoved = piece === 'b' || piece === 'r';
+      if (piece === 'b' && end >> 3 === 7) piece = 'B';
+      if (piece === 'r' && end >> 3 === 0) piece = 'R';
+      board[end] = piece;
+      const sep = captured ? 'x' : '-';
+      return {
+        board,
+        turn: 1 - st.turn,
+        quiet: captured || manMoved ? 0 : st.quiet + 1,
+        last: path,
+        log: (st.log || []).concat(path.map(ckNumber).join(sep)),
+      };
+    },
+    status(st) {
+      if (!ckMoves(st).length) return { over: true, winner: 1 - st.turn, reason: 'blocked' };
+      if (st.quiet >= DRAW_PLIES) return { over: true, winner: null, reason: 'quiet' };
+      return { over: false, turn: st.turn };
+    },
+  };
+
+  // ------------------------------------------------------------------ tetris battle
+  // Played in real time in its own window. Only the result is stored here:
+  // a player sends { ko: true } when they top out.
+  const tetris = {
+    title: 'Tetris Battle',
+    realtime: true,
+    init: () => ({ ko: null }),
+    apply(st, m, player) {
+      if (!m.ko || st.ko !== null) throw new Error('Illegal move');
+      return { ko: player };
+    },
+    status(st) {
+      return st.ko === null ? { over: false, turn: null } : { over: true, winner: 1 - st.ko, reason: 'ko' };
+    },
+  };
+
+  const RULES = { chess, checkers, ttt, c4, tetris };
 
   // Replays a game. Throws if any entry breaks the rules.
   function replay(type, entries) {

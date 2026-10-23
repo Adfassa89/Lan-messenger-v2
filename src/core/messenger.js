@@ -1107,8 +1107,8 @@ class Messenger extends EventEmitter {
   createGame(conv, type) {
     if (this._convType(conv) !== 'direct') throw new Error('Games can be played in private chats');
     if (!Games.TYPES.includes(type)) throw new Error('Unknown game');
-    // Chess colors are drawn at random; in the other games the inviter starts.
-    const players = type === 'chess' && Math.random() < 0.5 ? [conv, this.id] : [this.id, conv];
+    // Chess and checkers colors are drawn at random; in the other games the inviter starts.
+    const players = (type === 'chess' || type === 'checkers') && Math.random() < 0.5 ? [conv, this.id] : [this.id, conv];
     return this._sendMsg(conv, { kind: 'game', text: '', game: { type, players, moves: [] } });
   }
 

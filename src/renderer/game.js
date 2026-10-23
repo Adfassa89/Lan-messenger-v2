@@ -6,8 +6,15 @@
 const Game = (() => {
   const VALUE = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
   const START_COUNT = { p: 8, n: 2, b: 2, r: 2, q: 1 };
-  const TITLES = { chess: 'Chess', ttt: 'Tic-tac-toe', c4: 'Connect Four' };
-  const ICONS = { chess: '♞', ttt: '#', c4: '●' };
+  const TITLES = { chess: 'Chess', checkers: 'Checkers', ttt: 'Tic-tac-toe', c4: 'Connect Four', tetris: 'Tetris Battle' };
+  const ICONS = { chess: '♞', checkers: '⛀', ttt: '#', c4: '●', tetris: '▦' };
+  const ABOUT = {
+    chess: 'Classic chess, colors drawn at random',
+    checkers: 'Captures are compulsory, kings move both ways',
+    ttt: 'Three in a row wins',
+    c4: 'Four in a row wins',
+    tetris: 'Real-time battle: clear lines to send garbage',
+  };
   let open = null; // { conv, id, back, selected }
 
   function result(msg) {
@@ -36,6 +43,8 @@ const Game = (() => {
 
   function colorName(type, i) {
     if (type === 'chess') return i === 0 ? t('White') : t('Black');
+    if (type === 'checkers') return i === 0 ? t('Black') : t('Red');
+    if (type === 'tetris') return i === 0 ? t('Player 1') : t('Player 2');
     if (type === 'ttt') return i === 0 ? '✕' : '◯';
     return i === 0 ? t('Red') : t('Yellow');
   }
@@ -48,6 +57,7 @@ const Game = (() => {
       const why = {
         checkmate: t('Checkmate'), stalemate: t('Stalemate'), insufficient: t('Not enough pieces to win'),
         fifty: t('50-move rule'), resign: t('Resigned'), agreed: t('Draw agreed'), line: '', full: t('Board full'),
+        blocked: t('No moves left'), quiet: t('40 moves without a capture'), ko: 'K.O.',
       }[st.reason] || '';
       let head;
       if (st.winner === null) head = t('Draw');
@@ -58,6 +68,7 @@ const Game = (() => {
     if (r.drawOffer !== null && r.drawOffer !== undefined) {
       return r.drawOffer === me ? t('Draw offered – waiting for an answer') : t('{name} offers a draw', { name: sideName(msg, r.drawOffer) });
     }
+    if (msg.game.type === 'tetris') return t('Battle ready – both players press Play');
     const turn = st.turn;
     const check = st.check ? ` · ${t('Check!')}` : '';
     return (turn === me ? t('Your turn') : t('Waiting for {name}', { name: sideName(msg, turn) })) + check;
@@ -107,8 +118,34 @@ const Game = (() => {
     return `<div class="board c4">${html}</div>`;
   }
 
+  // Checkers board. `view` is the board to draw (it can show a capture
+  // sequence that is still being entered), `path` the squares chosen so far.
+  function checkersBoard(msg, r, { interactive, view, path = [], targets } = {}) {
+    const board = view || r.state.board;
+    const flip = myIndex(msg) === 1;
+    const last = new Set(path.length ? [] : r.state.last || []);
+    let html = '';
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const rank = flip ? row : 7 - row;
+        const file = flip ? 7 - col : col;
+        const s = rank * 8 + file;
+        const dark = (rank + file) % 2 === 0;
+        const cls = ['sq', 'ck-sq', dark ? 'dark' : 'light'];
+        if (last.has(s) || path.includes(s)) cls.push('last');
+        if (targets && targets.has(s)) cls.push('dot');
+        const p = board[s];
+        const piece = p ? `<span class="ck-piece ${p.toLowerCase() === 'b' ? 'p0' : 'p1'}${p === p.toUpperCase() ? ' king' : ''}"></span>` : '';
+        html += `<div class="${cls.join(' ')}" ${interactive && dark ? `data-ck="${s}"` : ''}>${piece}</div>`;
+      }
+    }
+    return `<div class="board chess checkers">${html}</div>`;
+  }
+
   function boardHtml(msg, r, opts) {
     if (msg.game.type === 'chess') return chessBoard(msg, r, opts);
+    if (msg.game.type === 'checkers') return checkersBoard(msg, r, opts);
+    if (msg.game.type === 'tetris') return '';
     if (msg.game.type === 'ttt') return tttBoard(msg, r, opts);
     return c4Board(msg, r, opts);
   }
@@ -121,14 +158,20 @@ const Game = (() => {
     const players = [0, 1].map((i) => `${esc(sideName(msg, i))} <small>(${esc(colorName(msg.game.type, i))})</small>`).join(` ${esc(t('vs'))} `);
     return `<div class="game-card">
       <div class="gc-head"><span class="gc-icon">${ICONS[msg.game.type]}</span><div><b>${esc(t(TITLES[msg.game.type]))}</b><div class="gc-players">${players}</div></div></div>
-      ${r ? `<div class="gc-preview">${boardHtml(msg, r)}</div>` : ''}
+      ${r && msg.game.type !== 'tetris' ? `<div class="gc-preview">${boardHtml(msg, r)}</div>` : ''}
+      ${msg.game.type === 'tetris' ? '<div class="gc-tetris"><i class="t1"></i><i class="t2"></i><i class="t3"></i><i class="t4"></i></div>' : ''}
       <div class="gc-status${myTurn ? ' turn' : ''}">${esc(statusText(msg, r))}</div>
-      <button class="fbtn" data-act="game">${esc(myTurn ? t('Play') : t('Open'))}</button>
+      <button class="fbtn" data-act="game">${esc(myTurn || (msg.game.type === 'tetris' && r && !r.status.over) ? t('Play') : t('Open'))}</button>
     </div>`;
   }
 
   // ------------------------------------------------------------------ game window
   function show(conv, id) {
+    const m = (S.msgs.get(conv) || []).find((x) => x.id === id);
+    if (m && m.game && m.game.type === 'tetris') {
+      call(api.openTetris(conv, id));
+      return;
+    }
     close();
     const back = el('div', 'modal-back game-back');
     back.addEventListener('mousedown', (e) => { if (e.target === back) close(); });
@@ -340,12 +383,115 @@ const Game = (() => {
     board.addEventListener('pointercancel', finish);
   }
 
+  // ------------------------------------------------------------------ checkers window
+  function checkersBar(msg, r, i) {
+    const id = msg.game.players[i];
+    const me = myIndex(msg);
+    const own = i === 0 ? 'b' : 'r';
+    const left = r.state.board.filter((p) => p && p.toLowerCase() === own).length;
+    const lost = 12 - left;
+    const theirLost = 12 - r.state.board.filter((p) => p && p.toLowerCase() === (own === 'b' ? 'r' : 'b')).length;
+    const moving = !r.status.over && r.status.turn === i;
+    const peer = S.peers.get(id);
+    return `<div class="cc-player">
+      ${avatarHtml('direct', id, id === S.me.id ? S.me.name : (peer ? peer.name : ''), null, 'cc-avatar')}
+      <div class="cc-who"><div class="cc-name">${esc(id === S.me.id ? S.me.name : peerName(id))}${i === me ? ` <span class="cc-you">(${esc(t('You'))})</span>` : ''}</div>
+        <div class="cc-captured">${new Array(theirLost).fill(`<span class="ck-piece mini ${own === 'b' ? 'p1' : 'p0'}"></span>`).join('')}${theirLost > lost ? `<span class="cc-adv">+${theirLost - lost}</span>` : ''}</div></div>
+      <div class="cc-clock${moving ? ' on' : ''}"><span class="ck-piece mini ${i === 0 ? 'p0' : 'p1'}"></span><span>${esc(moving ? (i === me ? t('Your turn') : t('To move')) : colorName('checkers', i))}</span></div>
+    </div>`;
+  }
+
+  function renderCheckers(msg, r) {
+    const me = myIndex(msg);
+    const over = r.status.over;
+    const myTurn = !over && r.status.turn === me;
+    const offerFromOther = !over && r.drawOffer === 1 - me;
+    const C = Games.RULES.checkers;
+    const path = open.path || [];
+    let view = null;
+    let targets = null;
+    if (myTurn) {
+      const legal = C.legalMoves(r.state);
+      if (path.length) {
+        const cands = legal.filter((m) => path.every((v, i) => m[i] === v));
+        targets = new Set(cands.filter((m) => m.length > path.length).map((m) => m[path.length]));
+        // Show the piece where it has got to so far, and the pieces it has jumped.
+        view = r.state.board.slice();
+        const piece = view[path[0]];
+        view[path[0]] = null;
+        for (let i = 1; i < path.length; i++) {
+          if (Math.abs((path[i] >> 3) - (path[i - 1] >> 3)) === 2) view[(path[i] + path[i - 1]) / 2] = null;
+        }
+        view[path[path.length - 1]] = piece;
+      }
+    }
+    const log = r.state.log || [];
+    let moves = '';
+    for (let i = 0; i < log.length; i += 2) {
+      const cur = (j) => (j === log.length - 1 ? ' cur' : '');
+      moves += `<div class="cc-row"><span class="cc-num">${i / 2 + 1}.</span><span class="cc-mv${cur(i)}">${esc(log[i])}</span><span class="cc-mv${cur(i + 1)}">${log[i + 1] ? esc(log[i + 1]) : ''}</span></div>`;
+    }
+    const opp = 1 - (me < 0 ? 0 : me);
+    const self = me < 0 ? 0 : me;
+    open.back.innerHTML = `<div class="modal game-modal chesscom">
+      <div class="modal-head"><h2>${esc(t('Checkers'))}</h2><button class="icon-btn" data-close title="${esc(t('Close'))}">✕</button></div>
+      <div class="cc-body">
+        <div class="cc-left">
+          ${checkersBar(msg, r, opp)}
+          <div class="game-board-wrap">${checkersBoard(msg, r, { interactive: myTurn, view, path, targets })}</div>
+          ${checkersBar(msg, r, self)}
+        </div>
+        <div class="cc-panel">
+          <div class="cc-status${myTurn ? ' turn' : ''}${over ? ' over' : ''}">${esc(statusText(msg, r))}${myTurn && path.length > 1 ? ` · ${esc(t('Keep jumping'))}` : ''}</div>
+          ${offerFromOther ? `<div class="cc-offer"><span>½ ${esc(t('Accept the draw?'))}</span><button class="cc-btn green" data-draw="accept">${esc(t('Accept'))}</button><button class="cc-btn" data-draw="decline">${esc(t('Decline'))}</button></div>` : ''}
+          <div class="cc-moves">${moves || `<div class="cc-empty">${esc(t('No moves yet'))}</div>`}</div>
+          <div class="cc-actions">
+            ${!over && r.drawOffer === null ? `<button class="cc-btn" data-action="draw">½ ${esc(t('Draw'))}</button>` : ''}
+            ${!over ? `<button class="cc-btn" data-action="resign">⚑ ${esc(t('Resign'))}</button>` : `<button class="cc-btn green" data-action="rematch">${esc(t('New game'))}</button>`}
+          </div>
+        </div>
+      </div></div>`;
+    const modal = open.back.querySelector('.game-modal');
+    modal.querySelector('[data-close]').onclick = close;
+    modal.addEventListener('click', (e) => onClick(e, msg, r));
+    const list = modal.querySelector('.cc-moves');
+    list.scrollTop = list.scrollHeight;
+    if (myTurn) {
+      modal.querySelector('.board').addEventListener('click', (e) => {
+        const sq = e.target.closest('[data-ck]');
+        if (!sq) return;
+        const s = Number(sq.dataset.ck);
+        const legal = C.legalMoves(r.state);
+        const cur = open.path || [];
+        if (cur.length) {
+          const next = cur.concat(s);
+          const cands = legal.filter((m) => next.every((v, i) => m[i] === v));
+          if (cands.length) {
+            const done = cands.find((m) => m.length === next.length);
+            if (done) {
+              open.path = null;
+              move({ path: done });
+            } else {
+              open.path = next;
+              render();
+            }
+            return;
+          }
+          if (cur.length > 1) return; // in the middle of a capture: finish it first
+        }
+        open.path = legal.some((m) => m[0] === s) && !(cur.length === 1 && cur[0] === s) ? [s] : null;
+        render();
+      });
+    }
+  }
+
   function render() {
     const msg = current();
     if (!open) return;
     if (!msg) return close();
     const r = result(msg);
     if (msg.game.type === 'chess' && r) return renderChess(msg, r);
+    if (msg.game.type === 'checkers' && r) return renderCheckers(msg, r);
     const me = myIndex(msg);
     const type = msg.game.type;
     const over = !r || r.status.over;
@@ -390,6 +536,7 @@ const Game = (() => {
     const { conv, id } = open;
     open.selected = null;
     open.promo = null;
+    open.path = null;
     return call(api.gameMove(conv, id, m));
   }
 
@@ -420,7 +567,7 @@ const Game = (() => {
     const back = el('div', 'modal-back');
     back.innerHTML = `<div class="modal"><div class="modal-head"><h2>${esc(t('Play a game'))}</h2><button class="icon-btn" data-close>✕</button></div>
       <div class="modal-body"><div class="game-picker">${Games.TYPES.map((type) => `<button class="game-pick" data-type="${type}">
-        <span class="gp-icon">${ICONS[type]}</span><b>${esc(t(TITLES[type]))}</b><span>${esc(t({ chess: 'Classic chess, colors drawn at random', ttt: 'Three in a row wins', c4: 'Four in a row wins' }[type]))}</span></button>`).join('')}</div>
+        <span class="gp-icon">${ICONS[type]}</span><b>${esc(t(TITLES[type]))}</b><span>${esc(t(ABOUT[type]))}</span></button>`).join('')}</div>
       <p class="modal-note" style="margin-top:12px">${esc(t('Moves are delivered like messages, so you can also play slowly across shifts.'))}</p></div></div>`;
     const done = () => back.remove();
     back.addEventListener('mousedown', (e) => { if (e.target === back) done(); });

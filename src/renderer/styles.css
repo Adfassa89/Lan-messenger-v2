@@ -1252,3 +1252,29 @@ html[data-theme="dark"] .style-preview[data-style="emerald"] {
 .cc-btn:hover { background: #4b4847; }
 .cc-btn.green { background: #81b64c; box-shadow: 0 4px 0 #45753c; }
 .cc-btn.green:hover { background: #a3d160; }
+
+/* ---------------------------------------------------------------- checkers */
+.ck-piece {
+  display: block; width: 78%; height: 78%; margin: auto; border-radius: 50%; position: relative; z-index: 1;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .35), inset 0 3px 0 rgba(255, 255, 255, .18), 0 2px 4px rgba(0, 0, 0, .35);
+}
+.ck-piece.p0 { background: radial-gradient(circle at 50% 40%, #4a4a4a, #1c1c1c 70%); }
+.ck-piece.p1 { background: radial-gradient(circle at 50% 40%, #f05454, #b31c1c 70%); }
+.ck-piece::before { content: ""; position: absolute; inset: 18%; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .14); }
+.ck-piece.king::after {
+  content: "♛\fe0e"; position: absolute; inset: 0; display: grid; place-items: center;
+  font: 700 calc(min(62vh, 520px) / 8 * .42) "Segoe UI Symbol", "DejaVu Sans", serif; color: #ffd84d; text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
+}
+.gc-preview .ck-piece.king::after { font-size: 11px; }
+.ck-piece.mini { display: inline-block; width: 15px; height: 15px; margin: 0 -3px 0 0; vertical-align: middle; box-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
+.ck-piece.mini::before { display: none; }
+.cc-clock .ck-piece.mini { width: 18px; height: 18px; margin: 0; }
+.checkers .sq[data-ck] { cursor: pointer; }
+
+/* tetris card in the chat */
+.gc-tetris { display: grid; grid-template-columns: repeat(4, 22px); grid-template-rows: repeat(2, 22px); gap: 3px; padding: 4px 0; }
+.gc-tetris i { border-radius: 4px; box-shadow: inset 0 3px 0 rgba(255, 255, 255, .25), inset 0 -3px 0 rgba(0, 0, 0, .2); }
+.gc-tetris .t1 { background: #b552e0; grid-column: 1 / 4; grid-row: 2; }
+.gc-tetris .t2 { background: #b552e0; grid-column: 2; grid-row: 1; }
+.gc-tetris .t3 { background: #3fd0f2; grid-column: 4; grid-row: 1 / 3; }
+.gc-tetris .t4 { background: #f5cf3a; grid-column: 1; grid-row: 1; }

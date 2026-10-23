@@ -85,3 +85,44 @@ test('moves are written in standard chess notation', () => {
   const next = chess.apply({ ...st, log: [] }, { from: 'b1', to: 'd2' }, 0);
   assert.deepStrictEqual(next.log, ['Nbd2']);
 });
+
+const ck = Games.RULES.checkers;
+const num = (n) => {
+  // square number (1-32) -> board index
+  for (let s = 0; s < 64; s++) if (((s >> 3) + (s & 7)) % 2 === 0 && ck.number(s) === n) return s;
+  throw new Error(`no square ${n}`);
+};
+
+test('checkers: opening moves, forced captures and multi-jumps', () => {
+  assert.strictEqual(ck.legalMoves(ck.init()).length, 7);
+  const st = { board: new Array(64).fill(null), turn: 0, quiet: 0, log: [] };
+  st.board[num(10)] = 'b';
+  st.board[num(1)] = 'b';
+  st.board[num(14)] = 'r';
+  st.board[num(23)] = 'r';
+  // The capture is compulsory, and the man must keep jumping: 10x19x28.
+  const moves = ck.legalMoves(st);
+  assert.deepStrictEqual(moves.map((m) => m.map(ck.number)), [[10, 19, 28]]);
+  assert.throws(() => ck.apply(st, { path: [num(1), num(5)] }, 0), /Illegal/);
+  const next = ck.apply(st, { path: moves[0] }, 0);
+  assert.deepStrictEqual(next.log, ['10x19x28']);
+  assert.strictEqual(next.board.filter((p) => p && p.toLowerCase() === 'r').length, 0);
+  assert.deepStrictEqual(ck.status(next), { over: true, winner: 0, reason: 'blocked' });
+});
+
+test('checkers: men are crowned on the far row and kings move backwards', () => {
+  const st = { board: new Array(64).fill(null), turn: 0, quiet: 0, log: [] };
+  st.board[num(25)] = 'b';
+  st.board[num(8)] = 'r';
+  const next = ck.apply(st, { path: [num(25), num(29)] }, 0);
+  assert.strictEqual(next.board[num(29)], 'B');
+  assert.throws(() => ck.apply(next, { path: [num(29), num(25)] }, 0), /turn/);
+  const after = ck.apply(next, { path: [num(8), num(4)] }, 1);
+  assert.ok(ck.legalMoves(after).some((m) => m[0] === num(29) && m[1] === num(25)), 'king can move back');
+});
+
+test('tetris battle stores who was knocked out', () => {
+  const r = Games.replay('tetris', [{ p: 1, m: { ko: true } }]);
+  assert.deepStrictEqual(r.status, { over: true, winner: 0, reason: 'ko' });
+  assert.throws(() => Games.replay('tetris', [{ p: 1, m: { ko: true } }, { p: 0, m: { ko: true } }]));
+});
