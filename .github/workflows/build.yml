@@ -26,6 +26,17 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Check update signing key
+        shell: pwsh
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          if ($env:UPDATE_SIGNING_KEY) {
+            Write-Output "Signing key found ($($env:UPDATE_SIGNING_KEY.Length) characters)"
+          } else {
+            Write-Output "::warning::The UPDATE_SIGNING_KEY secret is not available to this build. Add it under Settings > Secrets and variables > Actions > Repository secrets."
+          }
+
       - name: Build installer and portable app
         run: npm run dist
         env:
