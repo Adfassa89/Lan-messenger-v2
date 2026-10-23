@@ -133,6 +133,30 @@ To run two copies on one PC for testing, start the second with a separate profil
 Encryption note: connections use fresh keys every time, so recorded traffic cannot be read later.
 There is no central authority that verifies identities, so the app trusts that people on your LAN are who they say they are.
 
+## Code signing policy
+
+Windows builds are made automatically by GitHub Actions from the code in this repository, using the
+[build workflow](.github/workflows/build.yml). Nothing is built or signed by hand.
+
+Free code signing is provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+**Team roles**
+
+- Committers and reviewers: [Adfassa89](https://github.com/Adfassa89)
+- Approvers (approve every signed release): [Adfassa89](https://github.com/Adfassa89)
+
+**Privacy policy**
+
+This program does not send any information to the internet. It only talks to other PCs running
+LAN Messenger 2 on the same local network, and only to deliver what the user sends (messages,
+files, calls, screen sharing, alerts and status) and to share signed app updates between those PCs.
+Chats and settings are stored only on the user's own PC.
+
+## License
+
+LAN Messenger 2 is free and open-source software under the [MIT License](LICENSE).
+Third-party parts keep their own licenses (see Credits).
+
 ## Credits
 
 - Chess pieces: Colin M.L. Burnett ("Cburnett") and Rfc1394, from Wikimedia Commons, licensed
