@@ -1,5 +1,5 @@
 'use strict';
-/* global api, I18N, TetrisRules */
+/* global api, I18N, TetrisRules, Controls */
 // Tetris Battle window: timing, controls, drawing, and the live link to the
 // opponent. The rules themselves are in src/shared/tetris.js.
 
@@ -13,10 +13,8 @@ const ROWS = VISIBLE + 2; // two rows above the field, where pieces appear
 const COLORS = {
   I: '#3fd0f2', J: '#4f6cf5', L: '#f5922f', O: '#f5cf3a', S: '#62d64b', T: '#b552e0', Z: '#ef4565', G: '#686480',
 };
-// Handling, in milliseconds (close to TETR.IO's defaults).
-const DAS = 167;
-const ARR = 33;
-const SOFT_DROP_MS = 20;
+// Key repeat and soft drop timing come from the player's control settings.
+const H_ = () => Controls.handling;
 const LOCK_DELAY = 500;
 const MAX_RESETS = 15;
 const STATE_EVERY = 90;
@@ -100,9 +98,11 @@ function drawMine() {
     }
   }
   if (game.active && phase === 'playing') {
-    const gy = game.ghostY();
-    for (const [x, y] of game.cells({ ...game.active, y: gy })) {
-      if (y >= top) block(ctx, x * cell, (y - top) * cell, cell, COLORS[game.active.type], 0.22);
+    if (H_().ghost) {
+      const gy = game.ghostY();
+      for (const [x, y] of game.cells({ ...game.active, y: gy })) {
+        if (y >= top) block(ctx, x * cell, (y - top) * cell, cell, COLORS[game.active.type], 0.22);
+      }
     }
     for (const [x, y] of game.cells()) {
       if (y >= top) block(ctx, x * cell, (y - top) * cell, cell, COLORS[game.active.type]);
@@ -311,7 +311,8 @@ function frame(now) {
         while (das.arr <= 0) {
           if (!game.move(das.dir)) { das.arr = 0; break; }
           afterShift(true);
-          das.arr += ARR;
+          if (H_().arr === 0) continue; // instant: slide all the way
+          das.arr += H_().arr;
         }
       }
     }
@@ -320,8 +321,8 @@ function frame(now) {
     const rowsPerSec = Math.min(20, (0.02 + secs * 0.0012) * 60);
     if (held.has('soft')) {
       softAcc += dt;
-      while (softAcc >= SOFT_DROP_MS) {
-        softAcc -= SOFT_DROP_MS;
+      while (softAcc >= H_().soft) {
+        softAcc -= H_().soft;
         if (game.drop()) gravityAcc = 0;
       }
     }
@@ -353,15 +354,10 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-// ------------------------------------------------------------------ keyboard (TETR.IO default keys)
-const KEYMAP = {
-  ArrowLeft: 'left', ArrowRight: 'right', ArrowDown: 'soft', Space: 'hard',
-  ArrowUp: 'cw', KeyX: 'cw', KeyZ: 'ccw', ControlLeft: 'ccw', ControlRight: 'ccw', KeyA: '180',
-  KeyC: 'hold', ShiftLeft: 'hold', ShiftRight: 'hold',
-};
-
+// ------------------------------------------------------------------ keyboard (keys chosen in Controls)
 document.addEventListener('keydown', (e) => {
-  const action = KEYMAP[e.code];
+  if (Controls.isOpen()) return;
+  const action = Controls.actionFor(e.code);
   if (!action) return;
   e.preventDefault();
   if (phase !== 'playing' || e.repeat) return;
@@ -370,10 +366,10 @@ document.addEventListener('keydown', (e) => {
     const dir = action === 'left' ? -1 : 1;
     afterShift(game.move(dir));
     das.dir = dir;
-    das.timer = DAS;
+    das.timer = H_().das;
     das.arr = 0;
   } else if (action === 'soft') {
-    softAcc = SOFT_DROP_MS;
+    softAcc = H_().soft;
   } else if (action === 'hard') {
     hardDrop();
   } else if (action === 'cw' || action === 'ccw' || action === '180') {
@@ -387,14 +383,14 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('keyup', (e) => {
-  const action = KEYMAP[e.code];
+  const action = Controls.actionFor(e.code);
   if (!action) return;
   held.delete(action);
   if ((action === 'left' && das.dir === -1) || (action === 'right' && das.dir === 1)) {
     // If the other direction is still held, switch to it.
     const other = action === 'left' ? 'right' : 'left';
     das.dir = held.has(other) ? (other === 'left' ? -1 : 1) : 0;
-    das.timer = DAS;
+    das.timer = H_().das;
   }
 });
 
@@ -457,10 +453,14 @@ async function init() {
   $('meName').textContent = info.people[info.me].name;
   $('oppName').textContent = info.people[oppId].name;
   for (const e of document.querySelectorAll('[data-t]')) e.textContent = t(e.dataset.t);
-  $('keys').innerHTML = [
-    ['← →', t('move')], ['↓', t('soft drop')], ['Space', t('hard drop')], ['↑ / X', t('rotate')],
-    ['Z', t('rotate left')], ['A', '180°'], ['C / Shift', t('hold')],
-  ].map(([k, v]) => `<kbd>${k}</kbd> ${v}`).join(' &nbsp; ');
+  const showKeys = () => { $('keys').innerHTML = Controls.hintHtml(t); };
+  showKeys();
+  $('btnControls').textContent = `⚙ ${t('Controls')}`;
+  $('btnControls').onclick = () => {
+    held.clear();
+    das.dir = 0;
+    Controls.open(t, showKeys);
+  };
   $('btnRematch').textContent = t('Rematch');
   $('btnClose').textContent = t('Close');
   $('btnClose').onclick = () => window.close();
