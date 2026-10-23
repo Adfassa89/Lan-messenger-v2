@@ -72,3 +72,16 @@ test('tic-tac-toe and connect four find the winner', () => {
   assert.strictEqual(c4.status.winner, 0);
   assert.throws(() => Games.replay('c4', [0, 0, 0, 0, 0, 0, 0].map((col, i) => ({ p: i % 2, m: { col } }))), /full/);
 });
+
+test('moves are written in standard chess notation', () => {
+  const play = (moves) => Games.replay('chess', moves.map(([from, to, promo], i) => ({ p: i % 2, m: { from, to, promo } }))).state.log;
+  assert.deepStrictEqual(play([['f2', 'f3'], ['e7', 'e5'], ['g2', 'g4'], ['d8', 'h4']]), ['f3', 'e5', 'g4', 'Qh4#']);
+  assert.deepStrictEqual(
+    play([['e2', 'e4'], ['d7', 'd5'], ['e4', 'd5'], ['g8', 'f6'], ['g1', 'f3'], ['f6', 'd5'], ['f1', 'c4'], ['b8', 'c6'], ['e1', 'g1']]),
+    ['e4', 'd5', 'exd5', 'Nf6', 'Nf3', 'Nxd5', 'Bc4', 'Nc6', 'O-O'],
+  );
+  // Two knights can reach d2: the file is added to tell them apart.
+  const st = chess.fromFen('4k3/8/8/8/8/5N2/8/1N2K3 w - - 0 1');
+  const next = chess.apply({ ...st, log: [] }, { from: 'b1', to: 'd2' }, 0);
+  assert.deepStrictEqual(next.log, ['Nbd2']);
+});

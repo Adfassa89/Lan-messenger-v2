@@ -1133,10 +1133,6 @@ html[data-theme="dark"] .style-preview[data-style="emerald"] {
 .sq .rk { left: 3px; top: 2px; }
 .sq .fl { right: 3px; bottom: 1px; }
 .gc-preview .sq i { display: none; }
-.pc { font-family: "Segoe UI Symbol", "DejaVu Sans", "Noto Sans Symbols 2", serif; line-height: 1; font-size: min(5.2vh, 44px); }
-.gc-preview .pc { font-size: 17px; }
-.pc.w { color: #fff; text-shadow: 0 0 1px #000, 0 0 1px #000, 0 1px 1px #000, 1px 0 1px #000, -1px 0 1px #000, 0 -1px 1px #000; }
-.pc.b { color: #1c1c1c; text-shadow: 0 0 1px rgba(255, 255, 255, .5); }
 
 .board.ttt { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 6px; background: transparent; padding: 0; }
 .cell { display: grid; place-items: center; border-radius: 10px; background: color-mix(in srgb, currentColor 9%, transparent); }
@@ -1164,7 +1160,6 @@ html[data-theme="dark"] .style-preview[data-style="emerald"] {
 .gp { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--panel-2); font-weight: 600; }
 .gp.active { outline: 2px solid var(--accent); }
 .gp-chip { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 16px; }
-.gp-chip.chess { font-size: 18px; background: #f0d9b5; }
 .gp-chip.ttt.p0 { color: #ef4444; font-weight: 800; }
 .gp-chip.ttt.p1 { color: #3b82f6; font-weight: 800; }
 .gp-chip.c4.p0 { background: #ef4444; }
@@ -1188,3 +1183,72 @@ html[data-theme="dark"] .style-preview[data-style="emerald"] {
 .game-pick:hover { border-color: var(--accent); background: var(--hover); }
 .game-pick .gp-icon { grid-row: span 2; width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 26px; background: var(--accent-soft); color: var(--accent-text); }
 .game-pick span:last-child { font-size: 12.5px; color: var(--muted); }
+
+/* ---------------------------------------------------------------- chess, styled after chess.com's default look */
+.pc { display: block; width: 100%; height: 100%; background-size: 100% 100%; background-repeat: no-repeat; }
+.pc.mini { display: inline-block; width: 1.25em; height: 1.25em; vertical-align: -0.28em; margin-right: 1px; }
+.pc.ghost { position: fixed; z-index: 300; pointer-events: none; cursor: grabbing; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .35)); }
+.board.chess { border-radius: 3px; box-shadow: none; }
+.sq.light { background: #ebecd0; }
+.sq.dark { background: #739552; }
+.sq.last, .sq.sel { box-shadow: inset 0 0 0 999px rgba(255, 255, 51, .5); }
+.sq.check { background: radial-gradient(circle, rgba(255, 0, 0, .9) 0%, rgba(231, 0, 0, .6) 30%, rgba(169, 0, 0, 0) 70%), #739552; }
+.sq.light.check { background: radial-gradient(circle, rgba(255, 0, 0, .9) 0%, rgba(231, 0, 0, .6) 30%, rgba(169, 0, 0, 0) 70%), #ebecd0; }
+.sq.dot::after { width: 33%; height: 33%; background: rgba(0, 0, 0, .14); position: absolute; }
+.sq.cap::after { inset: 0; border: none; border-radius: 50%; box-shadow: inset 0 0 0 0.45em rgba(0, 0, 0, .14); }
+.sq.hover { box-shadow: inset 0 0 0 4px rgba(255, 255, 255, .75); }
+.sq.sel.hover, .sq.last.hover { box-shadow: inset 0 0 0 4px rgba(255, 255, 255, .75), inset 0 0 0 999px rgba(255, 255, 51, .5); }
+.sq[data-sq] .pc { cursor: grab; }
+.sq .pc { position: relative; z-index: 1; }
+.sq i { z-index: 2; font-size: 12px; font-weight: 700; opacity: 1; }
+.sq.light i { color: #739552; }
+.sq.dark i { color: #ebecd0; }
+.sq .rk { left: 3px; top: 1px; }
+.sq .fl { right: 3px; bottom: 0; }
+.promo button { background: #fff; padding: 4px; }
+.promo button:hover { background: #ebecd0; }
+
+.game-modal.chesscom { max-width: 1000px; background: #312e2b; color: #fff; }
+.chesscom .modal-head h2 { color: #fff; }
+.chesscom .modal-head .icon-btn { color: #c3c2c1; }
+.chesscom .modal-head .icon-btn:hover { background: #3c3a37; color: #fff; }
+.cc-body { display: flex; gap: 16px; padding: 2px 18px 18px; align-items: stretch; }
+.cc-left { width: min(calc(100vh - 230px), 560px); flex: none; display: flex; flex-direction: column; gap: 6px; }
+.cc-left .game-board-wrap { width: 100%; }
+.cc-player { display: flex; align-items: center; gap: 10px; height: 46px; }
+.cc-player .avatar.cc-avatar { width: 40px; height: 40px; border-radius: 3px; font-size: 14px; }
+.cc-player .avatar.cc-avatar img { border-radius: 3px; }
+.cc-who { flex: 1; min-width: 0; }
+.cc-name { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-you { color: #989795; font-weight: 400; }
+.cc-captured { display: flex; align-items: center; height: 18px; margin-top: 2px; }
+.cc-captured .pc { width: 17px; height: 17px; margin-right: -5px; }
+.cc-adv { margin-left: 10px; font-size: 12px; font-weight: 600; color: #c3c2c1; }
+.cc-clock {
+  display: flex; align-items: center; gap: 6px; min-width: 132px; justify-content: flex-end; padding: 6px 10px; border-radius: 4px;
+  background: #262421; color: #8b8987; font-weight: 700; font-size: 14px;
+}
+.cc-clock .pc { width: 20px; height: 20px; opacity: .55; }
+.cc-clock.on { background: #fff; color: #262421; }
+.cc-clock.on .pc { opacity: 1; }
+.cc-panel { flex: 1; min-width: 250px; display: flex; flex-direction: column; background: #262522; border-radius: 6px; overflow: hidden; }
+.cc-status { padding: 14px 16px; font-weight: 700; font-size: 15px; border-bottom: 1px solid #3c3a37; color: #fff; }
+.cc-status.turn { color: #81b64c; }
+.cc-status.over { color: #fff; background: #1f1e1b; }
+.cc-offer { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #3c3a37; flex-wrap: wrap; }
+.cc-offer span { flex: 1; font-weight: 600; }
+.cc-moves { flex: 1; min-height: 120px; max-height: calc(100vh - 330px); overflow-y: auto; font-size: 14px; }
+.cc-row { display: grid; grid-template-columns: 44px 1fr 1fr; align-items: center; padding: 3px 10px; }
+.cc-row:nth-child(even) { background: #2b2926; }
+.cc-num { color: #8b8987; font-weight: 600; }
+.cc-mv { justify-self: start; padding: 2px 6px; border-radius: 3px; font-weight: 600; color: #e8e6e3; }
+.cc-mv.cur { background: #484644; color: #fff; border-bottom: 2px solid #6e6c69; }
+.cc-empty { padding: 16px; color: #8b8987; }
+.cc-actions { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #3c3a37; }
+.cc-btn {
+  flex: 1; height: 40px; padding: 0 12px; border-radius: 6px; background: #3c3a37; color: #fff; font-weight: 700; font-size: 14px;
+  box-shadow: 0 3px 0 #2b2926;
+}
+.cc-btn:hover { background: #4b4847; }
+.cc-btn.green { background: #81b64c; box-shadow: 0 4px 0 #45753c; }
+.cc-btn.green:hover { background: #a3d160; }

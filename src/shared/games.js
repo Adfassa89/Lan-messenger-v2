@@ -199,12 +199,30 @@
     return rest.length === 1 && 'bn'.includes(rest[0].toLowerCase());
   }
 
-  function moveText(st, mv) {
-    if (mv.castle) return mv.castle === 'k' ? 'O-O' : 'O-O-O';
-    const p = st.board[mv.from];
-    const piece = p.toLowerCase() === 'p' ? '' : p.toUpperCase();
-    const capture = st.board[mv.to] || mv.ep ? '×' : '–';
-    return `${piece}${name(mv.from)}${capture}${name(mv.to)}${mv.promo ? `=${mv.promo.toUpperCase()}` : ''}`;
+  // Standard algebraic notation, as used by chess sites: Nf3, exd5, O-O, e8=Q+, Qh4#.
+  function san(st, mv, legal, next) {
+    let s;
+    if (mv.castle) {
+      s = mv.castle === 'k' ? 'O-O' : 'O-O-O';
+    } else {
+      const p = st.board[mv.from];
+      const type = p.toLowerCase();
+      const capture = !!st.board[mv.to] || !!mv.ep;
+      if (type === 'p') {
+        s = (capture ? `${FILES[fileOf(mv.from)]}x` : '') + name(mv.to) + (mv.promo ? `=${mv.promo.toUpperCase()}` : '');
+      } else {
+        const rivals = legal.filter((o) => o.to === mv.to && o.from !== mv.from && st.board[o.from] === p);
+        let dis = '';
+        if (rivals.length) {
+          if (!rivals.some((o) => fileOf(o.from) === fileOf(mv.from))) dis = FILES[fileOf(mv.from)];
+          else if (!rivals.some((o) => rankOf(o.from) === rankOf(mv.from))) dis = String(rankOf(mv.from) + 1);
+          else dis = name(mv.from);
+        }
+        s = type.toUpperCase() + dis + (capture ? 'x' : '') + name(mv.to);
+      }
+    }
+    if (inCheck(next)) s += legalMoves(next).length ? '+' : '#';
+    return s;
   }
 
   const chess = {
@@ -219,10 +237,11 @@
       const from = typeof m.from === 'string' ? FILES.indexOf(m.from[0]) + (Number(m.from[1]) - 1) * 8 : m.from;
       const to = typeof m.to === 'string' ? FILES.indexOf(m.to[0]) + (Number(m.to[1]) - 1) * 8 : m.to;
       const promo = m.promo ? String(m.promo).toLowerCase() : undefined;
-      const mv = legalMoves(st).find((x) => x.from === from && x.to === to && (x.promo || undefined) === (x.promo ? promo || 'q' : undefined));
+      const legal = legalMoves(st);
+      const mv = legal.find((x) => x.from === from && x.to === to && (x.promo || undefined) === (x.promo ? promo || 'q' : undefined));
       if (!mv) throw new Error('Illegal move');
       const next = makeMove(st, mv);
-      next.log = (st.log || []).concat(moveText(st, mv));
+      next.log = (st.log || []).concat(san(st, mv, legal, next));
       return next;
     },
     status(st) {

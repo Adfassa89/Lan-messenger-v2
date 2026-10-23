@@ -7,6 +7,7 @@
     "Gestures": "Дохио",
     "Work": "Ажил",
     "Things": "Бусад",
+    "To move": "Нүүх ээлж",
     "Chess": "Шатар",
     "Tic-tac-toe": "Икс-Нолик",
     "Connect Four": "Дөрвийг холбох",

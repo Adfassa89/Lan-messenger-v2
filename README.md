@@ -124,3 +124,10 @@ To run two copies on one PC for testing, start the second with a separate profil
 
 Encryption note: connections use fresh keys every time, so recorded traffic cannot be read later.
 There is no central authority that verifies identities, so the app trusts that people on your LAN are who they say they are.
+
+## Credits
+
+- Chess pieces: Colin M.L. Burnett ("Cburnett") and Rfc1394, from Wikimedia Commons, licensed
+  [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), taken from
+  [cm-chessboard](https://github.com/shaack/cm-chessboard). Source: `build/third-party/chess-pieces-cburnett.svg`;
+  `scripts/make-pieces.py` turns it into `src/renderer/pieces.css`.
