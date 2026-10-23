@@ -106,12 +106,8 @@ input, textarea, select { font: inherit; color: inherit; }
   padding: 0 18px;
   font-weight: 600; font-size: 13px; letter-spacing: .2px; color: var(--muted);
 }
-.brand-logo {
-  width: 24px; height: 24px; border-radius: 7px;
-  display: grid; place-items: center;
-  background: var(--brand);
-}
-.brand-logo svg { width: 15px; height: 15px; fill: var(--on-accent); }
+.brand-logo { width: 24px; height: 24px; display: grid; place-items: center; }
+.brand-logo svg { width: 24px; height: 24px; }
 
 .me {
   display: flex; align-items: center; gap: 12px;
