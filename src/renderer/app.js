@@ -183,6 +183,7 @@ async function call(promise) {
 function msgPreview(m) {
   if (!m) return '';
   if (m.deleted) return t('This message was deleted');
+  if (m.kind === 'call') return `📞 ${callText(m.call)}`;
   if (m.kind === 'poll') return `📊 ${m.poll.question}`;
   if (m.kind === 'file') {
     if (m.file.voice) return `🎤 ${t('Voice message')}`;
@@ -353,6 +354,8 @@ function convItem(i) {
   } else if (i.meta && i.meta.lastText) {
     let text = i.meta.lastText;
     if (text === '🚫') text = t('This message was deleted');
+    else if (text === '📞') text = `📞 ${t('Call')}`;
+    else if (text === '📵') text = `📵 ${t('Missed call')}`;
     else if (text === '🎤') text = `🎤 ${t('Voice message')}`;
     const who = i.meta.lastFrom === S.me.id ? `${t('You')}: ` : (i.kind !== 'direct' && i.meta.lastFrom ? `${peerName(i.meta.lastFrom).split(' ')[0]}: ` : '');
     prev = esc(who + text);
@@ -493,11 +496,15 @@ function renderHeader() {
   h.innerHTML = `
     ${avatarHtml(kind, conv, convName(conv), status === 'offline' ? null : status, 'lg')}
     <div class="who"><div class="title">${esc(convName(conv))}</div>${sub}</div>
+    ${kind !== 'broadcast' ? `<button class="icon-btn" id="hdrVoice" title="${esc(t('Voice call'))}"><svg class="ico" viewBox="0 0 24 24"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg></button>
+    <button class="icon-btn" id="hdrVideo" title="${esc(t('Video call'))}"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></svg></button>` : ''}
     <button class="icon-btn" id="hdrShare" title="${esc(t('Share your screen'))}"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M12 13V8M9.5 10.5 12 8l2.5 2.5"/></svg></button>
     <button class="icon-btn" id="hdrAttach" title="${esc(t('Send files'))}"><svg class="ico" viewBox="0 0 24 24"><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4M12 3v12M7 8l5-5 5 5"/></svg></button>
     ${kind === 'group' ? `<button class="icon-btn" id="hdrAdd" title="${esc(t('Add people'))}"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 19c.8-3.4 3.4-5 6.5-5s5.7 1.6 6.5 5M18 8v6M15 11h6"/></svg></button>` : ''}
     <button class="icon-btn" id="hdrMore" title="${esc(t('More'))}"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></svg></button>`;
   $('#hdrShare').onclick = () => Share.start(conv);
+  if ($('#hdrVoice')) $('#hdrVoice').onclick = () => call(api.callStart(conv, false));
+  if ($('#hdrVideo')) $('#hdrVideo').onclick = () => call(api.callStart(conv, true));
   $('#hdrAttach').onclick = attachFiles;
   if ($('#hdrAdd')) $('#hdrAdd').onclick = () => groupMembersModal(conv.slice(2));
   $('#hdrMore').onclick = (e) => {
@@ -602,7 +609,7 @@ function isCont(list, i) {
   if (i === 0) return false;
   const a = list[i - 1];
   const b = list[i];
-  return a.kind !== 'system' && b.kind !== 'system' && !a.urgent && !b.urgent && a.from === b.from
+  return a.kind !== 'system' && b.kind !== 'system' && a.kind !== 'call' && b.kind !== 'call' && !a.urgent && !b.urgent && a.from === b.from
     && b.ts - a.ts < 5 * 60000 && dayKey(a.ts) === dayKey(b.ts);
 }
 
@@ -634,6 +641,7 @@ function msgNode(list, i) {
     s.dataset.id = m.id;
     return s;
   }
+  if (m.kind === 'call') return callNode(m);
   const out = m.from === S.me.id;
   const cont = isCont(list, i);
   const kind = convKind(S.active);
@@ -702,6 +710,29 @@ function msgNode(list, i) {
   wrap.addEventListener('click', (e) => onBubbleClick(e, m));
   if (m.kind === 'file' && !m.file.voice) loadThumb(row, m);
   return row;
+}
+
+function callText(c) {
+  if (c.outgoing) {
+    if (!c.duration) return c.video ? t('Video call – no answer') : t('Voice call – no answer');
+    return c.video ? t('Outgoing video call') : t('Outgoing voice call');
+  }
+  if (c.declined) return c.video ? t('Declined video call') : t('Declined voice call');
+  if (c.missed) return c.video ? t('Missed video call') : t('Missed voice call');
+  return c.video ? t('Incoming video call') : t('Incoming voice call');
+}
+
+function callNode(m) {
+  const c = m.call;
+  const bad = c.missed || (c.outgoing && !c.duration);
+  const node = el('div', `call-log${bad ? ' missed' : ''}`, `
+    <span class="cl-icon">${c.video ? '🎥' : '📞'}</span>
+    <span class="cl-text"><b>${esc(callText(c))}</b><span>${esc(fmtTime(m.ts))}${c.duration ? ` · ${esc(fmtDuration(c.duration))}` : ''}</span></span>
+    ${convKind(S.active) !== 'broadcast' ? `<button class="fbtn ghost" data-call="${c.video ? 1 : 0}">${esc(t('Call back'))}</button>` : ''}`);
+  node.dataset.id = m.id;
+  const btn = node.querySelector('[data-call]');
+  if (btn) btn.onclick = () => call(api.callStart(S.active, btn.dataset.call === '1'));
+  return node;
 }
 
 function urgentHtml(m, out) {

@@ -1092,3 +1092,14 @@ html[data-theme="dark"] .style-preview[data-style="emerald"] {
 .spv-in { width: 60%; height: 13px; background: var(--bubble-in); border: 1px solid var(--bubble-in-border); border-radius: var(--r-bubble); box-shadow: var(--shadow); }
 .spv-out { align-self: flex-end; width: 55%; height: 13px; background: var(--bubble-out); border-radius: var(--r-bubble); }
 .spv-send { position: absolute; right: 7px; bottom: 6px; width: 13px; height: 13px; border-radius: 50%; background: var(--brand); }
+
+/* call history entries in a chat */
+.call-log {
+  display: flex; align-items: center; gap: 10px; width: fit-content; max-width: 100%; margin: 12px auto; padding: 8px 10px 8px 14px;
+  border-radius: var(--r-card); background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.cl-icon { font: 18px/1 var(--emoji); }
+.cl-text { display: flex; flex-direction: column; font-size: 13px; }
+.cl-text span { font-size: 12px; color: var(--muted); }
+.call-log.missed .cl-text b { color: var(--danger); }
+.call-log .fbtn { margin-left: 6px; }

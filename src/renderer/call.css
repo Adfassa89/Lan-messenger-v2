@@ -1,0 +1,76 @@
+html, body { margin: 0; height: 100%; }
+body {
+  display: flex; flex-direction: column; background: #0b0d12; color: #e8eaf0; overflow: hidden;
+  font: 14px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; user-select: none;
+}
+.hidden { display: none !important; }
+
+.top { display: flex; align-items: baseline; gap: 12px; padding: 14px 20px 6px; }
+.title { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status { font-size: 13px; color: #9aa3b2; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.stage {
+  flex: 1; min-height: 0; display: grid; gap: 10px; padding: 10px 20px;
+  grid-template-columns: repeat(var(--cols, 1), 1fr); grid-auto-rows: 1fr;
+}
+.tile {
+  position: relative; min-height: 0; border-radius: 16px; overflow: hidden; background: #171b24;
+  box-shadow: inset 0 0 0 2px transparent; transition: box-shadow .15s;
+}
+.tile.speaking { box-shadow: inset 0 0 0 3px #22c55e; }
+.tile video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.tile .avatar-wrap { position: absolute; inset: 0; display: grid; place-items: center; background: #171b24; }
+.tile.has-video .avatar-wrap { display: none; }
+.avatar {
+  width: 112px; height: 112px; border-radius: 50%; display: grid; place-items: center; overflow: hidden;
+  font-size: 40px; font-weight: 700; color: #fff;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.tile-label {
+  position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 6px; max-width: calc(100% - 24px);
+  padding: 5px 10px; border-radius: 9px; background: rgba(0, 0, 0, .55); font-size: 13px; font-weight: 600;
+}
+.tile-label span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-label svg { width: 15px; height: 15px; fill: none; stroke: #f87171; stroke-width: 2; flex: none; }
+.tile-state {
+  position: absolute; left: 50%; top: calc(50% + 74px); transform: translateX(-50%);
+  font-size: 13px; color: #c4c9d4; white-space: nowrap;
+}
+.tile.ringing .avatar { animation: pulse 1.6s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, .5); } 80%, 100% { box-shadow: 0 0 0 22px rgba(99, 102, 241, 0); } }
+
+.self {
+  position: absolute; right: 24px; bottom: 92px; width: 200px; aspect-ratio: 16 / 10; border-radius: 12px; overflow: hidden;
+  background: #222838; box-shadow: 0 8px 28px rgba(0, 0, 0, .5); border: 1px solid #2c3346;
+}
+.self video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.self-off { position: absolute; inset: 0; display: grid; place-items: center; background: #222838; font-size: 12px; color: #9aa3b2; }
+
+.controls { display: flex; justify-content: center; gap: 14px; padding: 14px 20px 20px; }
+.ctl {
+  width: 54px; height: 54px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer;
+  background: #232a39; color: #fff; transition: background .12s, transform .1s;
+}
+.ctl:hover { background: #2e3749; }
+.ctl:active { transform: scale(.95); }
+.ctl.off { background: #f1f2f6; color: #111; }
+.ctl.hang { background: #e5484d; width: 68px; border-radius: 27px; }
+.ctl.hang:hover { background: #f05a5f; }
+.ctl svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ctl.hang svg { fill: currentColor; stroke: none; }
+
+.menu {
+  position: absolute; left: 50%; bottom: 88px; transform: translateX(-50%); width: 340px; max-height: 60vh; overflow-y: auto;
+  padding: 8px; border-radius: 14px; background: #1b2030; border: 1px solid #2c3346; box-shadow: 0 12px 40px rgba(0, 0, 0, .6);
+}
+.menu h4 { margin: 8px 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: #8a93a6; }
+.menu button {
+  display: flex; width: 100%; gap: 8px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: #e8eaf0;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.menu button:hover { background: #262d40; }
+.menu button.on::after { content: "✓"; margin-left: auto; color: #8b9bff; }
+.toast {
+  position: absolute; left: 50%; top: 56px; transform: translateX(-50%); padding: 8px 14px; border-radius: 10px;
+  background: #e5484d; color: #fff; font-size: 13px; font-weight: 600;
+}

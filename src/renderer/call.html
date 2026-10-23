@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; media-src 'self' blob: mediastream:">
+  <title>LAN Messenger 2</title>
+  <link rel="stylesheet" href="call.css">
+</head>
+<body>
+  <header class="top">
+    <div class="title" id="title"></div>
+    <div class="status" id="status"></div>
+  </header>
+  <main class="stage" id="stage"></main>
+  <div class="self" id="self">
+    <video id="selfVideo" autoplay playsinline muted></video>
+    <div class="self-off" id="selfOff"></div>
+  </div>
+  <footer class="controls">
+    <button class="ctl" id="btnMic"></button>
+    <button class="ctl" id="btnCam"></button>
+    <button class="ctl" id="btnDevices"></button>
+    <button class="ctl hang" id="btnHang"></button>
+  </footer>
+  <div class="menu hidden" id="menu"></div>
+  <div class="toast hidden" id="toast"></div>
+  <script src="../shared/i18n.js"></script>
+  <script src="call.js"></script>
+</body>
+</html>

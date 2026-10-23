@@ -186,3 +186,15 @@ test('folders with many files and slow disks never stall', () => withPair(async 
     fs.createWriteStream = origCreate;
   }
 }));
+
+test('calls are recorded in the chat history', () => withPair(async (alice) => {
+  const bobId = [...alice.peers.keys()][0];
+  alice.logCall(bobId, { video: true, outgoing: true, duration: 95000 });
+  const missed = alice.logCall(bobId, { missed: true, peerId: bobId });
+  const list = alice.loadMessages(bobId);
+  assert.strictEqual(list.length, 2);
+  assert.deepStrictEqual(list[0].call, { video: true, outgoing: true, duration: 95000, missed: false, declined: false });
+  assert.strictEqual(missed.from, bobId);
+  assert.strictEqual(alice.convs[bobId].unread, 1);
+  assert.strictEqual(alice.convs[bobId].lastText, '📵');
+}));

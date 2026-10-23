@@ -7,7 +7,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', 'src');
 const FILES = [
   'renderer/app.js', 'renderer/editor.js', 'renderer/voice.js', 'renderer/share.js',
-  'renderer/viewer.js', 'renderer/alert.js', 'renderer/index.html', 'main/main.js',
+  'renderer/viewer.js', 'renderer/alert.js', 'renderer/call.js', 'renderer/ring.js', 'renderer/index.html', 'main/main.js',
 ];
 // Texts translated through a variable, e.g. t(label).
 const EXTRA = ['Smileys', 'Gestures', 'Work', 'Things', 'Indigo', 'Office', 'Ocean', 'Minimal', 'Mine Site', 'Emerald'];

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>LAN Messenger 2</title>
+  <link rel="stylesheet" href="ring.css">
+</head>
+<body>
+  <div class="who">
+    <div class="avatar" id="avatar"></div>
+    <div class="info">
+      <div class="kind" id="kind"></div>
+      <div class="name" id="name"></div>
+      <div class="group" id="group"></div>
+    </div>
+  </div>
+  <div class="btns">
+    <button class="decline" id="btnDecline"><svg viewBox="0 0 24 24"><path d="M3 15.5c5-4.7 13-4.7 18 0l-2.4 2.4-3.2-1.8.2-2.4a10 10 0 0 0-7.2 0l.2 2.4-3.2 1.8z"/></svg><span></span></button>
+    <button class="accept" id="btnVoice"><svg viewBox="0 0 24 24"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg><span></span></button>
+    <button class="accept" id="btnVideo"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM17 10l4-2.5v9L17 14z"/></svg><span></span></button>
+  </div>
+  <script src="../shared/i18n.js"></script>
+  <script src="ring.js"></script>
+</body>
+</html>

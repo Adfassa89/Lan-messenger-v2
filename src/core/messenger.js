@@ -49,6 +49,7 @@ function defaultSettings(downloadDir) {
 
 function preview(msg) {
   if (msg.deleted) return '🚫';
+  if (msg.kind === 'call') return msg.call.missed ? '📵' : '📞';
   if (msg.kind === 'poll') return `📊 ${msg.poll.question}`;
   if (msg.kind === 'file') {
     if (msg.file.voice) return '🎤';
@@ -1124,9 +1125,32 @@ class Messenger extends EventEmitter {
     this.emit('scheduled', this.scheduled);
   }
 
-  // ------------------------------------------------------------------ screen sharing signalling
+  // ------------------------------------------------------------------ screen sharing and call signalling
   sendRtc(peerId, sid, data) {
     this._sendNow(peerId, { type: 'rtc', sid, data });
+  }
+
+  // Adds a call to this PC's chat history. Each PC records its own view of
+  // the call, so nothing is sent over the network.
+  logCall(conv, { video = false, outgoing = false, duration = 0, missed = false, declined = false, peerId } = {}) {
+    const type = this._convType(conv);
+    const from = outgoing ? this.id : (peerId || conv);
+    const peer = this.peers.get(from);
+    const msg = {
+      id: uuid(),
+      from,
+      fromName: outgoing ? this.config.name : (peer && peer.name) || 'Unknown',
+      ts: Date.now(),
+      kind: 'call',
+      text: '',
+      status: outgoing ? 'delivered' : 'received',
+      read: outgoing || !missed,
+      call: { video: !!video, outgoing: !!outgoing, duration: Math.max(0, Math.round(duration)), missed: !!missed, declined: !!declined },
+    };
+    this.store.addMessage(conv, msg);
+    this._bumpConv(conv, type, msg, !outgoing && missed);
+    this.emit('message', { conv, msg, isNew: true });
+    return msg;
   }
 
   // ------------------------------------------------------------------ app updates shared between PCs

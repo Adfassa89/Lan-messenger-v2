@@ -46,7 +46,10 @@ let updateReady = null;
 let shareSourceId = null;
 const thumbCache = new Map();
 const alertWindows = new Map(); // msgId -> BrowserWindow
-const rtcRoutes = new Map(); // sid -> webContents of a viewer window
+const rtcRoutes = new Map(); // sid -> webContents of a viewer or call window
+const calls = new Map(); // sid -> call this PC is part of
+const rings = new Map(); // sid -> incoming call still ringing
+const RING_TIMEOUT = 45000;
 const startHidden = process.argv.includes('--hidden');
 
 const t = (key, vars) => I18N.translate(messenger ? messenger.settings.language : 'en', key, vars);
@@ -254,8 +257,157 @@ function openViewer(peerId, sid, name) {
 
 function routeRtc(e) {
   const target = rtcRoutes.get(e.sid);
-  if (target && !target.isDestroyed()) target.send('evt', { type: 'rtc', payload: e });
-  else send('rtc', e);
+  if (target && !target.isDestroyed()) return target.send('evt', { type: 'rtc', payload: e });
+  const kind = String(e.data.kind || '');
+  if (kind === 'call-invite') return onIncomingCall(e);
+  if (kind === 'call-cancel') return endRing(e.sid, { missed: true });
+  if (kind.startsWith('call-')) return undefined;
+  return send('rtc', e);
+}
+
+// ------------------------------------------------------------------ voice and video calls
+function inCall() {
+  return [...calls.values()].some((c) => c.win && !c.win.isDestroyed());
+}
+
+function openCallWindow(call, role) {
+  const w = new BrowserWindow({
+    width: 980,
+    height: 660,
+    minWidth: 420,
+    minHeight: 360,
+    title: t('Call with {name}', { name: convTitle(call.conv) }),
+    icon: appIcon(),
+    backgroundColor: '#0b0d12',
+    autoHideMenuBar: true,
+    webPreferences,
+  });
+  w.removeMenu();
+  w.loadFile(path.join(RENDERER, 'call.html'), { query: { sid: call.sid, role, lang: messenger.settings.language } });
+  call.win = w;
+  rtcRoutes.set(call.sid, w.webContents);
+  w.on('closed', () => {
+    rtcRoutes.delete(call.sid);
+    // Window closed without a proper hang-up: tell the others and record it.
+    if (!call.logged) {
+      for (const id of call.members) messenger.sendRtc(id, call.sid, { kind: call.connectedAt ? 'call-leave' : 'call-cancel' });
+      finishCall(call.sid, { duration: call.connectedAt ? Date.now() - call.connectedAt : 0 });
+    }
+    calls.delete(call.sid);
+  });
+  guardNavigation(w);
+}
+
+function startCall(conv, video) {
+  if (inCall()) throw new Error(t('You are already in a call'));
+  if (conv === 'broadcast') throw new Error(t('Calls are not available in Everyone'));
+  const members = messenger.recipients(conv).filter((id) => messenger.peers.get(id)?.online);
+  if (!members.length) throw new Error(t('Nobody in this chat is online right now'));
+  const sid = crypto.randomUUID();
+  const call = { sid, conv, video: !!video, members, outgoing: true };
+  calls.set(sid, call);
+  openCallWindow(call, 'caller');
+  const group = conv.startsWith('g:') ? conv.slice(2) : null;
+  for (const id of members) {
+    messenger.sendRtc(id, sid, {
+      kind: 'call-invite', video: !!video, name: messenger.config.name, group, members: [messenger.id, ...members],
+    });
+  }
+}
+
+function onIncomingCall({ peerId, sid, data }) {
+  if (rings.has(sid) || calls.has(sid)) return;
+  const group = typeof data.group === 'string' ? data.group : null;
+  if (group && !messenger.groups[group]) return;
+  const conv = group ? `g:${group}` : peerId;
+  const members = (Array.isArray(data.members) ? data.members : [])
+    .filter((id) => typeof id === 'string' && id !== messenger.id).slice(0, 16);
+  if (!members.includes(peerId)) members.unshift(peerId);
+  if (inCall() || rings.size) {
+    messenger.sendRtc(peerId, sid, { kind: 'call-decline', reason: 'busy' });
+    messenger.logCall(conv, { video: !!data.video, missed: true, peerId });
+    return;
+  }
+  const display = screen.getPrimaryDisplay().workArea;
+  const w = new BrowserWindow({
+    width: 380,
+    height: 230,
+    x: display.x + display.width - 400,
+    y: display.y + display.height - 250,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    show: false,
+    title: t('Incoming call'),
+    icon: appIcon(),
+    backgroundColor: '#161922',
+    webPreferences,
+  });
+  w.setAlwaysOnTop(true, 'screen-saver');
+  w.loadFile(path.join(RENDERER, 'ring.html'), { query: { sid, lang: messenger.settings.language } });
+  w.once('ready-to-show', () => w.showInactive());
+  guardNavigation(w);
+  const ring = { sid, conv, video: !!data.video, from: peerId, members, win: w };
+  ring.timer = setTimeout(() => {
+    messenger.sendRtc(peerId, sid, { kind: 'call-decline', reason: 'timeout' });
+    endRing(sid, { missed: true });
+  }, RING_TIMEOUT);
+  rings.set(sid, ring);
+  if (win && !win.isFocused()) win.flashFrame(true);
+}
+
+function endRing(sid, { missed = false, declined = false, log = true } = {}) {
+  const ring = rings.get(sid);
+  if (!ring) return null;
+  rings.delete(sid);
+  clearTimeout(ring.timer);
+  if (ring.win && !ring.win.isDestroyed()) ring.win.close();
+  if (log) messenger.logCall(ring.conv, { video: ring.video, missed, declined, peerId: ring.from });
+  if (missed && Notification.isSupported()) {
+    const n = new Notification({
+      title: t('Missed call'),
+      body: `${messenger.peers.get(ring.from)?.name || t('Someone')}${ring.conv.startsWith('g:') ? ` · ${convTitle(ring.conv)}` : ''}`,
+      icon: appIcon(),
+      silent: true,
+    });
+    n.on('click', () => { showWindow(); send('open-conv', ring.conv); });
+    n.show();
+  }
+  return ring;
+}
+
+function finishCall(sid, { duration = 0 } = {}) {
+  const call = calls.get(sid);
+  if (!call || call.logged) return;
+  call.logged = true;
+  messenger.logCall(call.conv, { video: call.video, outgoing: call.outgoing, duration, peerId: call.from });
+}
+
+function callInfo(sid) {
+  const ring = rings.get(sid);
+  const call = calls.get(sid);
+  const c = call || ring;
+  if (!c) return null;
+  const people = {};
+  const avatars = messenger.getState().avatars;
+  for (const id of new Set([...c.members, c.from].filter(Boolean))) {
+    const p = messenger.peers.get(id);
+    people[id] = { name: p ? p.name : t('Someone'), avatar: avatars[id] || null };
+  }
+  return {
+    sid,
+    me: { id: messenger.id, name: messenger.config.name, avatar: messenger.config.avatar || null },
+    people,
+    members: c.members,
+    from: c.from || null,
+    video: c.video,
+    conv: c.conv,
+    convTitle: convTitle(c.conv),
+    isGroup: c.conv.startsWith('g:'),
+    language: messenger.settings.language,
+    sound: messenger.settings.sound && messenger.config.status !== 'busy',
+  };
 }
 
 function setupMediaPermissions() {
@@ -522,6 +674,31 @@ function registerIpc() {
   h('share-select', (id) => { shareSourceId = id; });
   h('rtc-send', (peerId, sid, data) => messenger.sendRtc(peerId, sid, data));
   h('open-viewer', (peerId, sid, name) => openViewer(peerId, sid, name));
+  h('call-start', (conv, video) => startCall(conv, video));
+  h('call-info', (sid) => callInfo(sid));
+  h('call-accept', (sid, video) => {
+    const ring = endRing(sid, { log: false });
+    if (!ring) return;
+    const call = { sid, conv: ring.conv, video: !!video, members: ring.members, outgoing: false, from: ring.from };
+    calls.set(sid, call);
+    openCallWindow(call, 'callee');
+  });
+  h('call-decline', (sid) => {
+    const ring = rings.get(sid);
+    if (!ring) return;
+    messenger.sendRtc(ring.from, sid, { kind: 'call-decline', reason: 'declined' });
+    endRing(sid, { declined: true });
+  });
+  h('call-connected', (sid) => {
+    const call = calls.get(sid);
+    if (call && !call.connectedAt) call.connectedAt = Date.now();
+  });
+  h('call-ended', (sid, info) => {
+    const call = calls.get(sid);
+    if (!call) return;
+    finishCall(sid, { duration: Number(info && info.duration) || 0 });
+    if (call.win && !call.win.isDestroyed()) call.win.close();
+  });
   h('open-conv', (conv) => {
     showWindow();
     send('open-conv', conv);

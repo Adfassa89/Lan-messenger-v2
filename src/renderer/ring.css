@@ -1,0 +1,28 @@
+html, body { margin: 0; height: 100%; }
+body {
+  box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; padding: 20px;
+  background: linear-gradient(160deg, #1d2333, #11141c); color: #fff; border: 1px solid #2c3346; border-radius: 0;
+  font: 14px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; user-select: none; -webkit-app-region: drag;
+}
+.who { display: flex; align-items: center; gap: 14px; }
+.avatar {
+  width: 60px; height: 60px; border-radius: 50%; flex: none; display: grid; place-items: center; overflow: hidden;
+  font-size: 22px; font-weight: 700; background: linear-gradient(135deg, #4f63f5, #7c5cf6);
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, .6); animation: ring 1.6s infinite;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+@keyframes ring { 0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, .55); } 80%, 100% { box-shadow: 0 0 0 16px rgba(34, 197, 94, 0); } }
+.info { min-width: 0; }
+.kind { font-size: 12.5px; color: #9aa3b2; }
+.name { font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.group { font-size: 12.5px; color: #c4c9d4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btns { display: flex; gap: 10px; -webkit-app-region: no-drag; }
+button {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; height: 44px; border: 0; border-radius: 12px;
+  font: 600 13.5px "Segoe UI", system-ui, sans-serif; color: #fff; cursor: pointer;
+}
+button svg { width: 18px; height: 18px; fill: currentColor; }
+.decline { background: #e5484d; }
+.decline:hover { background: #f05a5f; }
+.accept { background: #22a55b; }
+.accept:hover { background: #29b966; }

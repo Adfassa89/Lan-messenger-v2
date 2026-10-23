@@ -12,6 +12,7 @@ Available in **English** and **Монгол**.
 | | |
 |---|---|
 | 🚨 **Urgent alerts** | A red pop-up with an alarm sound appears on top of everything on the other PCs (even when they are set to *Busy*) and stays until each person clicks **Acknowledge**. You see who confirmed and who hasn't. Made for blasting notices, safety warnings and breakdowns. |
+| 📞 **Voice and video calls** | Call a colleague or a whole group (up to about 6 people) from the chat header. Calls go directly PC-to-PC over the network, with no internet or server. Incoming calls pop up with a ringtone; you can mute, switch the camera on or off, and choose microphone, camera and speaker. Missed calls appear in the chat with a **Call back** button. |
 | 🖥️ **Screen sharing** | Show your screen (or one window) live to a colleague or a whole group. It goes directly PC-to-PC over the network. Viewers can only watch; they can't control your PC. |
 | ✏️ **Screenshot with drawing** | `Ctrl + Shift + S` (or **＋ → Screenshot with drawing**) takes a screenshot. Crop it, add arrows, boxes, highlights and text, then send. Pasted pictures can be drawn on too. |
 | 🇲🇳 **Mongolian / English** | Switch language in **Settings → Language**. Every screen is translated. |
@@ -107,6 +108,7 @@ src/main/        Electron main process
   main.js        windows, tray, notifications, alerts, screen capture
 src/renderer/    user interface (HTML/CSS/JS, no build step)
   app.js         chat UI · editor.js screenshot drawing · voice.js · share.js
+  call.html      voice/video call window · ring.html incoming call pop-up
   alert.html     urgent alert window · viewer.html screen-share viewer
 src/shared/      i18n.js translations (English text is the key)
 build/           icons, installer firewall rule, after-pack update signing
