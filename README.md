@@ -13,7 +13,8 @@ Available in **English** and **Монгол**.
 |---|---|
 | 🚨 **Urgent alerts** | A red pop-up with an alarm sound appears on top of everything on the other PCs (even when they are set to *Busy*) and stays until each person clicks **Acknowledge**. You see who confirmed and who hasn't. Made for blasting notices, safety warnings and breakdowns. |
 | 📞 **Voice and video calls** | Call a colleague or a whole group (up to about 6 people) from the chat header. Calls go directly PC-to-PC over the network, with no internet or server. Incoming calls pop up with a ringtone; you can mute, switch the camera on or off, and choose microphone, camera and speaker. Missed calls appear in the chat with a **Call back** button. |
-| ♟️ **Games in chats** | Play **Chess**, **Tic-tac-toe** or **Connect Four** with a colleague in a private chat (＋ → Play a game). Moves are delivered like messages, so a game can run across shifts; each PC checks every move against the rules. |
+| ♟️ **Games in chats** | Play **Chess** (with a chess.com-style board), **Checkers**, **Tic-tac-toe**, **Connect Four** or **Tetris Battle** with a colleague in a private chat (＋ → Play a game). Turn-based moves are delivered like messages, so a game can run across shifts; each PC checks every move against the rules. |
+| 🧱 **Tetris Battle** | A live head-to-head match in the style of TETR.IO: both players get the same pieces, and clearing lines sends garbage rows to the opponent. Controls can be changed like in old Facebook Tetris Battle: rebind every key, pick the *Classic* or *Modern* preset, and adjust the sliding delay, sliding speed and soft-drop speed. |
 | 🖥️ **Screen sharing** | Show your screen (or one window) live to a colleague or a whole group. It goes directly PC-to-PC over the network. Viewers can only watch; they can't control your PC. |
 | ✏️ **Screenshot with drawing** | `Ctrl + Shift + S` (or **＋ → Screenshot with drawing**) takes a screenshot. Crop it, add arrows, boxes, highlights and text, then send. Pasted pictures can be drawn on too. |
 | 🇲🇳 **Mongolian / English** | Switch language in **Settings → Language**. Every screen is translated. |
@@ -35,7 +36,12 @@ Available in **English** and **Монгол**.
 | 🖼️ **Profile photos** | Settings → Change photo. |
 | 📄 **Export chat** | Save a conversation as PDF or text for records. |
 | 🔒 **Encrypted** | All messages, files and screen sharing are encrypted between PCs. |
-| 🔍 **Search**, 🔔 **notifications**, 🌙 **dark mode**, tray icon, auto-away, start with Windows | |
+| 🎨 **6 design styles** | Indigo (default), Office, Ocean, Minimal, Mine Site and Emerald, each in light and dark. Choose in **Settings → Appearance**. |
+| 📥 **Stays in the taskbar corner** | Closing the window (✕) keeps the app running next to the clock, like the old LAN Messenger, so no message is missed. To close it completely, right-click the tray icon and choose **Exit**. (If you don't see the icon, click the small **^** arrow next to the clock.) |
+| 🚀 **Starts with Windows** | On by default: the app opens quietly in the tray when the PC starts. Can be turned off in Settings. |
+| 🖱️ **Drag & drop** | Drag files or folders into an open chat, or straight onto a person or group in the left list to send them without opening the chat. |
+| 🔔 **Notifications and sounds** | Desktop pop-ups and a sound for new messages, a ringtone for calls, and an alarm for urgent alerts. Each can be turned off in Settings; *Busy* silences message pop-ups and sounds, but urgent alerts still come through. |
+| 🔍 **Search**, 🌙 **dark mode**, auto-away | |
 
 ## How to get the app (no programming needed)
 
@@ -70,8 +76,8 @@ Without the secret, everything else works normally; builds just won't pass thems
 
 ### If people don't appear
 
-- Make sure LAN Messenger is running on both PCs.
-- Make sure the firewall allows **LAN Messenger** (see above). IT can open **UDP port 50100** and **TCP port 50101**.
+- Make sure LAN Messenger 2 is running on both PCs.
+- Make sure the firewall allows **LAN Messenger 2** (see above). IT can open **UDP port 50100** and **TCP port 50101**.
 - If the PCs are on different network segments (different subnets/VLANs), open **Settings → Network → Add a computer by IP address** and type the other PC's IP. The other PC's IP is shown in its own Settings → Network.
 
 ## Where data is stored
@@ -111,6 +117,8 @@ src/renderer/    user interface (HTML/CSS/JS, no build step)
   app.js         chat UI · editor.js screenshot drawing · voice.js · share.js
   call.html      voice/video call window · ring.html incoming call pop-up
   game.js        game cards and boards (rules in src/shared/games.js)
+  tetris.html    Tetris Battle window (engine in src/shared/tetris.js,
+                 key settings in tetris-controls.js)
   alert.html     urgent alert window · viewer.html screen-share viewer
 src/shared/      i18n.js translations (English text is the key)
 build/           icons, installer firewall rule, after-pack update signing
