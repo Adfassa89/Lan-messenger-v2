@@ -1,7 +1,7 @@
 {
   "name": "lan-messenger",
   "productName": "LAN Messenger 2",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Fast, secure, serverless messenger for your local network",
   "main": "src/main/boot.js",
   "author": "LAN Messenger 2",
@@ -39,6 +39,7 @@
     "nsis": {
       "oneClick": false,
       "perMachine": false,
+      "selectPerMachineByDefault": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,

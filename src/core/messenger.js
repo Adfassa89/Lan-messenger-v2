@@ -20,6 +20,7 @@ const Games = require('../shared/games');
 const OFFLINE_AFTER = 17000;
 const ACK_TIMEOUT = 20000;
 const PING_INTERVAL = 8000;
+const REVERSE_TIMEOUT = 8000;
 const MAX_TEXT = 20000;
 const MAX_AVATAR = 96 * 1024;
 const MAX_FOLDER_FILES = 20000;
@@ -143,6 +144,8 @@ class Messenger extends EventEmitter {
     this.out = new Map(); // peerId -> outbound link state
     this.ackTimers = new Map(); // `${peerId}:${rid}` -> timer
     this.inbound = new Set();
+    this.inboundChat = new Map(); // peerId -> Set of chat links that peer opened to us
+    this.reverseWaits = new Map(); // token -> { peerId, resolve, timer }
     this.seen = new Map(); // rid -> time, to drop duplicates
     this.avatarAsked = new Map(); // peerId -> time
     this.files = new FileTransfers(this);
@@ -181,6 +184,9 @@ class Messenger extends EventEmitter {
       broadcast: this.broadcastEnabled,
       getInfo: () => this._info(),
       getManualHosts: () => this.config.manualPeers,
+      // A PC whose firewall blocks incoming traffic only hears replies to its
+      // own questions, so keep answering until we are connected to it.
+      shouldAnswer: (id) => !this._liveLink(id),
     });
     this.discovery.on('peer', (p) => this._touchPeer(p));
     this.discovery.on('bye', (id) => this._setOffline(id));
@@ -208,6 +214,8 @@ class Messenger extends EventEmitter {
       if (st.link) st.link.close();
     }
     for (const l of this.inbound) l.close();
+    for (const w of this.reverseWaits.values()) clearTimeout(w.timer);
+    this.reverseWaits.clear();
     this.files.stop();
     this.discovery.stop();
     await new Promise((r) => this.server.close(() => r()));
@@ -287,6 +295,7 @@ class Messenger extends EventEmitter {
     if (typeof info.av === 'string') this._checkAvatar(p.id, info.av);
     if (changed) this.emit('peers', this.listPeers());
     if (this.outbox.some((e) => e.peerId === p.id)) this._flush(p.id);
+    else if (!wasOnline) this._keepLink(p);
   }
 
   _setOffline(id) {
@@ -310,11 +319,38 @@ class Messenger extends EventEmitter {
   }
 
   _pingAll() {
-    for (const st of this.out.values()) {
-      if (st.link && !st.link.closed) st.link.sendJson({ type: 'ping', ...this._presence() });
-    }
-    for (const l of this.inbound) if (l.key && l.purpose === 'chat') l.sendJson({ type: 'ping', ...this._presence() });
+    const links = new Set();
+    for (const st of this.out.values()) if (st.link && !st.link.closed) links.add(st.link);
+    for (const l of this.inbound) if (l.key && l.purpose === 'chat') links.add(l);
+    for (const l of links) l.sendJson({ type: 'ping', ...this._presence() });
+    this._keepLinks();
     this._probeManual();
+  }
+
+  // Keeps a connection open to every PC that is online. If Windows Firewall
+  // blocks incoming connections on one of the two PCs, the connection the
+  // other way still carries everything in both directions.
+  _keepLinks() {
+    for (const p of this.peers.values()) this._keepLink(p);
+  }
+
+  _keepLink(p) {
+    if (!this.started || !p.online || !p.host || this._liveLink(p.id)) return;
+    const st = this._outState(p.id);
+    if (st.connecting || Date.now() < st.backoffUntil) return;
+    this._ensureLink(p.id).catch(() => {
+      st.failures++;
+      st.backoffUntil = Date.now() + Math.min(60000, 2000 * 2 ** Math.min(st.failures, 5));
+    });
+  }
+
+  // Any open chat connection with this peer, whichever PC opened it.
+  _liveLink(peerId) {
+    const st = this.out.get(peerId);
+    if (st && st.link && !st.link.closed) return st.link;
+    const set = this.inboundChat.get(peerId);
+    if (set) for (const l of set) if (!l.closed) return l;
+    return null;
   }
 
   _presence() {
@@ -423,8 +459,20 @@ class Messenger extends EventEmitter {
     link.on('ready', (h) => {
       link.purpose = h.purpose;
       if (h.purpose === 'file') return this.files.serve(link, h);
+      if (h.purpose === 'file-back') return this._onDialBack(link, h);
+      if (h.purpose === 'chat') {
+        link.on('json', (obj) => this._onWire(h.id, obj, link));
+        let set = this.inboundChat.get(h.id);
+        if (!set) this.inboundChat.set(h.id, (set = new Set()));
+        set.add(link);
+        link.on('close', () => {
+          set.delete(link);
+          if (!set.size && this.inboundChat.get(h.id) === set) this.inboundChat.delete(h.id);
+        });
+      }
+      // Also sends anything waiting for this peer, over this connection if needed.
       this._touchPeer({ ...h, host: link.remoteAddress }, { fromLink: true });
-      if (h.purpose === 'chat') link.on('json', (obj) => this._onWire(h.id, obj, link));
+      if (h.purpose === 'chat' && this.outbox.some((e) => e.peerId === h.id)) this._flush(h.id);
     });
   }
 
@@ -439,7 +487,11 @@ class Messenger extends EventEmitter {
 
   _ensureLink(peerId) {
     const st = this._outState(peerId);
-    if (st.link && !st.link.closed) return Promise.resolve(st.link);
+    const live = this._liveLink(peerId);
+    if (live) {
+      if (st.link !== live) this._useLink(peerId, st, live);
+      return Promise.resolve(live);
+    }
     if (st.connecting) return st.connecting;
     const peer = this.peers.get(peerId);
     if (!peer || !peer.host) return Promise.reject(new Error('Unknown address'));
@@ -449,25 +501,67 @@ class Messenger extends EventEmitter {
         link.on('json', (obj) => this._onWire(peerId, obj, link));
       },
     }).then((link) => {
-      st.link = link;
       st.failures = 0;
-      link.on('close', () => {
-        if (st.link !== link) return;
-        st.link = null;
-        st.inflight.clear();
-        for (const [k, t] of this.ackTimers) {
-          if (k.startsWith(`${peerId}:`)) {
-            clearTimeout(t);
-            this.ackTimers.delete(k);
-          }
-        }
-        if (this.started && this.outbox.some((e) => e.peerId === peerId)) this._scheduleRetry(peerId, 1000);
-      });
+      st.backoffUntil = 0;
+      this._useLink(peerId, st, link);
       return link;
     }).finally(() => {
       st.connecting = null;
     });
     return st.connecting;
+  }
+
+  // Sends this peer's messages over `link` (opened by either PC).
+  _useLink(peerId, st, link) {
+    st.link = link;
+    link.on('close', () => {
+      if (st.link !== link) return;
+      st.link = null;
+      st.inflight.clear();
+      for (const [k, t] of this.ackTimers) {
+        if (k.startsWith(`${peerId}:`)) {
+          clearTimeout(t);
+          this.ackTimers.delete(k);
+        }
+      }
+      if (this.started && this.outbox.some((e) => e.peerId === peerId)) this._scheduleRetry(peerId, 1000);
+    });
+  }
+
+  // Asks a peer we cannot connect to (its firewall blocks us) to connect to
+  // us instead, for a file or update download. Resolves with that link.
+  reverseConnect(peerId) {
+    const link = this._liveLink(peerId);
+    if (!link) return Promise.reject(new Error('Could not reach sender'));
+    const token = uuid();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.reverseWaits.delete(token);
+        reject(new Error('Could not reach sender'));
+      }, REVERSE_TIMEOUT);
+      this.reverseWaits.set(token, { peerId, resolve, timer });
+      link.sendJson({ type: 'dial-back', token });
+    });
+  }
+
+  _onDialBack(link, h) {
+    const w = this.reverseWaits.get(h.token);
+    if (!w || w.peerId !== h.id) return link.close();
+    this.reverseWaits.delete(h.token);
+    clearTimeout(w.timer);
+    w.resolve(link);
+  }
+
+  // The other PC asked us to connect to it so it can download from us.
+  _dialBack(peerId, token) {
+    const peer = this.peers.get(peerId);
+    if (!peer || !peer.host || typeof token !== 'string' || token.length > 64) return;
+    connect(peer.host, peer.port, { ...this._hello('file-back'), token }, {
+      setup: (link) => {
+        if (link.peer.id !== peerId) throw new Error('Unexpected peer at this address');
+        this.files.serve(link, link.peer);
+      },
+    }).catch((err) => this.emit('warning', `Dial back to ${peerId} failed: ${err.message}`));
   }
 
   _scheduleRetry(peerId, delay) {
@@ -485,7 +579,9 @@ class Messenger extends EventEmitter {
     }
     const peer = this.peers.get(peerId);
     if (!peer || !peer.online) return;
-    if (Date.now() < st.backoffUntil) return this._scheduleRetry(peerId, st.backoffUntil - Date.now() + 20);
+    if (Date.now() < st.backoffUntil && !this._liveLink(peerId)) {
+      return this._scheduleRetry(peerId, st.backoffUntil - Date.now() + 20);
+    }
     const todo = () => this.outbox.filter((e) => e.peerId === peerId && !st.inflight.has(e.rid));
     if (!todo().length) return;
 
@@ -532,7 +628,8 @@ class Messenger extends EventEmitter {
   _announcePresence() {
     if (!this.started) return;
     this.discovery.announce();
-    for (const peerId of this.out.keys()) this._sendNow(peerId, { type: 'presence', ...this._presence() });
+    const ids = new Set([...this.out.keys(), ...this.inboundChat.keys()]);
+    for (const peerId of ids) this._sendNow(peerId, { type: 'presence', ...this._presence() });
   }
 
   // ------------------------------------------------------------------ incoming
@@ -562,6 +659,8 @@ class Messenger extends EventEmitter {
         return;
       case 'avatar':
         return this._onAvatar(peerId, obj);
+      case 'dial-back':
+        return this._dialBack(peerId, obj.token);
       case 'rtc':
         if (typeof obj.sid === 'string' && obj.data && typeof obj.data === 'object') {
           this.emit('rtc', { peerId, sid: obj.sid, data: obj.data });

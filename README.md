@@ -78,6 +78,7 @@ Without the secret, everything else works normally; builds just won't pass thems
 
 - Make sure LAN Messenger 2 is running on both PCs.
 - Make sure the firewall allows **LAN Messenger 2** (see above). IT can open **UDP port 50100** and **TCP port 50101**.
+  If only one of two PCs blocks the app, chat, games and file transfers still work (the open PC is used for both directions), but people appear more slowly. If **both** PCs block it, they cannot reach each other at all.
 - If the PCs are on different network segments (different subnets/VLANs), open **Settings → Network → Add a computer by IP address** and type the other PC's IP. The other PC's IP is shown in its own Settings → Network.
 
 ## Where data is stored

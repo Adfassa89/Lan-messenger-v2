@@ -210,7 +210,15 @@ function connect(host, port, hello, { timeout = 5000, setup } = {}) {
     link.once('ready', () => {
       clearTimeout(timer);
       link.off('close', onClose);
-      if (setup) setup(link);
+      if (setup) {
+        try {
+          setup(link);
+        } catch (err) {
+          // E.g. a different PC now has this address: fail instead of hanging.
+          link.close(err);
+          return reject(err);
+        }
+      }
       resolve(link);
     });
   });

@@ -205,6 +205,20 @@ class FileTransfers {
   }
 
   // ---------- receiver side ----------
+  // Opens a download connection to the sender. If the sender's firewall
+  // blocks us, it is asked over the chat connection to connect to us instead.
+  async _open(peer) {
+    try {
+      return await connect(peer.host, peer.port, this.m._hello('file'));
+    } catch (err) {
+      try {
+        return await this.m.reverseConnect(peer.id);
+      } catch {
+        throw err;
+      }
+    }
+  }
+
   isActive(tid) {
     return this.downloads.has(tid);
   }
@@ -245,7 +259,7 @@ class FileTransfers {
 
     try {
       fs.mkdirSync(dir, { recursive: true });
-      job.link = await connect(peer.host, peer.port, this.m._hello('file'));
+      job.link = await this._open(peer);
       const ch = channel(job.link);
       if (job.cancelled) throw new Error('cancelled');
 
@@ -326,7 +340,7 @@ class FileTransfers {
   async fetchUpdate(peerId, dest, fsMod = fs) {
     const peer = this.m.peers.get(peerId);
     if (!peer || !peer.online) throw new Error('Peer offline');
-    const link = await connect(peer.host, peer.port, this.m._hello('file'));
+    const link = await this._open(peer);
     try {
       const ch = channel(link);
       const meta = await request(link, ch, { type: 'update-get' }, { part: dest, fsMod });

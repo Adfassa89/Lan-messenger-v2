@@ -218,3 +218,58 @@ test('chess moves travel between PCs and illegal moves are refused', () => withP
   await new Promise((r) => setTimeout(r, 400));
   assert.strictEqual(msgAt(white, convOf(white), game.id).game.moves.length, before);
 }));
+
+test('a PC whose firewall blocks incoming connections can still chat, play and share files', async () => {
+  const [alice, bob] = makePair();
+  // Alice's firewall: every incoming connection is dropped, and only replies
+  // to her own discovery questions get through (like Windows Firewall).
+  alice._onInbound = (socket) => socket.destroy();
+  let askedAt = 0;
+  await bob.start();
+  await alice.start();
+  const q = alice.discovery.query.bind(alice.discovery);
+  alice.discovery.query = () => { askedAt = Date.now(); q(); };
+  const onMessage = alice.discovery._onMessage.bind(alice.discovery);
+  alice.discovery._onMessage = (buf, rinfo) => { if (Date.now() - askedAt < 1500) onMessage(buf, rinfo); };
+  alice.discovery.query();
+  try {
+    await waitFor(() => alice.peers.get(bob.id)?.online && bob.peers.get(alice.id)?.online, 8000, 'discovery');
+
+    // Bob cannot connect to Alice, yet his messages reach her.
+    const hi = bob.sendText(alice.id, 'Can you hear me?');
+    await waitFor(() => msgAt(alice, bob.id, hi.id), 8000, 'message to the blocked PC');
+    await waitFor(() => msgAt(bob, alice.id, hi.id).status === 'delivered', 5000, 'delivered');
+
+    // Tic-tac-toe in both directions.
+    const game = bob.createGame(alice.id, 'ttt');
+    await waitFor(() => msgAt(alice, bob.id, game.id), 5000, 'game invite');
+    bob.gameMove(alice.id, game.id, { cell: 4 });
+    await waitFor(() => msgAt(alice, bob.id, game.id).game.moves.length === 1, 5000, 'move 1');
+    alice.gameMove(bob.id, game.id, { cell: 0 });
+    await waitFor(() => msgAt(bob, alice.id, game.id).game.moves.length === 2, 5000, 'move 2');
+
+    // Bob downloads a file from Alice: she connects back to him to send it.
+    const src = path.join(alice.dir, 'plan.bin');
+    const data = crypto.randomBytes(3 * 1024 * 1024 + 7);
+    fs.writeFileSync(src, data);
+    const [offer] = alice.sendFiles(bob.id, [src]);
+    await waitFor(() => msgAt(bob, alice.id, offer.id), 5000, 'file offer');
+    bob.acceptFile(alice.id, offer.id);
+    const got = await waitFor(() => {
+      const m = msgAt(bob, alice.id, offer.id);
+      return m.file.state === 'done' && m;
+    }, 20000, 'file from the blocked PC');
+    assert.ok(fs.readFileSync(got.file.path).equals(data));
+
+    // App updates are shared from the blocked PC the same way.
+    const pkg = path.join(alice.dir, 'app.asar');
+    fs.writeFileSync(pkg, crypto.randomBytes(512 * 1024));
+    alice.updatePackage = { version: '9.9.9', meta: { size: 512 * 1024 }, size: 512 * 1024, open: () => fs.createReadStream(pkg) };
+    const dest = path.join(bob.dir, 'update.asar');
+    await bob.fetchUpdate(alice.id, dest);
+    assert.ok(fs.readFileSync(dest).equals(fs.readFileSync(pkg)));
+  } finally {
+    await alice.stop();
+    await bob.stop();
+  }
+});

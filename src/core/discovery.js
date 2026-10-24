@@ -10,6 +10,9 @@ const { EventEmitter } = require('events');
 const { PROTOCOL } = require('./protocol');
 
 const ANNOUNCE_INTERVAL = 5000;
+// Every few announcements are questions instead, so a PC whose firewall
+// drops broadcasts still learns about the others from their direct replies.
+const QUERY_EVERY = 4;
 
 function broadcastAddresses() {
   const out = new Set(['255.255.255.255']);
@@ -44,11 +47,13 @@ function parseHost(entry, defaultPort) {
 
 class Discovery extends EventEmitter {
   // getInfo() returns the fields we announce: { id, name, dept, status, port }
-  constructor({ port, getInfo, getManualHosts, broadcast = true }) {
+  constructor({ port, getInfo, getManualHosts, shouldAnswer, broadcast = true }) {
     super();
     this.port = port;
     this.getInfo = getInfo;
     this.getManualHosts = getManualHosts || (() => []);
+    this.shouldAnswer = shouldAnswer || (() => true);
+    this.ticks = 0;
     this.broadcast = broadcast;
     this.socket = null;
     this.timer = null;
@@ -59,7 +64,11 @@ class Discovery extends EventEmitter {
   start() {
     this.stopped = false;
     this._bind();
-    this.timer = setInterval(() => this.announce(), ANNOUNCE_INTERVAL);
+    this.timer = setInterval(() => {
+      this.ticks++;
+      if (this.ticks % QUERY_EVERY === 0) this.query();
+      else this.announce();
+    }, ANNOUNCE_INTERVAL);
   }
 
   _bind() {
@@ -129,7 +138,7 @@ class Discovery extends EventEmitter {
       this.emit('bye', p.id);
       return;
     }
-    if (p.type === 'query') {
+    if (p.type === 'query' && this.shouldAnswer(p.id)) {
       // Answer directly so the asker learns about us immediately.
       this._send(this._packet('announce'), rinfo.address, rinfo.port);
     }
