@@ -408,10 +408,12 @@ function openTetris(conv, id) {
   w.removeMenu();
   w.loadFile(path.join(RENDERER, 'tetris.html'), { query: { conv, id, lang: messenger.settings.language } });
   tetrisWindows.set(id, w);
-  rtcRoutes.set(id, w.webContents);
+  // w.webContents can't be read any more once the window is closed.
+  const wc = w.webContents;
+  rtcRoutes.set(id, wc);
   w.on('closed', () => {
     tetrisWindows.delete(id);
-    if (rtcRoutes.get(id) === w.webContents || rtcRoutes.get(id)?.isDestroyed()) rtcRoutes.delete(id);
+    if (rtcRoutes.get(id) === wc || rtcRoutes.get(id)?.isDestroyed()) rtcRoutes.delete(id);
   });
   guardNavigation(w);
 }
