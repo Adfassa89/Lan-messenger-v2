@@ -47,13 +47,24 @@ function send(data) {
 // ------------------------------------------------------------------ drawing
 let cell = 30;
 function sizeBoards() {
-  const avail = window.innerHeight - 150;
-  cell = Math.max(18, Math.min(34, Math.floor(avail / ROWS)));
+  // Fit both boards and the side panels in the window, also on small or
+  // high-DPI screens (about 460px of side panels, gaps and margins).
+  const byHeight = (window.innerHeight - 150) / ROWS;
+  const byWidth = (window.innerWidth - 470) / (W * 1.72);
+  cell = Math.max(12, Math.min(34, Math.floor(Math.min(byHeight, byWidth))));
   for (const [id, size] of [['board', cell], ['oppBoard', Math.round(cell * 0.72)]]) {
     const c = $(id);
     c.width = W * size;
     c.height = ROWS * size;
   }
+  // The "next" queues shrink with the boards so the columns never get taller.
+  const fit = (id, w, h, maxH) => {
+    const k = Math.min(1, maxH / h);
+    $(id).style.width = `${Math.round(w * k)}px`;
+    $(id).style.height = `${Math.round(h * k)}px`;
+  };
+  fit('next', 120, 400, ROWS * cell - 24);
+  fit('oppNext', 80, 250, ROWS * Math.round(cell * 0.72) - 24);
 }
 
 function block(ctx, x, y, size, color, alpha = 1) {

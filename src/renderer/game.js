@@ -193,7 +193,7 @@ const Game = (() => {
 
   function close() {
     if (!open) return;
-    open.back.remove();
+    leave(open.back);
     open = null;
     document.removeEventListener('keydown', onKey, true);
   }
@@ -569,7 +569,7 @@ const Game = (() => {
       <div class="modal-body"><div class="game-picker">${Games.TYPES.map((type) => `<button class="game-pick" data-type="${type}">
         <span class="gp-icon">${ICONS[type]}</span><b>${esc(t(TITLES[type]))}</b><span>${esc(t(ABOUT[type]))}</span></button>`).join('')}</div>
       <p class="modal-note" style="margin-top:12px">${esc(t('Moves are delivered like messages, so you can also play slowly across shifts.'))}</p></div></div>`;
-    const done = () => back.remove();
+    const done = () => leave(back);
     back.addEventListener('mousedown', (e) => { if (e.target === back) done(); });
     back.querySelector('[data-close]').onclick = done;
     back.querySelector('.game-picker').onclick = async (e) => {

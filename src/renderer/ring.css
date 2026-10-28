@@ -26,3 +26,12 @@ button svg { width: 18px; height: 18px; fill: currentColor; }
 .decline:hover { background: #f05a5f; }
 .accept { background: #22a55b; }
 .accept:hover { background: #29b966; }
+
+/* Slides in like a Windows notification. */
+body > * { animation: ringIn .35s cubic-bezier(.2, .8, .2, 1) backwards; }
+.btns { animation-delay: .08s; }
+@keyframes ringIn { from { opacity: 0; transform: translateX(24px); } }
+.btns button { transition: transform .1s, filter .12s; }
+.btns button:hover { filter: brightness(1.1); }
+.btns button:active { transform: scale(.94); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

@@ -165,10 +165,25 @@ function fmtAgo(ts) {
 
 const IMAGE_RE = /\.(png|jpe?g|gif|bmp|webp)$/i;
 
+// Plays the element's closing animation (the .leaving class), then removes it.
+function leave(node, ms = 170) {
+  if (!node || node.classList.contains('leaving')) return;
+  node.classList.add('leaving');
+  setTimeout(() => node.remove(), ms);
+}
+
+// Restarts a one-off entrance animation class on an element that stays in place.
+function replayAnim(node, cls) {
+  if (!node) return;
+  node.classList.remove(cls);
+  void node.offsetWidth;
+  node.classList.add(cls);
+}
+
 function toast(text, type = '') {
   const tEl = el('div', `toast ${type}`, esc(text));
   $('#toasts').append(tEl);
-  setTimeout(() => tEl.remove(), type === 'error' ? 5000 : 2800);
+  setTimeout(() => leave(tEl, 200), type === 'error' ? 5000 : 2800);
 }
 
 async function call(promise) {
@@ -203,8 +218,16 @@ function applyTheme() {
   const th = S.settings.theme || 'system';
   const dark = th === 'dark' || (th === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   const root = document.documentElement;
-  root.dataset.theme = dark ? 'dark' : 'light';
-  root.dataset.style = STYLES.some(([k]) => k === S.settings.style) ? S.settings.style : 'indigo';
+  const theme = dark ? 'dark' : 'light';
+  const style = STYLES.some(([k]) => k === S.settings.style) ? S.settings.style : 'indigo';
+  if (root.dataset.theme && (root.dataset.theme !== theme || root.dataset.style !== style)) {
+    // Blend the colours over instead of switching in one jump.
+    root.classList.add('theme-anim');
+    clearTimeout(applyTheme.timer);
+    applyTheme.timer = setTimeout(() => root.classList.remove('theme-anim'), 450);
+  }
+  root.dataset.theme = theme;
+  root.dataset.style = style;
   const css = getComputedStyle(root);
   const v = (name) => css.getPropertyValue(name).trim();
   api.setTitleBar(v('--panel'), v('--text'), v('--bg'));
@@ -461,8 +484,11 @@ async function openConv(conv) {
     S.hasMore.set(conv, list.length >= PAGE);
   }
   if (S.active !== conv) return;
+  const switched = $('#messages').dataset.conv !== conv;
+  $('#messages').dataset.conv = conv;
   renderHeader();
   renderMessages(true);
+  if (switched) replayAnim($('#messages'), 'conv-enter');
   renderComposerState();
   renderList();
   markReadIfVisible();
@@ -471,6 +497,7 @@ async function openConv(conv) {
 
 function closeConv() {
   S.active = null;
+  $('#messages').dataset.conv = '';
   api.setActiveConv(null);
   $('#welcome').classList.remove('hidden');
   renderList();
@@ -923,7 +950,7 @@ function lightbox(p) {
   const info = S.thumbs.get(p);
   if (!info) return;
   const lb = el('div', 'lightbox', `<img src="${info.url}">`);
-  lb.addEventListener('click', () => lb.remove());
+  lb.addEventListener('click', () => leave(lb));
   lb.addEventListener('dblclick', () => api.openFile(p));
   document.body.append(lb);
 }
@@ -998,6 +1025,7 @@ function upsertMessage(conv, msg, isNew) {
     if ((S.convs.get(conv)?.pins || []).some((p) => p.id === msg.id)) renderPinBar();
   } else {
     renderMessages(msg.from === S.me.id);
+    if (isNew) $(`#messages [data-id="${CSS.escape(msg.id)}"]`)?.classList.add('msg-enter');
   }
 }
 
@@ -1192,12 +1220,21 @@ function showMenu(items, x, y) {
 }
 
 function hidePopover() {
-  $('#popover').classList.add('hidden');
+  const pop = $('#popover');
+  if (!popoverOpen()) return;
+  pop.classList.add('leaving');
+  // Opening another menu resets the class list, which cancels this.
+  setTimeout(() => { if (pop.classList.contains('leaving')) pop.classList.add('hidden'); }, 120);
+}
+
+function popoverOpen() {
+  const pop = $('#popover');
+  return !pop.classList.contains('hidden') && !pop.classList.contains('leaving');
 }
 
 document.addEventListener('mousedown', (e) => {
   const pop = $('#popover');
-  if (!pop.classList.contains('hidden') && !pop.contains(e.target) && !e.target.closest('#btnEmoji, #me, #hdrMore, #btnPlus, [data-act="quick-react"], [data-act="menu"]')) hidePopover();
+  if (popoverOpen() && !pop.contains(e.target) && !e.target.closest('#btnEmoji, #me, #hdrMore, #btnPlus, [data-act="quick-react"], [data-act="menu"]')) hidePopover();
 });
 
 function statusMenu() {
@@ -1220,7 +1257,7 @@ function modal({ title, body, wide, cls = '', buttons = [], onOpen, onClose }) {
   m.innerHTML = `<div class="modal-head"><h2>${esc(title)}</h2><button class="icon-btn" data-close title="${esc(t('Close'))}">${ICONS.close}</button></div>
     <div class="modal-body">${body}</div>${buttons.length ? '<div class="modal-foot"></div>' : ''}`;
   const close = () => {
-    back.remove();
+    leave(back);
     document.removeEventListener('keydown', onKey, true);
     if (onClose) onClose();
   };
@@ -1866,12 +1903,12 @@ function wire() {
   $('#btnNewGroup').addEventListener('click', newGroupModal);
   $('#btnSearch').addEventListener('click', searchModal);
   $('#btnPlus').addEventListener('click', () => {
-    if (!$('#popover').classList.contains('hidden')) hidePopover();
+    if (popoverOpen()) hidePopover();
     else plusMenu();
   });
   $('#btnMic').addEventListener('click', () => S.active && Voice.record(S.active));
   $('#btnEmoji').addEventListener('click', () => {
-    if (!$('#popover').classList.contains('hidden') && $('#popover').classList.contains('emoji-pop')) hidePopover();
+    if (popoverOpen() && $('#popover').classList.contains('emoji-pop')) hidePopover();
     else emojiPicker();
   });
   $('#btnSend').addEventListener('click', sendCurrent);
@@ -1966,7 +2003,7 @@ function wire() {
     } else if ((e.ctrlKey || e.metaKey) && k === 'f') {
       e.preventDefault();
       searchModal();
-    } else if (e.key === 'Escape' && !$('#popover').classList.contains('hidden')) {
+    } else if (e.key === 'Escape' && popoverOpen()) {
       hidePopover();
     }
   });

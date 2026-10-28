@@ -1277,3 +1277,65 @@ html[data-theme="dark"] .style-preview[data-style="emerald"] {
 
 /* dropping files on a person in the list */
 .conv.drop-target { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+
+/* ================================================================ motion
+   Short, subtle animations. Things that close play a .leaving animation
+   before they are removed (see leave() in app.js). */
+:root { --ease-out: cubic-bezier(.2, .8, .2, 1); --ease-spring: cubic-bezier(.3, 1.25, .5, 1); }
+@keyframes fadeOut { to { opacity: 0; } }
+@keyframes popOut { to { opacity: 0; transform: translateY(4px) scale(.97); } }
+@keyframes riseIn { from { opacity: 0; transform: translateY(8px); } }
+@keyframes slideDown { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes msgIn { from { opacity: 0; transform: translateY(12px) scale(.96); } }
+@keyframes markPop { from { opacity: 0; transform: scale(.3) rotate(-15deg); } }
+@keyframes discDrop { from { transform: translateY(-420%); } 70% { transform: translateY(6%); } }
+
+.leaving { pointer-events: none !important; }
+.modal-back { animation: fade .18s ease-out; }
+.modal { animation: pop .22s var(--ease-spring); }
+.modal-back.leaving { animation: fadeOut .17s ease-in forwards; }
+.modal-back.leaving .modal { animation: popOut .17s ease-in forwards; }
+.popover.leaving, .invite-card.leaving { animation: popOut .12s ease-in forwards; }
+.toast { animation: riseIn .24s var(--ease-spring); }
+.toast.leaving { animation: popOut .2s ease-in forwards; }
+.lightbox.leaving { animation: fadeOut .17s ease-in forwards; }
+.lightbox img { animation: pop .24s var(--ease-out); }
+
+/* New messages slide up into place; a chat fades in when you switch to it. */
+.msg.msg-enter { animation: msgIn .28s var(--ease-out); transform-origin: bottom left; }
+.msg.out.msg-enter { transform-origin: bottom right; }
+#messages.conv-enter { animation: riseIn .24s var(--ease-out); }
+#welcome:not(.hidden) { animation: riseIn .35s var(--ease-out); }
+
+/* Bars that appear and disappear. */
+#typing:not(.hidden), #pinBar:not(.hidden), #updateBanner:not(.hidden), #shareBanner:not(.hidden),
+#offlineHint:not(.hidden), #schedStrip:not(.hidden), #composeBar:not(.hidden) { animation: slideDown .22s var(--ease-out); }
+#dropOverlay:not(.hidden) { animation: fade .15s ease-out; }
+
+/* Buttons respond to presses. */
+.btn, .fbtn, .icon-btn, .game-pick, .style-card, .poll-opt, .menu-item, .conv {
+  transition: background .14s, color .14s, filter .14s, border-color .14s, box-shadow .14s, transform .1s;
+}
+.btn:active, .fbtn:active, .icon-btn:active, .game-pick:active, .style-card:active, .poll-opt:active { transform: scale(.95); }
+.conv:active { transform: scale(.985); }
+.game-pick:hover, .style-card:hover { transform: translateY(-1px); }
+.send-btn:hover svg { transform: translateX(2px); }
+.send-btn svg { transition: transform .15s var(--ease-out); }
+.react-chip { transition: transform .12s, background .14s; }
+.react-chip:hover { transform: translateY(-1px); }
+.avatar { transition: transform .15s var(--ease-out); }
+.conv:hover .avatar { transform: scale(1.04); }
+
+/* Game moves. */
+.game-modal .cell.last .mark { display: inline-block; animation: markPop .3s var(--ease-spring); }
+.game-modal .disc.last { animation: discDrop .45s cubic-bezier(.45, 0, .6, 1); }
+
+/* Changing theme or style blends the colours. */
+html.theme-anim, html.theme-anim * {
+  transition: background-color .35s ease, color .35s ease, border-color .35s ease, fill .35s ease, box-shadow .35s ease !important;
+}
+
+/* Windows' "Animation effects" off: keep everything still. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

@@ -98,13 +98,48 @@ function guardNavigation(w) {
   w.webContents.on('will-navigate', (e) => e.preventDefault());
 }
 
+// Window size and position that fit the screen it opens on, so a small or
+// high-DPI screen (e.g. a laptop at 150% scaling) never gets a window larger
+// than the screen. Sizes are in Windows' scaled units, like everything here.
+function targetDisplay() {
+  if (win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()) return screen.getDisplayMatching(win.getBounds());
+  return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+}
+
+function fitted({ width, height, minWidth = 0, minHeight = 0 }, display = targetDisplay()) {
+  const wa = display.workArea;
+  // A few pixels of margin: uneven scaling (e.g. 175%) rounds sizes up.
+  const w = Math.min(width, wa.width - 8);
+  const h = Math.min(height, wa.height - 8);
+  return {
+    width: w,
+    height: h,
+    minWidth: Math.min(minWidth, w),
+    minHeight: Math.min(minHeight, h),
+    x: Math.round(wa.x + (wa.width - w) / 2),
+    y: Math.round(wa.y + (wa.height - h) / 2),
+  };
+}
+
+// After scaling changes or a monitor is unplugged, pull lost windows back.
+function keepWindowsOnScreen() {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (w.isDestroyed() || w.isMinimized() || w.isMaximized() || w.isFullScreen()) continue;
+    const b = w.getBounds();
+    const wa = screen.getDisplayMatching(b).workArea;
+    const visible = b.x < wa.x + wa.width - 40 && b.x + b.width > wa.x + 40 && b.y >= wa.y - 8 && b.y < wa.y + wa.height - 40;
+    if (visible && b.width <= wa.width && b.height <= wa.height) continue;
+    const [minW, minH] = w.getMinimumSize();
+    const f = fitted({ width: b.width, height: b.height, minWidth: minW, minHeight: minH }, screen.getDisplayMatching(b));
+    w.setMinimumSize(f.minWidth, f.minHeight);
+    w.setBounds({ x: f.x, y: f.y, width: f.width, height: f.height });
+  }
+}
+
 function createWindow() {
   const c = themeColors();
   win = new BrowserWindow({
-    width: 1180,
-    height: 760,
-    minWidth: 800,
-    minHeight: 540,
+    ...fitted({ width: 1180, height: 760, minWidth: 760, minHeight: 480 }),
     show: false,
     title: APP_NAME,
     icon: appIcon(),
@@ -199,15 +234,14 @@ function notify(conv, msg) {
 // Urgent alerts get their own always-on-top window that stays until acknowledged.
 function showAlert(conv, msg) {
   if (alertWindows.has(msg.id)) return;
-  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  const w = 560;
-  const h = 420;
+  const f = fitted({ width: 560, height: 420 }, screen.getDisplayNearestPoint(screen.getCursorScreenPoint()));
+  // Several alerts are stacked slightly offset, as far as the screen allows.
   const offset = alertWindows.size * 28;
   const alertWin = new BrowserWindow({
-    width: w,
-    height: h,
-    x: Math.round(display.workArea.x + (display.workArea.width - w) / 2) + offset,
-    y: Math.round(display.workArea.y + (display.workArea.height - h) / 2) + offset,
+    width: f.width,
+    height: f.height,
+    x: f.x + Math.min(offset, f.x),
+    y: f.y + Math.min(offset, f.y),
     frame: false,
     resizable: false,
     minimizable: false,
@@ -239,10 +273,7 @@ function closeAlert(msgId) {
 // ------------------------------------------------------------------ screen sharing
 function openViewer(peerId, sid, name) {
   const viewer = new BrowserWindow({
-    width: 1280,
-    height: 780,
-    minWidth: 480,
-    minHeight: 320,
+    ...fitted({ width: 1280, height: 780, minWidth: 480, minHeight: 320 }),
     title: t("{name}'s screen", { name }),
     icon: appIcon(),
     backgroundColor: '#000000',
@@ -276,10 +307,7 @@ function inCall() {
 
 function openCallWindow(call, role) {
   const w = new BrowserWindow({
-    width: 980,
-    height: 660,
-    minWidth: 420,
-    minHeight: 360,
+    ...fitted({ width: 980, height: 660, minWidth: 420, minHeight: 360 }),
     title: t('Call with {name}', { name: convTitle(call.conv) }),
     icon: appIcon(),
     backgroundColor: '#0b0d12',
@@ -332,12 +360,13 @@ function onIncomingCall({ peerId, sid, data }) {
     messenger.logCall(conv, { video: !!data.video, missed: true, peerId });
     return;
   }
-  const display = screen.getPrimaryDisplay().workArea;
+  // Bottom-right corner of the screen in use, like a Windows notification.
+  const display = targetDisplay().workArea;
   const w = new BrowserWindow({
-    width: 380,
-    height: 230,
-    x: display.x + display.width - 400,
-    y: display.y + display.height - 250,
+    width: Math.min(380, display.width),
+    height: Math.min(230, display.height),
+    x: display.x + Math.max(0, display.width - 400),
+    y: display.y + Math.max(0, display.height - 250),
     frame: false,
     resizable: false,
     alwaysOnTop: true,
@@ -395,10 +424,7 @@ function openTetris(conv, id) {
   const msg = messenger.store.getMessage(conv, id);
   if (!msg || !msg.game || msg.game.type !== 'tetris') throw new Error(t('Game not found'));
   const w = new BrowserWindow({
-    width: 1120,
-    height: 780,
-    minWidth: 860,
-    minHeight: 600,
+    ...fitted({ width: 1120, height: 780, minWidth: 760, minHeight: 480 }),
     title: t('Tetris Battle'),
     icon: appIcon(),
     backgroundColor: '#0d0b14',
@@ -871,6 +897,7 @@ app.whenReady().then(async () => {
     dialog.showErrorBox(APP_NAME, `${t('Could not start networking')}: ${err.message}`);
   }
   createWindow();
+  for (const ev of ['display-removed', 'display-metrics-changed']) screen.on(ev, () => setTimeout(keepWindowsOnScreen, 300));
   createTray();
   applyLoginItem();
   setInterval(checkIdle, 30000);

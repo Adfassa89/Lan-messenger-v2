@@ -15,3 +15,7 @@ body:hover .bar, body.idle-off .bar { opacity: 1; }
 .live { width: 9px; height: 9px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 3px rgba(239, 68, 68, .3); }
 button { font: inherit; color: #fff; background: rgba(255, 255, 255, .12); border: 0; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 button:hover { background: rgba(255, 255, 255, .22); }
+
+video { animation: viewIn .35s ease-out; }
+@keyframes viewIn { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { video { animation: none; } }

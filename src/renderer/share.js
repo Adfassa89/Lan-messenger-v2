@@ -128,7 +128,7 @@ const Share = (() => {
       <div class="ic-btns"><button class="btn" data-no>${esc(t('Decline'))}</button><button class="btn primary" data-yes>${esc(t('Watch'))}</button></div>`);
     const remove = () => {
       clearTimeout(entry.timer);
-      card.remove();
+      leave(card);
       invites.delete(sid);
     };
     const entry = { peerId, card, timer: setTimeout(remove, 120000) };
@@ -150,7 +150,7 @@ const Share = (() => {
     if (data.kind === 'end' && invites.has(sid)) {
       const inv = invites.get(sid);
       clearTimeout(inv.timer);
-      inv.card.remove();
+      leave(inv.card);
       invites.delete(sid);
     }
     if (!session || sid !== session.sid || !session.invited.includes(peerId)) return;
