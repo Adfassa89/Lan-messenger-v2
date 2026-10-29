@@ -125,8 +125,10 @@ const Controls = (() => {
       <input type="range" min="${LIMITS[k][0]}" max="${LIMITS[k][1]}" step="1" value="${state.handling[k]}" data-h="${k}">
       <b data-v="${k}">${state.handling[k]} ${unit}</b></label>`;
 
+    let drawn = false;
     function draw() {
-      back.innerHTML = `<div class="ctl-panel">
+      // Only the first drawing animates in; redraws after a key change must not blink.
+      back.innerHTML = `<div class="ctl-panel${drawn ? ' still' : ''}">
         <div class="ctl-head"><h2>${t('Controls')}</h2><button class="ctl-x" data-close>✕</button></div>
         <div class="ctl-presets">
           <button data-preset="classic">${t('Classic (Facebook Tetris Battle)')}</button>
@@ -148,6 +150,7 @@ const Controls = (() => {
         <label class="ctl-check"><input type="checkbox" data-ghost ${state.handling.ghost ? 'checked' : ''}> ${t('Show ghost piece (where the piece will land)')}</label>
         <div class="ctl-foot"><button class="ctl-done" data-close>${t('Done')}</button></div>
       </div>`;
+      drawn = true;
     }
 
     function close() {

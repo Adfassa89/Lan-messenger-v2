@@ -149,3 +149,4 @@ body {
 @keyframes tFade { from { opacity: 0; } }
 @keyframes tPanel { from { opacity: 0; transform: scale(.94); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+.ctl-panel.still { animation: none; }

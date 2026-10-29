@@ -261,7 +261,7 @@ const Game = (() => {
     const offerFromOther = !over && r.drawOffer === 1 - me;
     const opp = 1 - (me < 0 ? 0 : me);
     const self = me < 0 ? 0 : me;
-    open.back.innerHTML = `<div class="modal game-modal chesscom">
+    open.back.innerHTML = `<div class="modal game-modal chesscom${open.drawn ? ' still' : ''}">
       <div class="modal-head"><h2>${esc(t('Chess'))}</h2><button class="icon-btn" data-close title="${esc(t('Close'))}">✕</button></div>
       <div class="cc-body">
         <div class="cc-left">
@@ -282,6 +282,7 @@ const Game = (() => {
         </div>
       </div></div>`;
     const modal = open.back.querySelector('.game-modal');
+    open.drawn = true; // only the first drawing animates in
     modal.querySelector('[data-close]').onclick = close;
     modal.addEventListener('click', (e) => onClick(e, msg, r));
     const list = modal.querySelector('.cc-moves');
@@ -433,7 +434,7 @@ const Game = (() => {
     }
     const opp = 1 - (me < 0 ? 0 : me);
     const self = me < 0 ? 0 : me;
-    open.back.innerHTML = `<div class="modal game-modal chesscom">
+    open.back.innerHTML = `<div class="modal game-modal chesscom${open.drawn ? ' still' : ''}">
       <div class="modal-head"><h2>${esc(t('Checkers'))}</h2><button class="icon-btn" data-close title="${esc(t('Close'))}">✕</button></div>
       <div class="cc-body">
         <div class="cc-left">
@@ -452,6 +453,7 @@ const Game = (() => {
         </div>
       </div></div>`;
     const modal = open.back.querySelector('.game-modal');
+    open.drawn = true; // only the first drawing animates in
     modal.querySelector('[data-close]').onclick = close;
     modal.addEventListener('click', (e) => onClick(e, msg, r));
     const list = modal.querySelector('.cc-moves');
@@ -507,7 +509,7 @@ const Game = (() => {
         <span class="gp-chip p${i} ${type}">${type === 'chess' ? pieceHtml(i === 0 ? 'K' : 'k') : type === 'ttt' ? (i === 0 ? '✕' : '◯') : ''}</span>
         <span>${esc(sideName(msg, i))}</span></div>`).join('');
 
-    open.back.innerHTML = `<div class="modal game-modal">
+    open.back.innerHTML = `<div class="modal game-modal${open.drawn ? ' still' : ''}">
       <div class="modal-head"><h2>${ICONS[type]} ${esc(t(TITLES[type]))}</h2><button class="icon-btn" data-close title="${esc(t('Close'))}">✕</button></div>
       <div class="game-body">
         <div class="game-board-wrap">${r ? boardHtml(msg, r, { interactive: myTurn, selected: open.selected, targets }) : ''}
@@ -526,6 +528,7 @@ const Game = (() => {
       </div></div>`;
 
     const modal = open.back.querySelector('.game-modal');
+    open.drawn = true; // only the first drawing animates in
     modal.querySelector('[data-close]').onclick = close;
     modal.addEventListener('click', (e) => onClick(e, msg, r));
     const list = modal.querySelector('.move-list');

@@ -1339,3 +1339,6 @@ html.theme-anim, html.theme-anim * {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* A game window redrawn after a move must not replay its opening animation. */
+.modal.still { animation: none; }

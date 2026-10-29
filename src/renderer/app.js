@@ -228,11 +228,64 @@ function applyTheme() {
   }
   root.dataset.theme = theme;
   root.dataset.style = style;
-  const css = getComputedStyle(root);
-  const v = (name) => css.getPropertyValue(name).trim();
-  api.setTitleBar(v('--panel'), v('--text'), v('--bg'));
+  syncTitleBar();
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+// Windows draws the minimise/maximise/close buttons itself, in a colour we
+// give it. When a dark backdrop covers the app (dialogs, games, image view),
+// that corner gets the same tint, so it does not look cut out.
+function parseColor(c) {
+  const s = String(c).trim();
+  let m = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (m) {
+    const h = m[1].length === 3 ? m[1].replace(/./g, '$&$&') : m[1];
+    return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)).concat(1);
+  }
+  m = s.match(/^rgba?\(([^)]+)\)$/);
+  if (!m) return null;
+  const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+  return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1];
+}
+
+// The app's own colour right where Windows draws its buttons.
+function colorUnderButtons() {
+  for (const e of document.elementsFromPoint(innerWidth - 70, 20)) {
+    if (e.closest('.modal-back, .lightbox, .editor-back')) continue;
+    const c = parseColor(getComputedStyle(e).backgroundColor);
+    if (c && c[3] > 0.9) return c;
+  }
+  return null;
+}
+
+function syncTitleBar() {
+  const css = getComputedStyle(document.documentElement);
+  const v = (name) => css.getPropertyValue(name).trim();
+  let bar = colorUnderButtons() || parseColor(v('--panel'));
+  let sym = parseColor(v('--text'));
+  if (!bar || !sym) return;
+  for (const back of document.querySelectorAll('.modal-back:not(.leaving), .lightbox:not(.leaving), .editor-back')) {
+    const o = parseColor(getComputedStyle(back).backgroundColor);
+    if (!o || !o[3]) continue;
+    const mix = (c) => c.map((x, i) => (i < 3 ? x * (1 - o[3]) + o[i] * o[3] : 1));
+    bar = mix(bar);
+    // Keep the buttons readable on the darker background.
+    sym = o[3] > 0.6 ? [235, 238, 245, 1] : mix(sym);
+  }
+  const hex = (c) => `#${c.slice(0, 3).map((x) => Math.round(x).toString(16).padStart(2, '0')).join('')}`;
+  const key = hex(bar) + hex(sym);
+  if (key === syncTitleBar.last) return;
+  syncTitleBar.last = key;
+  api.setTitleBar(hex(bar), hex(sym), v('--bg'));
+}
+
+// Follow dialogs opening and closing.
+let titleBarQueued = false;
+new MutationObserver(() => {
+  if (titleBarQueued) return;
+  titleBarQueued = true;
+  requestAnimationFrame(() => { titleBarQueued = false; syncTitleBar(); });
+}).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 
 // Static text in index.html carries data-i18n / data-i18n-title / data-i18n-ph.
 function applyLanguage() {
