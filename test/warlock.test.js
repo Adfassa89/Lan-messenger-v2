@@ -86,6 +86,7 @@ test('teleport, swap and shield work like the original', () => {
   a.x = 0; a.y = 0; b.x = 400; b.y = 0;
   a.spells[2] = { key: 'teleport', level: 1 };
   sim.input('p0', { cast: 2, x: -2000, y: 0 });
+  run(sim, 0.3); // turns round first (Dota turn rate), then blinks
   assert.strictEqual(Math.round(a.x), -770); // level 1 range
   a.x = 0;
   a.cd = {};
@@ -102,6 +103,25 @@ test('teleport, swap and shield work like the original', () => {
   run(sim, 1.2);
   assert.ok(b.hp >= hpB - 1, 'shielded warlock unhurt');
   assert.ok(a.hp < 1000 - 40, 'the fireball came back');
+});
+
+test('Dota turning: walk and cast only once facing the target', () => {
+  const sim = arena();
+  const [a] = sim.pawns;
+  a.x = 0; a.y = 0; a.face = 0; a.mods = {};
+  sim.input('p0', { move: [-1000, 0] }); // straight behind
+  sim.step();
+  assert.strictEqual(Math.round(a.x), 0, 'turns on the spot first');
+  run(sim, 0.2); // 180 degrees take about 0.175 s
+  assert.ok(Math.abs(Math.abs(a.face) - Math.PI) < 0.01, 'faces the target');
+  assert.ok(a.x < -1, 'then walks');
+  // A fireball behind: turn, 0.2 s cast point, then the fireball.
+  a.face = 0; a.cd = {};
+  sim.input('p0', { cast: 0, x: -1000, y: 0 });
+  run(sim, 0.12);
+  assert.ok(!sim.projectiles.some((b) => b.k === 'fireball'), 'still turning');
+  run(sim, 0.4);
+  assert.ok(sim.projectiles.some((b) => b.k === 'fireball' && b.vx < 0), 'fireball flies backwards');
 });
 
 test('a whole match: shop, rounds, scores and the final winner', () => {

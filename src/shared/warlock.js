@@ -32,6 +32,12 @@
   const CASH_START = 30;
   const CASH_ROUND = 10;
   const CAST_POINT = 0.2;
+  // Dota 2 turning: Warlock's turn rate 0.6 turns 180 degrees in 0.175 s;
+  // a hero only starts walking or casting once it faces within 11.5 degrees.
+  const TURN_SPEED = Math.PI / 0.175;
+  const FACE_TOLERANCE = (11.5 * Math.PI) / 180;
+  // Spells without a direction are used on the spot, without turning.
+  const NO_TURN = new Set(['scourge', 'windwalk', 'shield', 'rush']);
   const COLORS = ['#e8443a', '#3a7be8', '#2fbf71', '#f2c230', '#a35ce8', '#f2862e', '#2fc6c9', '#e85ca8', '#9aa13a', '#8a8f99'];
 
   const lv = (arr, level) => arr[Math.min(arr.length, Math.max(1, level)) - 1];
@@ -209,7 +215,7 @@
       if (!p || p.dead || p.left || this.phase !== 'fight') return;
       if (inp.move) {
         p.move = [Number(inp.move[0]) || 0, Number(inp.move[1]) || 0];
-        if (p.casting && p.casting.t > 0) p.casting = null; // moving cancels a cast in progress
+        p.casting = null; // a new order replaces a cast that has not gone off yet
       } else if (inp.stop) {
         p.move = null;
         p.casting = null;
@@ -220,16 +226,27 @@
 
     cast(p, slot, tx, ty) {
       const s = p.spells[slot];
-      if (!s || p.casting) return;
+      if (!s) return;
       const def = SPELLS[s.key];
       if ((p.cd[slot] || 0) > 0) return;
-      p.face = Math.atan2(ty - p.y, tx - p.x);
-      if (def.cast > 0) {
-        p.casting = { slot, tx, ty, t: def.cast };
-        p.move = null;
-      } else {
+      if (NO_TURN.has(s.key) && def.cast === 0) {
         this.fire(p, slot, tx, ty);
+        return;
       }
+      // Like Dota: turn to face the target, then the cast point, then the spell.
+      p.casting = { slot, tx, ty, t: def.cast, turning: !NO_TURN.has(s.key), total: def.cast };
+      p.move = null;
+    }
+
+    // Turns the warlock towards an angle at Dota's turn speed; true once it faces it.
+    turn(p, want, dt) {
+      let d = want - p.face;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      const step = TURN_SPEED * dt;
+      if (Math.abs(d) <= step) p.face = want;
+      else p.face += Math.sign(d) * step;
+      p.face = Math.atan2(Math.sin(p.face), Math.cos(p.face));
+      return Math.abs(d) <= FACE_TOLERANCE;
     }
 
     fire(p, slot, tx, ty) {
@@ -460,7 +477,11 @@
             }
           }
         }
-        if (p.casting) {
+        if (p.casting && p.casting.turning) {
+          const c = p.casting;
+          if (this.turn(p, Math.atan2(c.ty - p.y, c.tx - p.x), dt)) c.turning = false;
+        }
+        if (p.casting && !p.casting.turning) {
           p.casting.t -= dt;
           if (p.casting.t <= 0) {
             const c = p.casting;
@@ -485,10 +506,10 @@
           const sp = this.speed(p);
           if (d < sp * dt) {
             p.move = null;
-          } else {
+          } else if (this.turn(p, Math.atan2(dy, dx), dt)) {
+            // Walks straight to the point once roughly facing it.
             wx = (dx / d) * sp;
             wy = (dy / d) * sp;
-            p.face = Math.atan2(dy, dx);
           }
         }
         p.x += (p.vx + wx) * dt;
@@ -782,8 +803,11 @@
         t: r1(this.time), ph: this.phase, left: Math.max(0, r1(this.phaseLeft)), round: this.round, rounds: this.rounds, layer: this.layer,
         shrink: r1(SHRINK_PERIOD - this.shrinkAcc),
         p: this.pawns.map((p) => ({
-          id: p.id, x: r1(p.x), y: r1(p.y), f: r1(p.face), hp: Math.round(p.hp), mx: this.maxHp(p), dp: Math.round(p.dp), d: p.dead ? 1 : 0, l: p.left ? 1 : 0,
-          sc: p.score, k: p.kills, c: p.cash, cast: p.casting ? 1 : 0,
+          id: p.id, x: r1(p.x), y: r1(p.y), f: Math.round(p.face * 100) / 100, hp: Math.round(p.hp), mx: this.maxHp(p), dp: Math.round(p.dp), d: p.dead ? 1 : 0, l: p.left ? 1 : 0,
+          sc: p.score, k: p.kills, c: p.cash, cast: p.casting && !p.casting.turning ? 1 : 0,
+          cs: p.casting && !p.casting.turning ? p.spells[p.casting.slot].key : '',
+          cp: p.casting && !p.casting.turning && p.casting.total ? r1(1 - p.casting.t / p.casting.total) : 0,
+          mv: p.move ? 1 : 0,
           m: Object.keys(p.mods).filter((k) => p.mods[k]),
           sh: p.mods.shield ? p.mods.shield.r : 0,
           cd: Object.fromEntries(Object.entries(p.cd).filter(([, v]) => v > 0).map(([k, v]) => [k, r1(v)])),

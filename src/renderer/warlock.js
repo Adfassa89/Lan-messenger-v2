@@ -44,7 +44,7 @@ function renderLobby() {
   $('btnStart').classList.toggle('hidden', !isHost);
   $('btnStart').disabled = players.length < 2;
   $('btnStart').textContent = players.length < 2 ? t('Waiting for players…') : t('Start the match ({n} players)', { n: players.length });
-  $('lobbyHelp').innerHTML = `${t('Right-click to move, aim with the mouse.')}<br>
+  $('lobbyHelp').innerHTML = `${t('Right-click to move, aim with the mouse.')} ${t('Mouse wheel zooms.')}<br>
     <kbd>Q</kbd> ${t('Fireball')} · <kbd>W</kbd><kbd>E</kbd><kbd>R</kbd><kbd>D</kbd><kbd>F</kbd><kbd>G</kbd> ${t('spells')} · <kbd>X</kbd> ${t('Scourge')} · <kbd>S</kbd> ${t('stop')}<br>
     ${t('Knock the others into the lava. Last warlock standing wins the round.')}`;
 }
@@ -207,6 +207,9 @@ canvas.addEventListener('mousemove', (e) => {
   if (e.buttons & 2) moveTo(e, false);
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas.addEventListener('wheel', (e) => {
+  if (view) view.zoom = Math.min(1.35, Math.max(0.55, view.zoom * (e.deltaY > 0 ? 1.08 : 1 / 1.08)));
+}, { passive: true });
 canvas.addEventListener('mousedown', (e) => {
   if (e.button === 2) moveTo(e, true);
 });
