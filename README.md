@@ -19,7 +19,7 @@ Available in **English** and **Монгол**.
 | 🖥️ **Screen sharing** | Show your screen (or one window) live to a colleague or a whole group. It goes directly PC-to-PC over the network. Viewers can only watch; they can't control your PC. |
 | ✏️ **Screenshot with drawing** | `Ctrl + Shift + S` (or **＋ → Screenshot with drawing**) takes a screenshot. Crop it, add arrows, boxes, highlights and text, then send. Pasted pictures can be drawn on too. |
 | 🇲🇳 **Mongolian / English** | Switch language in **Settings → Language**. Every screen is translated. |
-| 🔄 **Automatic updates over the network** | When one PC gets a newer version, the others download it from that PC and offer a **Restart**. Updates are digitally signed, so nobody can push fake software. If an update ever fails to start, the PC goes back to the previous version automatically. |
+| 🔄 **Automatic updates** | When one PC gets a newer version, the others download it from that PC and offer a **Restart**. PCs with internet access also get new versions from GitHub. **Settings → Check for updates** shows what is happening and updates on demand. Updates are digitally signed, so nobody can push fake software. If an update ever fails to start, the PC goes back to the previous version automatically. |
 
 ### Everyday features
 | | |
@@ -149,10 +149,15 @@ Free code signing is provided by [SignPath.io](https://about.signpath.io), certi
 
 ### Privacy policy
 
-This program does not send any information to the internet. It only talks to other PCs running
-LAN Messenger 2 on the same local network, and only to deliver what the user sends (messages,
-files, calls, screen sharing, alerts and status) and to share signed app updates between those PCs.
-Chats and settings are stored only on the user's own PC.
+This program talks to other PCs running LAN Messenger 2 on the same local network, and only to
+deliver what the user sends (messages, files, calls, screen sharing, alerts and status) and to share
+signed app updates between those PCs. Chats and settings are stored only on the user's own PC.
+
+The only contact with the internet is the update check: the app asks GitHub
+(`api.github.com`, this repository's latest release) for the newest version number and, if it is
+newer, downloads that signed release. Nothing about the user, their messages or their files is sent.
+It happens when the user clicks **Check for updates**, and otherwise every few hours unless
+**Settings → Also look for updates on the internet** is switched off.
 
 ## License
 

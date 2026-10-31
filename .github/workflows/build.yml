@@ -55,6 +55,19 @@ jobs:
           path: dist/*.exe
           if-no-files-found: error
 
+      # The signed update package, so the app can update itself from the
+      # Releases page as well as from other PCs (it checks the signature).
+      - name: Collect update package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/update | Out-Null
+          if (Test-Path dist/win-unpacked/resources/app.asar.sig) {
+            Copy-Item dist/win-unpacked/resources/app.asar dist/update/app.asar
+            Copy-Item dist/win-unpacked/resources/app.asar.sig dist/update/app.asar.sig
+          } else {
+            Write-Output "::warning::No signed update package: the app cannot update itself from this release."
+          }
+
       - name: Read version
         id: ver
         shell: pwsh
@@ -71,4 +84,6 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: LAN Messenger 2 ${{ steps.ver.outputs.tag }}
           body_path: build/release-notes.md
-          files: dist/*.exe
+          files: |
+            dist/*.exe
+            dist/update/*

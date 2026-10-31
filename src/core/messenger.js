@@ -47,6 +47,7 @@ function defaultSettings(downloadDir) {
     autoAway: true,
     enterToSend: true,
     autoUpdate: true,
+    internetUpdates: true,
   };
 }
 

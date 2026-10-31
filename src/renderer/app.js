@@ -1698,12 +1698,21 @@ function updateBoxHtml(st) {
       line = t('Version {v} is ready. It is installed when the app restarts.', { v: st.staged || st.target });
       icon = '✅';
       break;
+    case 'checking':
+      line = t('Looking for a newer version on the network and the internet…');
+      break;
     case 'error':
       line = t('The update could not be downloaded: {error}', { error: st.error || '' });
       icon = '⚠️';
       break;
+    case 'installer':
+      line = t('Version {v} is available. This one has to be installed from the download page.', { v: st.target });
+      icon = '🆕';
+      break;
     case 'none':
-      line = t('You have the newest version on the network.');
+      line = st.internet === 'latest' ? t('You have the newest version.')
+        : st.internet === 'offline' ? t('No PC on your network has a newer version, and the internet could not be reached to check GitHub.')
+          : t('No PC on your network has a newer version.');
       icon = '✅';
       break;
     default:
@@ -1717,8 +1726,8 @@ function updateBoxHtml(st) {
       <div class="upd-line">${esc(line)}${checked}</div>${bar}${extra}</div></div>
     <div class="upd-btns">
       ${ready ? `<button class="btn primary" data-upd="restart">${esc(t('Restart now'))}</button>` : ''}
-      <button class="btn${ready ? '' : ' primary'}" data-upd="check"${st && st.state === 'downloading' ? ' disabled' : ''}>${esc(t('Check for updates'))}</button>
-      <button class="btn" data-upd="page">${esc(t('Open download page'))}</button>
+      <button class="btn${ready || (st && st.state === 'installer') ? '' : ' primary'}" data-upd="check"${st && (st.state === 'downloading' || st.state === 'checking') ? ' disabled' : ''}>${esc(t('Check for updates'))}</button>
+      <button class="btn${st && st.state === 'installer' ? ' primary' : ''}" data-upd="page">${esc(t('Open download page'))}</button>
     </div>`;
 }
 
@@ -1764,6 +1773,7 @@ function settingsModal() {
     ${toggleRow('minimizeToTray', t('Keep running in the tray when closed'), t('So you never miss a message'))}
     ${toggleRow('autoAway', t('Set me as Away when idle'), t('After 5 minutes without mouse or keyboard activity'))}
     ${toggleRow('autoUpdate', t('Update automatically from the network'), t('Newer versions on other PCs are installed safely (digitally signed)'))}
+    ${toggleRow('internetUpdates', t('Also look for updates on the internet'), t('Every few hours, on GitHub (only the version number is asked; nothing about you is sent)'))}
     <div class="upd-box" id="sUpd">${updateBoxHtml(null)}</div>
 
     <div class="section-title">${esc(t('Network'))}</div>
