@@ -14,7 +14,7 @@ const EXTRA = ['Smileys', 'Gestures', 'Work', 'Things', 'Indigo', 'Office', 'Oce
   'Pick your side and a time control, like on chess.com', 'Bullet', 'Blitz', 'Rapid', 'Three in a row wins', 'Four in a row wins',
   'Checkers', 'Tetris Battle', 'HOLD', 'NEXT', 'Move left', 'Move right', 'Soft drop', 'Hard drop', 'Rotate right', 'Rotate left', 'Rotate 180°', 'Hold',
   'Delay before sliding', 'Sliding speed', 'Soft drop speed', '(DAS – how long you hold before the piece starts sliding)',
-  '(ARR – time between steps, 0 = instant)', '(time per row while holding soft drop)', 'Captures are compulsory, kings move both ways', 'Real-time battle: clear lines to send garbage'];
+  '(ARR – time between steps, 0 = instant)', '(time per row while holding soft drop)', 'Captures are compulsory, kings move both ways; clocks optional', 'Classical', 'Real-time battle: clear lines to send garbage'];
 
 function decode(s) {
   return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');

@@ -251,7 +251,7 @@ function parseColor(c) {
 // The app's own colour right where Windows draws its buttons.
 function colorUnderButtons() {
   for (const e of document.elementsFromPoint(innerWidth - 70, 20)) {
-    if (e.closest('.modal-back, .lightbox, .editor-back')) continue;
+    if (e.closest('.modal-back, .lightbox, .editor-back, .endfx')) continue;
     const c = parseColor(getComputedStyle(e).backgroundColor);
     if (c && c[3] > 0.9) return c;
   }
@@ -264,7 +264,7 @@ function syncTitleBar() {
   let bar = colorUnderButtons() || parseColor(v('--panel'));
   let sym = parseColor(v('--text'));
   if (!bar || !sym) return;
-  for (const back of document.querySelectorAll('.modal-back:not(.leaving), .lightbox:not(.leaving), .editor-back')) {
+  for (const back of document.querySelectorAll('.modal-back:not(.leaving), .lightbox:not(.leaving), .editor-back, .endfx:not(.leaving)')) {
     const o = parseColor(getComputedStyle(back).backgroundColor);
     if (!o || !o[3]) continue;
     const mix = (c) => c.map((x, i) => (i < 3 ? x * (1 - o[3]) + o[i] * o[3] : 1));

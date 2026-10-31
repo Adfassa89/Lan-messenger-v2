@@ -146,7 +146,7 @@ class Messenger extends EventEmitter {
     this.inbound = new Set();
     this.inboundChat = new Map(); // peerId -> Set of chat links that peer opened to us
     this.reverseWaits = new Map(); // token -> { peerId, resolve, timer }
-    this.clockGames = new Map(); // game message id -> conv, for timed chess
+    this.clockGames = new Map(); // game message id -> conv, for timed chess and checkers
     this.seen = new Map(); // rid -> time, to drop duplicates
     this.avatarAsked = new Map(); // peerId -> time
     this.files = new FileTransfers(this);
@@ -797,7 +797,7 @@ class Messenger extends EventEmitter {
         || !players.includes(this.id) || !players.includes(peerId)) return;
       msg.game = { type: g.type, players: [players[0], players[1]], moves: [], at: Date.now() };
       const clock = Games.cleanClock(g.clock);
-      if (clock && g.type === 'chess') {
+      if (clock && Games.CLOCKED.includes(g.type)) {
         msg.game.clock = clock;
         this.clockGames.set(msg.id, conv);
       }
@@ -1244,7 +1244,7 @@ class Messenger extends EventEmitter {
   // ------------------------------------------------------------------ games
   // side: 'first' (white / dark pieces), 'second' or 'random'. In chess and
   // checkers the inviter chooses (random by default); otherwise the inviter starts.
-  // clock: { base, inc } in ms for timed chess, or nothing for no time limit.
+  // clock: { base, inc } in ms for timed chess or checkers, or nothing for no time limit.
   createGame(conv, type, { side = 'random', clock } = {}) {
     if (this._convType(conv) !== 'direct') throw new Error('Games can be played in private chats');
     if (!Games.TYPES.includes(type)) throw new Error('Unknown game');
@@ -1252,7 +1252,7 @@ class Messenger extends EventEmitter {
     const first = !choose || side === 'first' || (side !== 'second' && Math.random() < 0.5);
     const players = first ? [this.id, conv] : [conv, this.id];
     const game = { type, players, moves: [] };
-    const c = type === 'chess' ? Games.cleanClock(clock) : null;
+    const c = Games.CLOCKED.includes(type) ? Games.cleanClock(clock) : null;
     if (c) game.clock = c;
     const msg = this._sendMsg(conv, { kind: 'game', text: '', game });
     const stored = this.store.getMessage(conv, msg.id);

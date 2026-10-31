@@ -6,7 +6,7 @@
 // move, or one of { resign: true } / { draw: 'offer' | 'accept' | 'decline' }
 // / { timeout: true }. Player 0 always moves first.
 //
-// Chess may have a clock, { base, inc } in milliseconds. Each move entry then
+// Chess and checkers may have a clock, { base, inc } in milliseconds. Each move entry then
 // carries t, the time the mover spent on it (measured on the mover's PC).
 // Each player's first move is free; the increment is added after every move.
 (function init(root) {
@@ -459,6 +459,8 @@
 
   const RULES = { chess, checkers, ttt, c4, tetris };
 
+  const CLOCKED = ['chess', 'checkers'];
+
   // Accepts a clock from the network only if it is sensible.
   function cleanClock(c) {
     if (!c || typeof c !== 'object') return null;
@@ -478,7 +480,7 @@
   function replay(type, entries, options) {
     const rules = RULES[type];
     if (!rules) throw new Error('Unknown game');
-    const clock = type === 'chess' && options ? cleanClock(options.clock) : null;
+    const clock = CLOCKED.includes(type) && options ? cleanClock(options.clock) : null;
     const left = clock ? [clock.base, clock.base] : null;
     const moved = [0, 0];
     let state = rules.init();
@@ -493,7 +495,7 @@
       if (m.timeout) {
         if (!clock) throw new Error('This game has no clock');
         const loser = status.turn;
-        ended = canMate(state.board, loser === 1)
+        ended = type !== 'chess' || canMate(state.board, loser === 1)
           ? { over: true, winner: 1 - loser, reason: 'timeout' }
           : { over: true, winner: null, reason: 'timeoutDraw' };
         left[loser] = 0;
@@ -530,7 +532,7 @@
     return replay(type, (entries || []).concat(entry), options);
   }
 
-  const Games = { RULES, replay, play, cleanClock, TYPES: Object.keys(RULES) };
+  const Games = { RULES, replay, play, cleanClock, CLOCKED, TYPES: Object.keys(RULES) };
   if (typeof module !== 'undefined' && module.exports) module.exports = Games;
   else root.Games = Games;
 }(typeof window !== 'undefined' ? window : globalThis));

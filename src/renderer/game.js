@@ -10,7 +10,7 @@ const Game = (() => {
   const ICONS = { chess: '♞', checkers: '⛀', ttt: '#', c4: '●', tetris: '▦' };
   const ABOUT = {
     chess: 'Pick your side and a time control, like on chess.com',
-    checkers: 'Captures are compulsory, kings move both ways',
+    checkers: 'Captures are compulsory, kings move both ways; clocks optional',
     ttt: 'Three in a row wins',
     c4: 'Four in a row wins',
     tetris: 'Real-time battle: clear lines to send garbage',
@@ -20,16 +20,27 @@ const Game = (() => {
   // Game preferences, kept per PC: last time control and side chosen,
   // premoves and game sounds.
   const PREFS_KEY = 'lanmsg.games.v1';
-  const prefs = { clock: 'none', side: 'random', premoves: true, sounds: true };
+  const prefs = { clock: 'none', ckClock: 'none', side: 'random', premoves: true, sounds: true };
   try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch { /* defaults */ }
   const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* not saved */ } };
 
-  // Time controls like chess.com's: minutes + increment seconds.
-  const CLOCKS = [
-    ['Bullet', ['1+0', '1+1', '2+1']],
-    ['Blitz', ['3+0', '3+2', '5+0']],
-    ['Rapid', ['10+0', '15+10', '30+0']],
-  ];
+  // Time controls: minutes + increment seconds. Chess like chess.com.
+  // Checkers: the draughts federation's blitz 3|2 and rapid 5|3, and the
+  // English draughts (checkers) 3|3 blitz, 12|5 rapid and 45|20 classical.
+  const CLOCKS = {
+    chess: [
+      ['Bullet', ['1+0', '1+1', '2+1']],
+      ['Blitz', ['3+0', '3+2', '5+0']],
+      ['Rapid', ['10+0', '15+10', '30+0']],
+    ],
+    checkers: [
+      ['Bullet', ['1+0', '1+1', '2+1']],
+      ['Blitz', ['3+2', '3+3', '5+2']],
+      ['Rapid', ['5+3', '10+5', '12+5']],
+      ['Classical', ['45+20']],
+    ],
+  };
+  const clockPref = (type) => (type === 'chess' ? 'clock' : 'ckClock');
   const clockFromKey = (k) => {
     const m = /^(\d+)\+(\d+)$/.exec(k || '');
     return m ? { base: Number(m[1]) * 60000, inc: Number(m[2]) * 1000 } : null;
@@ -46,6 +57,25 @@ const Game = (() => {
     if (v >= 20000) return `${Math.floor(s / 60)}:${two(s % 60)}`;
     return `${Math.floor(s / 60)}:${two(s % 60)}.${Math.floor((v % 1000) / 100)}`;
   }
+  // The running clock ticks without redrawing the whole window.
+  function startTicker(modal, msg, r) {
+    clearInterval(open.ticker);
+    if (!r.clock || r.clock.running === null) return;
+    const i = r.clock.running;
+    const me = myIndex(msg);
+    const box = modal.querySelector(`.cc-clock[data-clock="${i}"]`);
+    if (!box) return;
+    open.ticker = setInterval(() => {
+      const left = clockLeft(msg, r, i);
+      box.lastChild.textContent = fmtClock(left);
+      box.classList.toggle('low', left < 20000);
+      if (i === me && left < 10000 && left > 0 && open.warned !== msg.id) {
+        open.warned = msg.id; // "ten seconds left", once per game
+        Sfx.play('lowtime');
+      }
+    }, 100);
+  }
+
   // Time left on a player's clock right now.
   function clockLeft(msg, r, i) {
     if (!r.clock) return 0;
@@ -354,21 +384,7 @@ const Game = (() => {
     modal.addEventListener('click', (e) => onClick(e, msg, r));
     const list = modal.querySelector('.cc-moves');
     list.scrollTop = list.scrollHeight;
-    // The running clock ticks without redrawing the whole window.
-    clearInterval(open.ticker);
-    if (r.clock && r.clock.running !== null) {
-      const i = r.clock.running;
-      const box = modal.querySelector(`.cc-clock[data-clock="${i}"]`);
-      open.ticker = setInterval(() => {
-        const left = clockLeft(msg, r, i);
-        box.lastChild.textContent = fmtClock(left);
-        box.classList.toggle('low', left < 20000);
-        if (i === me && left < 10000 && left > 0 && open.warned !== msg.id) {
-          open.warned = msg.id; // "ten seconds left", once per game
-          Sfx.play('lowtime');
-        }
-      }, 100);
-    }
+    startTicker(modal, msg, r);
     if (me >= 0 && !over && !open.promo) bindChessBoard(modal.querySelector('.board.chess'), msg, r);
     if (open.selected !== null) showTargets(modal, r, open.selected, pieceMoves(msg, r, open.selected));
   }
@@ -578,7 +594,9 @@ const Game = (() => {
       ${avatarHtml('direct', id, id === S.me.id ? S.me.name : (peer ? peer.name : ''), null, 'cc-avatar')}
       <div class="cc-who"><div class="cc-name">${esc(id === S.me.id ? S.me.name : peerName(id))}${i === me ? ` <span class="cc-you">(${esc(t('You'))})</span>` : ''}</div>
         <div class="cc-captured">${new Array(theirLost).fill(`<span class="ck-piece mini ${own === 'b' ? 'p1' : 'p0'}"></span>`).join('')}${theirLost > lost ? `<span class="cc-adv">+${theirLost - lost}</span>` : ''}</div></div>
-      <div class="cc-clock${moving ? ' on' : ''}"><span class="ck-piece mini ${i === 0 ? 'p0' : 'p1'}"></span><span>${esc(moving ? (i === me ? t('Your turn') : t('To move')) : colorName('checkers', i))}</span></div>
+      ${r.clock
+    ? `<div class="cc-clock timed${r.clock.running === i ? ' on' : ''}${clockLeft(msg, r, i) < 20000 ? ' low' : ''}" data-clock="${i}"><span class="ck-piece mini ${i === 0 ? 'p0' : 'p1'}"></span><span>${fmtClock(clockLeft(msg, r, i))}</span></div>`
+    : `<div class="cc-clock${moving ? ' on' : ''}"><span class="ck-piece mini ${i === 0 ? 'p0' : 'p1'}"></span><span>${esc(moving ? (i === me ? t('Your turn') : t('To move')) : colorName('checkers', i))}</span></div>`}
     </div>`;
   }
 
@@ -638,6 +656,7 @@ const Game = (() => {
     modal.addEventListener('click', (e) => onClick(e, msg, r));
     const list = modal.querySelector('.cc-moves');
     list.scrollTop = list.scrollHeight;
+    startTicker(modal, msg, r);
     if (myTurn) {
       modal.querySelector('.board').addEventListener('click', (e) => {
         const sq = e.target.closest('[data-ck]');
@@ -720,7 +739,9 @@ const Game = (() => {
       outcome,
       title,
       detail: reasonText(st),
-      buttons: [{ label: t('New game'), primary: true, action: () => rematch(msg) }, { label: t('Close') }],
+      // "Close" closes the game window too; clicking beside the card only
+      // hides the card, to look at the final position.
+      buttons: [{ label: t('New game'), primary: true, action: () => rematch(msg) }, { label: t('Close'), action: close }],
     });
   }
 
@@ -852,9 +873,9 @@ const Game = (() => {
     const draw = () => {
       m.innerHTML = `<div class="modal-head"><h2>${ICONS[type]} ${esc(t(TITLES[type]))}</h2><button class="icon-btn" data-close>✕</button></div>
         <div class="modal-body game-setup">
-          ${type === 'chess' ? `<div class="gs-label">${esc(t('Time control'))}</div>
-            ${CLOCKS.map(([kind, keys]) => `<div class="gs-row"><span class="gs-kind">${esc(t(kind))}</span>${keys.map((k) => `<button class="gs-opt${prefs.clock === k ? ' on' : ''}" data-clock="${k}">${esc(clockLabel(clockFromKey(k)))}</button>`).join('')}</div>`).join('')}
-            <button class="gs-opt wide${!clockFromKey(prefs.clock) ? ' on' : ''}" data-clock="none">∞ ${esc(t('No time limit'))}</button>` : ''}
+          <div class="gs-label">${esc(t('Time control'))}</div>
+            ${CLOCKS[type].map(([kind, keys]) => `<div class="gs-row"><span class="gs-kind">${esc(t(kind))}</span>${keys.map((k) => `<button class="gs-opt${prefs[clockPref(type)] === k ? ' on' : ''}" data-clock="${k}">${esc(clockLabel(clockFromKey(k)))}</button>`).join('')}</div>`).join('')}
+            <button class="gs-opt wide${!clockFromKey(prefs[clockPref(type)]) ? ' on' : ''}" data-clock="none">∞ ${esc(t('No time limit'))}</button>
           <div class="gs-label">${esc(t('I play as'))}</div>
           <div class="gs-sides">${sides.map(([k, icon, label]) => `<button class="gs-side${prefs.side === k ? ' on' : ''}" data-side="${k}">${icon}<span>${esc(label)}</span></button>`).join('')}</div>
         </div>
@@ -866,7 +887,7 @@ const Game = (() => {
       const b = e.target.closest('button');
       if (!b) return;
       if (b.dataset.clock) {
-        prefs.clock = b.dataset.clock;
+        prefs[clockPref(type)] = b.dataset.clock;
         savePrefs();
         draw();
       } else if (b.dataset.side) {
@@ -878,7 +899,7 @@ const Game = (() => {
         newGameModal(conv);
       } else if (b.dataset.go !== undefined) {
         done();
-        const options = { side: prefs.side, clock: type === 'chess' ? clockFromKey(prefs.clock) : null };
+        const options = { side: prefs.side, clock: clockFromKey(prefs[clockPref(type)]) };
         const g = await call(api.createGame(conv, type, options));
         if (g) setTimeout(() => show(conv, g.id), 50);
       }

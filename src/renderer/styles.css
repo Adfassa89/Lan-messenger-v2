@@ -1397,3 +1397,13 @@ html.theme-anim, html.theme-anim * {
 .upd-box .progress { margin-top: 8px; }
 .upd-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .upd-box .btn:not(.primary) { background: var(--panel); border: 1px solid var(--border); }
+
+/* Windows draws minimise / maximise / close over the top 44 px of the window.
+   Dialogs and game windows stay below that strip so the buttons never cover them. */
+:root { --modal-top: 24px; }
+body.overlay-controls { --modal-top: 54px; }
+.modal-back { padding-top: var(--modal-top); }
+.modal { max-height: calc(100vh - 24px - var(--modal-top)); }
+.cc-left { width: min(calc(100vh - 206px - var(--modal-top)), 560px); }
+.game-board-wrap { width: min(calc(62vh - var(--modal-top) + 24px), 520px); }
+.lightbox { padding-top: var(--modal-top); }

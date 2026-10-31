@@ -98,6 +98,8 @@
     "I play as": "Би тоглох тал",
     "Back": "Буцах",
     "Send invite": "Урилга илгээх",
+    "Captures are compulsory, kings move both ways; clocks optional": "Идэх нь заавал, хаан хоёр тийш явна; цаг сонгож болно",
+    "Classical": "Сонгодог",
     "Updates work in the installed app.": "Шинэчлэл суулгасан програм дээр ажиллана.",
     "Downloading version {v} from {name}… {pct}%": "{v} хувилбарыг {name}-с татаж байна… {pct}%",
     "Version {v} is ready. It is installed when the app restarts.": "{v} хувилбар бэлэн. Програм дахин эхлэхэд суулгагдана.",

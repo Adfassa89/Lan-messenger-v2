@@ -141,3 +141,15 @@ test('chess clocks: first moves are free, increments are added, time-outs end th
   assert.strictEqual(Games.cleanClock({ base: 5, inc: 0 }), null);
   assert.strictEqual(Games.replay('chess', moves).clock, null);
 });
+
+test('checkers can be played with a clock too', () => {
+  const opts = { clock: { base: 180000, inc: 2000 } };
+  const C = Games.RULES.checkers;
+  const first = C.legalMoves(C.init())[0];
+  const r = Games.replay('checkers', [{ p: 0, m: { path: first }, t: 5000 }], opts);
+  assert.deepStrictEqual(r.clock.left, [182000, 180000]); // first move free, +2 s
+  assert.strictEqual(r.clock.running, null); // black has not moved yet
+  const out = Games.replay('checkers', [{ p: 0, m: { path: first } }, { p: 0, m: { timeout: true } }], opts);
+  assert.deepStrictEqual([out.status.winner, out.status.reason], [0, 'timeout']);
+  assert.strictEqual(Games.replay('ttt', [], opts).clock, null); // only chess and checkers have clocks
+});
