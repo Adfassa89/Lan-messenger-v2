@@ -126,3 +126,18 @@ test('tetris battle stores who was knocked out', () => {
   assert.deepStrictEqual(r.status, { over: true, winner: 0, reason: 'ko' });
   assert.throws(() => Games.replay('tetris', [{ p: 1, m: { ko: true } }, { p: 0, m: { ko: true } }]));
 });
+
+test('chess clocks: first moves are free, increments are added, time-outs end the game', () => {
+  const opts = { clock: { base: 60000, inc: 2000 } };
+  const mv = (p, from, to, t) => ({ p, m: { from, to }, t });
+  const moves = [mv(0, 'e2', 'e4', 9999), mv(1, 'e7', 'e5', 9999), mv(0, 'g1', 'f3', 5000), mv(1, 'b8', 'c6', 61000)];
+  const r = Games.replay('chess', moves, opts);
+  // White: 60 + 2 (free first move) - 5 + 2. Black: 60 + 2 - 61 + 2.
+  assert.deepStrictEqual(r.clock.left, [59000, 3000]);
+  assert.strictEqual(r.clock.running, 0);
+  const out = Games.replay('chess', moves.concat({ p: 1, m: { timeout: true } }), opts);
+  assert.deepStrictEqual([out.status.over, out.status.winner, out.status.reason], [true, 1, 'timeout']);
+  assert.throws(() => Games.replay('chess', [{ p: 0, m: { timeout: true } }]), /no clock/);
+  assert.strictEqual(Games.cleanClock({ base: 5, inc: 0 }), null);
+  assert.strictEqual(Games.replay('chess', moves).clock, null);
+});

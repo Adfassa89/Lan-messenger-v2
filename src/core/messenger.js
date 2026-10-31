@@ -26,7 +26,7 @@ const MAX_AVATAR = 96 * 1024;
 const MAX_FOLDER_FILES = 20000;
 const VOICE_MAX = 25 * 1024 * 1024;
 // Message types that are queued until the other PC confirms them.
-const RELIABLE = new Set(['msg', 'read', 'react', 'edit', 'unsend', 'pin', 'vote', 'uack', 'game-move']);
+const RELIABLE = new Set(['msg', 'read', 'react', 'edit', 'unsend', 'pin', 'vote', 'uack', 'game-move', 'file-cancel']);
 
 const uuid = () => crypto.randomUUID();
 const hashOf = (s) => crypto.createHash('sha256').update(s).digest('hex').slice(0, 16);
@@ -146,6 +146,7 @@ class Messenger extends EventEmitter {
     this.inbound = new Set();
     this.inboundChat = new Map(); // peerId -> Set of chat links that peer opened to us
     this.reverseWaits = new Map(); // token -> { peerId, resolve, timer }
+    this.clockGames = new Map(); // game message id -> conv, for timed chess
     this.seen = new Map(); // rid -> time, to drop duplicates
     this.avatarAsked = new Map(); // peerId -> time
     this.files = new FileTransfers(this);
@@ -196,6 +197,8 @@ class Messenger extends EventEmitter {
     this.sweepTimer = setInterval(() => this._sweep(), 3000);
     this.pingTimer = setInterval(() => this._pingAll(), PING_INTERVAL);
     this.scheduleTimer = setInterval(() => this._runScheduled(), 5000);
+    this._findClockGames();
+    this.clockTimer = setInterval(() => this.clockGames.size && this._checkClocks(), 500);
     this.started = true;
     setTimeout(() => this._probeManual(), 500);
     setTimeout(() => this._runScheduled(), 1500);
@@ -207,6 +210,7 @@ class Messenger extends EventEmitter {
     clearInterval(this.sweepTimer);
     clearInterval(this.pingTimer);
     clearInterval(this.scheduleTimer);
+    clearInterval(this.clockTimer);
     for (const t of this.ackTimers.values()) clearTimeout(t);
     this.ackTimers.clear();
     for (const st of this.out.values()) {
@@ -791,7 +795,12 @@ class Messenger extends EventEmitter {
       const players = Array.isArray(g.players) ? g.players : [];
       if (type !== 'direct' || !Games.TYPES.includes(g.type) || players.length !== 2
         || !players.includes(this.id) || !players.includes(peerId)) return;
-      msg.game = { type: g.type, players: [players[0], players[1]], moves: [] };
+      msg.game = { type: g.type, players: [players[0], players[1]], moves: [], at: Date.now() };
+      const clock = Games.cleanClock(g.clock);
+      if (clock && g.type === 'chess') {
+        msg.game.clock = clock;
+        this.clockGames.set(msg.id, conv);
+      }
     }
     this.store.addMessage(conv, msg);
     this._bumpConv(conv, type, msg, kind !== 'system');
@@ -837,11 +846,15 @@ class Messenger extends EventEmitter {
       case 'pin':
         this._applyPin(conv, msg, peerId, !!w.on);
         break;
+      case 'file-cancel':
+        if (msg.from !== peerId || msg.kind !== 'file') return;
+        this._markSendCancelled(conv, msg);
+        break;
       case 'vote':
         this._applyVote(conv, msg, peerId, w.choices);
         break;
       case 'game-move':
-        this._applyGameMove(conv, msg, peerId, w.m, w.n);
+        this._applyGameMove(conv, msg, peerId, w.m, w.n, Number(w.t));
         break;
       case 'uack':
         if (msg.from !== this.id || !msg.urgent) return;
@@ -903,7 +916,7 @@ class Messenger extends EventEmitter {
     if (msg.replyTo) wire.replyTo = msg.replyTo;
     if (msg.urgent) wire.urgent = true;
     if (msg.poll) wire.poll = { question: msg.poll.question, options: msg.poll.options, multi: msg.poll.multi };
-    if (msg.game) wire.game = { type: msg.game.type, players: msg.game.players };
+    if (msg.game) wire.game = { type: msg.game.type, players: msg.game.players, ...(msg.game.clock ? { clock: msg.game.clock } : {}) };
     const type = this._convType(conv);
     if (type === 'broadcast') wire.broadcast = true;
     if (type === 'group') wire.group = this.groups[conv.slice(2)];
@@ -1035,6 +1048,25 @@ class Messenger extends EventEmitter {
   cancelFile(conv, msgId) {
     const msg = this.store.getMessage(conv, msgId);
     if (msg && msg.file) this.files.cancel(msg.file.tid);
+  }
+
+  // The sender stops a file or folder: transfers in progress end, and nobody
+  // can download it any more.
+  cancelSend(conv, msgId) {
+    const msg = this.store.getMessage(conv, msgId);
+    if (!msg || msg.kind !== 'file' || msg.from !== this.id) throw new Error('File not found');
+    if (msg.file.state === 'cancelled') return;
+    delete this.offers[msg.file.tid];
+    this.store.touch('offers');
+    this.files.stopUploads(msg.file.tid);
+    this._markSendCancelled(conv, msg);
+    this._sendMeta(conv, { type: 'file-cancel', id: msgId });
+  }
+
+  _markSendCancelled(conv, msg) {
+    if (msg.from !== this.id) this.files.cancel(msg.file.tid, 'sender');
+    const updated = this.store.updateMessage(conv, msg.id, { file: { state: 'cancelled', error: null } });
+    if (updated) this.emit('message', { conv, msg: updated, isNew: false });
   }
 
   markRead(conv) {
@@ -1210,29 +1242,76 @@ class Messenger extends EventEmitter {
   }
 
   // ------------------------------------------------------------------ games
-  createGame(conv, type) {
+  // side: 'first' (white / dark pieces), 'second' or 'random'. In chess and
+  // checkers the inviter chooses (random by default); otherwise the inviter starts.
+  // clock: { base, inc } in ms for timed chess, or nothing for no time limit.
+  createGame(conv, type, { side = 'random', clock } = {}) {
     if (this._convType(conv) !== 'direct') throw new Error('Games can be played in private chats');
     if (!Games.TYPES.includes(type)) throw new Error('Unknown game');
-    // Chess and checkers colors are drawn at random; in the other games the inviter starts.
-    const players = (type === 'chess' || type === 'checkers') && Math.random() < 0.5 ? [conv, this.id] : [this.id, conv];
-    return this._sendMsg(conv, { kind: 'game', text: '', game: { type, players, moves: [] } });
+    const choose = type === 'chess' || type === 'checkers';
+    const first = !choose || side === 'first' || (side !== 'second' && Math.random() < 0.5);
+    const players = first ? [this.id, conv] : [conv, this.id];
+    const game = { type, players, moves: [] };
+    const c = type === 'chess' ? Games.cleanClock(clock) : null;
+    if (c) game.clock = c;
+    const msg = this._sendMsg(conv, { kind: 'game', text: '', game });
+    const stored = this.store.getMessage(conv, msg.id);
+    if (stored && stored.game) {
+      stored.game.at = Date.now();
+      this.store.updateMessage(conv, msg.id, {});
+      if (c) this.clockGames.set(msg.id, conv);
+    }
+    return stored || msg;
+  }
+
+  // Timed chess: whoever's clock reaches zero loses. The player out of time
+  // claims it at once; the other PC claims it a little later in case that PC
+  // is switched off or the app is closed.
+  _checkClocks() {
+    const now = Date.now();
+    for (const [id, conv] of this.clockGames) {
+      const msg = this.store.getMessage(conv, id);
+      const g = msg && msg.game;
+      if (!g || !g.clock) { this.clockGames.delete(id); continue; }
+      let r;
+      try { r = Games.replay(g.type, g.moves, g); } catch { this.clockGames.delete(id); continue; }
+      if (r.status.over) { this.clockGames.delete(id); continue; }
+      if (r.clock.running === null) continue;
+      const left = r.clock.left[r.clock.running] - (now - (g.at || msg.ts));
+      const me = g.players.indexOf(this.id);
+      if (left <= 0 && (r.clock.running === me || left <= -3000)) {
+        try { this.gameMove(conv, id, { timeout: true }); } catch { /* someone else was faster */ }
+      }
+    }
+  }
+
+  // After a restart, find timed games that are still being played.
+  _findClockGames() {
+    for (const conv of Object.keys(this.convs)) {
+      if (this._convType(conv) !== 'direct') continue;
+      for (const m of this.store.messages(conv, { limit: 300 })) {
+        if (m.kind === 'game' && m.game && m.game.clock) this.clockGames.set(m.id, conv);
+      }
+    }
   }
 
   // Adds a move after checking it against the game rules.
-  _applyGameMove(conv, msg, who, move, n) {
+  _applyGameMove(conv, msg, who, move, n, spent) {
     if (msg.kind !== 'game' || !msg.game) return false;
     const g = msg.game;
     const p = g.players.indexOf(who);
     if (p < 0) return false;
     if (Number.isInteger(n) && n < g.moves.length) return false; // already have it
     const entry = { p, m: move && typeof move === 'object' ? move : {} };
+    if (g.clock && Number.isFinite(spent)) entry.t = Math.max(0, Math.round(spent));
     try {
-      Games.play(g.type, g.moves, entry);
+      Games.play(g.type, g.moves, entry, g);
     } catch (err) {
       this.emit('warning', `Rejected game move from ${who}: ${err.message}`);
       return false;
     }
     g.moves.push(entry);
+    g.at = Date.now(); // when this position started, for the clocks
     this.store.updateMessage(conv, msg.id, {});
     this.emit('message', { conv, msg, isNew: false });
     if (who !== this.id) {
@@ -1253,9 +1332,20 @@ class Messenger extends EventEmitter {
   gameMove(conv, msgId, move) {
     const msg = this.store.getMessage(conv, msgId);
     if (!msg || msg.kind !== 'game') throw new Error('Game not found');
-    const n = msg.game.moves.length;
-    if (!this._applyGameMove(conv, msg, this.id, move, n)) throw new Error('That move is not allowed');
-    this._sendMeta(conv, { type: 'game-move', id: msgId, m: move, n });
+    const g = msg.game;
+    const n = g.moves.length;
+    // Time spent thinking about this move, measured here.
+    const spent = g.clock ? Date.now() - (g.at || msg.ts) : undefined;
+    if (g.clock && move && !move.timeout && !move.draw) {
+      const r = Games.replay(g.type, g.moves, g);
+      const me = g.players.indexOf(this.id);
+      if (r.clock && r.clock.running === me && r.clock.left[me] - spent <= 0) {
+        this.gameMove(conv, msgId, { timeout: true });
+        throw new Error('Your time is up');
+      }
+    }
+    if (!this._applyGameMove(conv, msg, this.id, move, n, spent)) throw new Error('That move is not allowed');
+    this._sendMeta(conv, { type: 'game-move', id: msgId, m: move, n, ...(spent !== undefined ? { t: spent } : {}) });
   }
 
   // ------------------------------------------------------------------ scheduled messages

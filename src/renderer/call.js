@@ -10,7 +10,8 @@ const role = params.get('role'); // 'caller' or 'callee'
 let t = (k, v) => I18N.translate(params.get('lang') || 'en', k, v);
 
 const ICON = {
-  mic: '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  // The inner .lvl bar fills with your voice level while you speak.
+  mic: '<svg viewBox="0 0 24 24"><rect class="lvl" x="10" y="4" width="4" height="9" rx="2"/><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
   micOff: '<svg viewBox="0 0 24 24"><path d="M15 9.3V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.7 2.5M5 11a7 7 0 0 0 11.5 5.3M19 11a7 7 0 0 1-.6 2.8M12 18v3M3 3l18 18"/></svg>',
   cam: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></svg>',
   camOff: '<svg viewBox="0 0 24 24"><path d="M16 16v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1M10 5h4a2 2 0 0 1 2 2v3.3l5-3.3v10M3 3l18 18"/></svg>',
@@ -144,6 +145,28 @@ function watchLevel(entry) {
   } catch { /* audio analysis is optional */ }
 }
 
+// Your own microphone, shown on the mic button.
+let myMic = { analyser: null, data: null, track: null, shown: -1 };
+function watchMyMic() {
+  if (!micTrack || myMic.track === micTrack) return;
+  try {
+    audioCtx = audioCtx || new AudioContext();
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    audioCtx.createMediaStreamSource(new MediaStream([micTrack])).connect(analyser);
+    myMic = { analyser, data: new Uint8Array(analyser.fftSize), track: micTrack, shown: -1 };
+  } catch { /* the level display is optional */ }
+}
+
+function loudness(analyser, data) {
+  analyser.getByteTimeDomainData(data);
+  let sum = 0;
+  for (const v of data) sum += ((v - 128) / 128) ** 2;
+  return Math.sqrt(sum / data.length);
+}
+
+// About 12 times a second is smooth enough and keeps the graphics card idle;
+// the page is only touched when a value actually changes.
 function levelLoop() {
   for (const entry of peers.values()) {
     if (!entry.analyser) continue;
@@ -152,7 +175,14 @@ function levelLoop() {
     for (const v of entry.levelData) peak = Math.max(peak, Math.abs(v - 128));
     entry.tile.classList.toggle('speaking', peak > 14 && entry.state.mic !== false);
   }
-  if (!ended) requestAnimationFrame(levelLoop);
+  const live = micOn && micTrack && myMic.analyser && myMic.track === micTrack;
+  const level = live ? Math.round(Math.min(1, loudness(myMic.analyser, myMic.data) * 6) * 20) / 20 : 0;
+  if (level !== myMic.shown) {
+    myMic.shown = level;
+    $('btnMic').style.setProperty('--lvl', level);
+    $('btnMic').classList.toggle('talking', level >= 0.15);
+    $('self').classList.toggle('speaking', level >= 0.15);
+  }
 }
 
 // ------------------------------------------------------------------ connections
@@ -424,6 +454,7 @@ async function setMicrophone(deviceId) {
     if (micTrack) micTrack.stop();
     micTrack = s.getAudioTracks()[0];
     micTrack.enabled = micOn;
+    watchMyMic();
     await replaceForAll('audio', micTrack);
     renderControls();
   } catch {
@@ -534,7 +565,8 @@ async function init() {
     if (e.ctrlKey && e.key.toLowerCase() === 'm') toggleMic();
   });
   api.on(handle);
-  requestAnimationFrame(levelLoop);
+  watchMyMic();
+  const levelTimer = setInterval(() => (ended ? clearInterval(levelTimer) : levelLoop()), 80);
 
   if (role === 'caller') {
     // Only the caller hears about declines, so only the caller tracks who is still ringing.

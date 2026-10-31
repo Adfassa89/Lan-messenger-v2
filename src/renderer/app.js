@@ -358,7 +358,11 @@ function renderMe() {
 
 function renderNet() {
   const n = onlineCount();
-  $('#netInfo').innerHTML = `<span class="pulse"></span>${n === 0 ? t('Looking for people…') : esc(t('Online now: {n}', { n }))}`;
+  // The dot pulses only when the number changes: an endless pulse kept the
+  // graphics card redrawing all day.
+  const changed = S.onlineShown !== undefined && S.onlineShown !== n;
+  S.onlineShown = n;
+  $('#netInfo').innerHTML = `<span class="pulse${changed ? ' ping' : ''}"></span>${n === 0 ? t('Looking for people…') : esc(t('Online now: {n}', { n }))}`;
 }
 
 function renderUpdateBanner() {
@@ -885,12 +889,17 @@ function fileHtml(m, out) {
   const isImg = !f.folder && IMAGE_RE.test(f.name);
   const openLabel = f.folder ? t('Open folder') : t('Open');
 
-  if (out) {
-    if (prog && prog.upload && prog.done < prog.size) {
+  if (out && f.state === 'cancelled') {
+    err = `<div class="ferr">${esc(t('You stopped sending this'))}</div>`;
+  } else if (out) {
+    const sending = prog && prog.upload && prog.done < prog.size;
+    if (sending) {
       sub = t('Sending… {done} of {size}', { done: fmtSize(prog.done), size: fmtSize(f.size) });
       bar = `<div class="progress"><div style="width:${(prog.done / Math.max(1, f.size)) * 100}%"></div></div>`;
     }
-    btns = `<button class="fbtn ghost" data-act="open">${esc(openLabel)}</button><button class="fbtn ghost" data-act="folder">${esc(t('Show in folder'))}</button>`;
+    btns = `${sending ? `<button class="fbtn ghost" data-act="stop-send">${esc(t('Stop sending'))}</button>` : ''}<button class="fbtn ghost" data-act="open">${esc(openLabel)}</button><button class="fbtn ghost" data-act="folder">${esc(t('Show in folder'))}</button>`;
+  } else if (f.state === 'cancelled') {
+    err = `<div class="ferr">${esc(t('The sender stopped sending this'))}</div>`;
   } else if (f.state === 'downloading') {
     const p = prog || { done: 0, size: f.size, speed: 0 };
     sub = `${fmtSize(p.done)} / ${fmtSize(f.size)}${p.speed ? ` · ${fmtSize(p.speed)}/s` : ''}`;
@@ -944,6 +953,9 @@ async function onBubbleClick(e, m) {
   const act = btn.dataset.act;
   if (act === 'download') call(api.acceptFile(conv, m.id));
   else if (act === 'cancel') call(api.cancelFile(conv, m.id));
+  else if (act === 'stop-send') {
+    confirmModal(t('Stop sending?'), t('Transfers in progress stop, and nobody can download "{name}" any more.', { name: m.file.name }), t('Stop sending'), () => call(api.cancelSend(conv, m.id)));
+  }
   else if (act === 'open') {
     const err = await api.openFile(m.file.path);
     if (err) toast(err, 'error');
@@ -1907,7 +1919,8 @@ function handleEvent({ type, payload }) {
       break;
     }
     case 'file-progress':
-      S.progress.set(payload.msgId, payload);
+      if (payload.stopped) S.progress.delete(payload.msgId);
+      else S.progress.set(payload.msgId, payload);
       refreshMsgDom(payload.conv, payload.msgId);
       break;
     case 'typing':

@@ -1,0 +1,37 @@
+/* End-of-game screen, shared by every game window (see game-fx.js). */
+.endfx {
+  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center;
+  background: rgba(8, 10, 18, .55); animation: endfxFade .25s ease-out;
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+.endfx.lose { background: rgba(20, 8, 12, .6); }
+.endfx.leaving { animation: endfxOut .2s ease-in forwards; pointer-events: none; }
+.endfx-confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.endfx-card {
+  position: relative; z-index: 1; min-width: 280px; max-width: min(420px, calc(100vw - 32px)); padding: 26px 28px 22px;
+  border-radius: 18px; text-align: center; color: #fff;
+  background: linear-gradient(180deg, #2b2f3d, #1b1e28); box-shadow: 0 24px 70px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .08);
+  animation: endfxPop .45s cubic-bezier(.3, 1.4, .5, 1);
+}
+.endfx.win .endfx-card { background: linear-gradient(180deg, #2f7d3f, #1d4f2a); }
+.endfx.lose .endfx-card { background: linear-gradient(180deg, #4a2a30, #2a1a1e); animation: endfxPop .3s ease-out, endfxShake .45s .3s ease-in-out; }
+.endfx-icon { font: 56px/1 "Segoe UI Emoji", sans-serif; margin-bottom: 8px; animation: endfxBounce .7s .15s cubic-bezier(.3, 1.6, .5, 1) backwards; }
+.endfx-title { font-size: 26px; font-weight: 800; letter-spacing: .2px; }
+.endfx-detail { margin-top: 4px; font-size: 14px; opacity: .8; min-height: 1em; }
+.endfx-btns { display: flex; gap: 8px; justify-content: center; margin-top: 18px; }
+.endfx-btns button {
+  height: 38px; padding: 0 18px; border: 0; border-radius: 10px; cursor: pointer; font: 700 14px "Segoe UI", system-ui, sans-serif;
+  background: rgba(255, 255, 255, .14); color: #fff; transition: transform .1s, background .12s;
+}
+.endfx-btns button:hover { background: rgba(255, 255, 255, .22); }
+.endfx-btns button.primary { background: #fff; color: #1b1e28; }
+.endfx-btns button:active { transform: scale(.95); }
+@keyframes endfxFade { from { opacity: 0; } }
+@keyframes endfxOut { to { opacity: 0; } }
+@keyframes endfxPop { from { opacity: 0; transform: scale(.7) translateY(16px); } }
+@keyframes endfxBounce { from { transform: scale(0) rotate(-20deg); } }
+@keyframes endfxShake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+@media (prefers-reduced-motion: reduce) {
+  .endfx, .endfx *, .endfx-card { animation: none !important; }
+  .endfx-confetti { display: none; }
+}

@@ -14,6 +14,7 @@ Available in **English** and **Монгол**.
 | 🚨 **Urgent alerts** | A red pop-up with an alarm sound appears on top of everything on the other PCs (even when they are set to *Busy*) and stays until each person clicks **Acknowledge**. You see who confirmed and who hasn't. Made for blasting notices, safety warnings and breakdowns. |
 | 📞 **Voice and video calls** | Call a colleague or a whole group (up to about 6 people) from the chat header. Calls go directly PC-to-PC over the network, with no internet or server. Incoming calls pop up with a ringtone; you can mute, switch the camera on or off, and choose microphone, camera and speaker. Missed calls appear in the chat with a **Call back** button. |
 | ♟️ **Games in chats** | Play **Chess** (with a chess.com-style board), **Checkers**, **Tic-tac-toe**, **Connect Four** or **Tetris Battle** with a colleague in a private chat (＋ → Play a game). Turn-based moves are delivered like messages, so a game can run across shifts; each PC checks every move against the rules. |
+| ♟️ **Chess like chess.com** | Choose your side (White, Black or random) and a time control (bullet, blitz, rapid or no limit). Premoves, right-click marks and arrows, and you can look at your pieces' moves while waiting. Every game has sound effects and the same win / lose screen. |
 | 🧱 **Tetris Battle** | A live head-to-head match in the style of TETR.IO: both players get the same pieces, and clearing lines sends garbage rows to the opponent. Controls can be changed like in old Facebook Tetris Battle: rebind every key, pick the *Classic* or *Modern* preset, and adjust the sliding delay, sliding speed and soft-drop speed. |
 | 🖥️ **Screen sharing** | Show your screen (or one window) live to a colleague or a whole group. It goes directly PC-to-PC over the network. Viewers can only watch; they can't control your PC. |
 | ✏️ **Screenshot with drawing** | `Ctrl + Shift + S` (or **＋ → Screenshot with drawing**) takes a screenshot. Crop it, add arrows, boxes, highlights and text, then send. Pasted pictures can be drawn on too. |
@@ -32,7 +33,7 @@ Available in **English** and **Монгол**.
 | 📊 **Polls** | One-click voting, with single or multiple answers. |
 | ⏰ **Scheduled messages** | Write now, send automatically later (e.g. at 07:00 shift start). |
 | 🎤 **Voice messages** | Click the microphone, speak, click Send. |
-| 📁 **Files and whole folders** | Drag & drop files or folders of any size. Progress and speed are shown, and interrupted downloads resume. |
+| 📁 **Files and whole folders** | Drag & drop files or folders of any size. Progress and speed are shown, interrupted downloads resume, and either side can stop a transfer while it runs. |
 | 🖼️ **Profile photos** | Settings → Change photo. |
 | 📄 **Export chat** | Save a conversation as PDF or text for records. |
 | 🔒 **Encrypted** | All messages, files and screen sharing are encrypted between PCs. |

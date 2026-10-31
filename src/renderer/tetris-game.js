@@ -36,7 +36,6 @@ let lowestY = -1;
 let softAcc = 0;
 let lastStateSent = 0;
 let opp = null; // last state received from the opponent
-let audio = null;
 const held = new Set();
 const das = { dir: 0, timer: 0, arr: 0 };
 
@@ -164,7 +163,10 @@ function drawOpponent() {
   next.clearRect(0, 0, 80, 250);
   if (opp && opp.n) opp.n.slice(0, 3).forEach((type, i) => drawPiece(next, type, 40, 34 + i * 72, 15));
   $('oppMeter').style.height = `${Math.min(100, ((opp && opp.g) || 0) / VISIBLE * 100)}%`;
-  if (opp && opp.s) $('oppStats').innerHTML = statsHtml(opp.s);
+  if (opp && opp.s) {
+    const stats = statsHtml(opp.s);
+    if (stats !== drawOpponent.stats) $('oppStats').innerHTML = drawOpponent.stats = stats;
+  }
 }
 
 function statsHtml(s) {
@@ -206,25 +208,9 @@ function showAction(r) {
   actionTimer = setTimeout(() => { $('action').innerHTML = ''; }, 1600);
 }
 
-function beep(freq, len = 0.06, vol = 0.05) {
-  if (!info || !info.sound) return;
-  try {
-    audio = audio || new AudioContext();
-    const o = audio.createOscillator();
-    const g = audio.createGain();
-    o.frequency.value = freq;
-    g.gain.setValueAtTime(vol, audio.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + len);
-    o.connect(g).connect(audio.destination);
-    o.start();
-    o.stop(audio.currentTime + len);
-  } catch { /* no audio */ }
-}
-
 // ------------------------------------------------------------------ game flow
 function onLocked(r) {
-  if (r.lines) beep(520 + r.lines * 120, 0.12, 0.06);
-  else beep(180, 0.04, 0.03);
+  Sfx.play(r.lines ? 'clear' : 'lock', r.lines);
   if (r.sent > 0) send({ kind: 'tt-attack', lines: r.sent });
   showAction(r);
   sendState(true);
@@ -251,7 +237,6 @@ function afterShift(ok) {
 }
 
 function hardDrop() {
-  beep(240, 0.05, 0.05);
   onLocked(game.hardDrop());
 }
 
@@ -269,29 +254,31 @@ function start(seed) {
     n--;
     if (n > 0) {
       setOverlay('overlay', String(n), 'count');
-      beep(440, 0.08);
+      Sfx.play('countdown');
     } else {
       clearInterval(tick);
       setOverlay('overlay', '');
-      beep(880, 0.15);
+      Sfx.play('go');
       phase = 'playing';
       startedAt = performance.now();
       game.spawn();
       resetLock();
     }
   }, 1000);
-  beep(440, 0.08);
+  Sfx.play('countdown');
 }
 
 function finish(won, why) {
   if (phase === 'over') return;
   phase = 'over';
   held.clear();
-  $('result').classList.remove('hidden');
-  $('resultTitle').textContent = won ? t('VICTORY') : t('DEFEAT');
-  $('resultTitle').className = `result-title ${won ? 'win' : 'lose'}`;
-  $('resultSub').textContent = why;
-  beep(won ? 660 : 160, 0.4, 0.07);
+  // The same end screen as every other game.
+  EndFx.show({
+    outcome: won ? 'win' : 'lose',
+    title: won ? t('You won!') : t('You lost'),
+    detail: why,
+    buttons: [{ label: t('Rematch'), primary: true, action: () => $('btnRematch').onclick() }, { label: t('Close'), action: () => window.close() }],
+  });
 }
 
 function lose() {
@@ -355,14 +342,18 @@ function frame(now) {
     sendState();
     const s = Math.floor(secs);
     $('timer').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-    $('stats').innerHTML = statsHtml(myStats());
+    const stats = statsHtml(myStats());
+    if (stats !== frame.stats) $('stats').innerHTML = frame.stats = stats;
   }
   if (game) {
     drawMine();
     drawSide();
   }
   drawOpponent();
-  requestAnimationFrame(frame);
+  // Full speed only while playing; waiting or after the match a few redraws
+  // a second are plenty and keep the graphics card idle.
+  if (phase === 'playing' || phase === 'countdown') requestAnimationFrame(frame);
+  else setTimeout(() => requestAnimationFrame(frame), 250);
 }
 
 // ------------------------------------------------------------------ keyboard (keys chosen in Controls)
@@ -375,7 +366,9 @@ document.addEventListener('keydown', (e) => {
   held.add(action);
   if (action === 'left' || action === 'right') {
     const dir = action === 'left' ? -1 : 1;
-    afterShift(game.move(dir));
+    const ok = game.move(dir);
+    if (ok) Sfx.play('shift');
+    afterShift(ok);
     das.dir = dir;
     das.timer = H_().das;
     das.arr = 0;
@@ -384,7 +377,9 @@ document.addEventListener('keydown', (e) => {
   } else if (action === 'hard') {
     hardDrop();
   } else if (action === 'cw' || action === 'ccw' || action === '180') {
-    afterShift(game.rotate(action === 'cw' ? 1 : action === 'ccw' ? -1 : 2));
+    const ok = game.rotate(action === 'cw' ? 1 : action === 'ccw' ? -1 : 2);
+    if (ok) Sfx.play('rotate');
+    afterShift(ok);
   } else if (action === 'hold') {
     if (game.holdPiece()) {
       resetLock();
@@ -433,7 +428,7 @@ api.on(({ type, payload }) => {
     case 'tt-attack':
       if (phase === 'playing' || phase === 'countdown') {
         game.receive(Math.max(0, Math.min(20, Number(d.lines) || 0)));
-        beep(110, 0.12, 0.06);
+        Sfx.play('garbage');
       }
       break;
     case 'tt-ko':

@@ -69,7 +69,38 @@ function showWindow() {
   if (!win) return createWindow();
   if (win.isMinimized()) win.restore();
   win.show();
+  if (process.platform === 'win32') {
+    // Windows only lets an app come to the front in some cases (otherwise the
+    // taskbar button just flashes). Briefly topmost brings it there.
+    win.setAlwaysOnTop(true);
+    win.focus();
+    win.setAlwaysOnTop(false);
+  }
   win.focus();
+}
+
+// Shows the window and then tells the page what to open, waiting for the
+// page to load first if the window had to be created.
+function openInWindow(type, payload) {
+  const fresh = !win;
+  showWindow();
+  const go = () => send(type, payload);
+  if (fresh || win.webContents.isLoading()) win.webContents.once('did-finish-load', () => setTimeout(go, 400));
+  else go();
+}
+
+// Windows forgets a notification's click handler once the object is garbage
+// collected, so clicks (also later from the Action Center) did nothing.
+// Recent notifications are kept alive for that reason.
+const recentNotifications = [];
+function showNotification(options, onClick) {
+  if (!Notification.isSupported()) return null;
+  const n = new Notification({ icon: appIcon(), ...options });
+  n.on('click', () => onClick && onClick());
+  n.show();
+  recentNotifications.push(n);
+  if (recentNotifications.length > 50) recentNotifications.shift();
+  return n;
 }
 
 function isDark() {
@@ -222,12 +253,7 @@ function notify(conv, msg) {
   let body = preview(msg);
   if (msg.kind === 'file') body = msg.file.voice ? `🎤 ${t('Voice message')}` : `${msg.file.folder ? '📁' : '📎'} ${msg.file.name}`;
   if (msg.kind === 'game') body = `🎮 ${t('New game: {game}', { game: t(Games.RULES[msg.game.type].title) })}`;
-  const n = new Notification({ title, body: body.slice(0, 200), icon: appIcon(), silent: true });
-  n.on('click', () => {
-    showWindow();
-    send('open-conv', conv);
-  });
-  n.show();
+  showNotification({ title, body: body.slice(0, 200), silent: true }, () => openInWindow('open-conv', conv));
   if (messenger.settings.sound) send('play-sound');
 }
 
@@ -398,14 +424,11 @@ function endRing(sid, { missed = false, declined = false, log = true } = {}) {
   if (ring.win && !ring.win.isDestroyed()) ring.win.close();
   if (log) messenger.logCall(ring.conv, { video: ring.video, missed, declined, peerId: ring.from });
   if (missed && Notification.isSupported()) {
-    const n = new Notification({
+    showNotification({
       title: t('Missed call'),
       body: `${messenger.peers.get(ring.from)?.name || t('Someone')}${ring.conv.startsWith('g:') ? ` · ${convTitle(ring.conv)}` : ''}`,
-      icon: appIcon(),
       silent: true,
-    });
-    n.on('click', () => { showWindow(); send('open-conv', ring.conv); });
-    n.show();
+    }, () => openInWindow('open-conv', ring.conv));
   }
   return ring;
 }
@@ -457,7 +480,7 @@ function tetrisInfo(conv, id) {
     };
   }
   let over = false;
-  try { over = Games.replay('tetris', msg.game.moves).status.over; } catch { /* ignore */ }
+  try { over = Games.replay('tetris', msg.game.moves, msg.game).status.over; } catch { /* ignore */ }
   return {
     me: messenger.id, players: msg.game.players, people, over, language: messenger.settings.language,
     sound: messenger.settings.sound,
@@ -531,13 +554,10 @@ function applyLoginItem() {
 function trayHint() {
   if (messenger.settings.trayHintShown || !Notification.isSupported()) return;
   messenger.setSettings({ trayHintShown: true });
-  const n = new Notification({
+  showNotification({
     title: t('LAN Messenger 2 is still running'),
     body: t('It keeps receiving messages in the taskbar corner. To close it completely, right-click its icon there and choose Exit.'),
-    icon: appIcon(),
-  });
-  n.on('click', showWindow);
-  n.show();
+  }, showWindow);
 }
 
 function isImage(p) {
@@ -681,6 +701,7 @@ function registerIpc() {
   });
   h('accept-file', (conv, id) => messenger.acceptFile(conv, id));
   h('cancel-file', (conv, id) => messenger.cancelFile(conv, id));
+  h('cancel-send', (conv, id) => messenger.cancelSend(conv, id));
   h('open-file', async (p) => {
     if (!p || !fs.existsSync(p)) return t('File not found. It may have been moved or deleted.');
     const err = await shell.openPath(p);
@@ -771,7 +792,7 @@ function registerIpc() {
   h('rtc-send', (peerId, sid, data) => messenger.sendRtc(peerId, sid, data));
   h('open-viewer', (peerId, sid, name) => openViewer(peerId, sid, name));
   h('call-start', (conv, video) => startCall(conv, video));
-  h('create-game', (conv, type) => messenger.createGame(conv, type));
+  h('create-game', (conv, type, options) => messenger.createGame(conv, type, options || {}));
   h('game-move', (conv, id, move) => messenger.gameMove(conv, id, move));
   h('open-tetris', (conv, id) => openTetris(conv, id));
   h('tetris-info', (conv, id) => tetrisInfo(conv, id));
@@ -841,15 +862,12 @@ function wireEvents() {
     if (!messenger.settings.notifications || messenger.config.status === 'busy' || !Notification.isSupported()) return;
     const who = messenger.peers.get(conv)?.name || t('Someone');
     let over = false;
-    try { over = Games.replay(msg.game.type, msg.game.moves).status.over; } catch { /* ignore */ }
-    const n = new Notification({
+    try { over = Games.replay(msg.game.type, msg.game.moves, msg.game).status.over; } catch { /* ignore */ }
+    showNotification({
       title: `${t(Games.RULES[msg.game.type].title)} – ${who}`,
       body: over ? t('The game is over') : t('Your turn'),
-      icon: appIcon(),
       silent: true,
-    });
-    n.on('click', () => { showWindow(); send('open-game', { conv, id: msg.id }); });
-    n.show();
+    }, () => openInWindow('open-game', { conv, id: msg.id }));
     if (messenger.settings.sound) send('play-sound');
   });
   messenger.on('me', (me) => { send('me', me); updateTray(); });

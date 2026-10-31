@@ -3,8 +3,12 @@
 // every move it receives, and by the interface to show the boards.
 //
 // A game is a list of entries { p, m }: p is the player (0 or 1) and m is a
-// move, or one of { resign: true } / { draw: 'offer' | 'accept' | 'decline' }.
-// Player 0 always moves first.
+// move, or one of { resign: true } / { draw: 'offer' | 'accept' | 'decline' }
+// / { timeout: true }. Player 0 always moves first.
+//
+// Chess may have a clock, { base, inc } in milliseconds. Each move entry then
+// carries t, the time the mover spent on it (measured on the mover's PC).
+// Each player's first move is free; the increment is added after every move.
 (function init(root) {
   // ------------------------------------------------------------------ chess
   const FILES = 'abcdefgh';
@@ -455,10 +459,28 @@
 
   const RULES = { chess, checkers, ttt, c4, tetris };
 
-  // Replays a game. Throws if any entry breaks the rules.
-  function replay(type, entries) {
+  // Accepts a clock from the network only if it is sensible.
+  function cleanClock(c) {
+    if (!c || typeof c !== 'object') return null;
+    const base = Math.round(Number(c.base));
+    const inc = Math.round(Number(c.inc) || 0);
+    if (!(base >= 15000 && base <= 3 * 3600000) || !(inc >= 0 && inc <= 60000)) return null;
+    return { base, inc };
+  }
+
+  // Can this side still give checkmate? (Losing on time against a lone king is a draw.)
+  function canMate(board, white) {
+    return board.some((x) => x && x.toLowerCase() !== 'k' && (x === x.toUpperCase()) === white);
+  }
+
+  // Replays a game. Throws if any entry breaks the rules. `options` is the
+  // game record's settings (its clock).
+  function replay(type, entries, options) {
     const rules = RULES[type];
     if (!rules) throw new Error('Unknown game');
+    const clock = type === 'chess' && options ? cleanClock(options.clock) : null;
+    const left = clock ? [clock.base, clock.base] : null;
+    const moved = [0, 0];
     let state = rules.init();
     let status = rules.status(state);
     let drawOffer = null;
@@ -468,7 +490,14 @@
       if (p !== 0 && p !== 1) throw new Error('Bad player');
       if (ended || status.over) throw new Error('Game is over');
       const m = e.m || {};
-      if (m.resign) {
+      if (m.timeout) {
+        if (!clock) throw new Error('This game has no clock');
+        const loser = status.turn;
+        ended = canMate(state.board, loser === 1)
+          ? { over: true, winner: 1 - loser, reason: 'timeout' }
+          : { over: true, winner: null, reason: 'timeoutDraw' };
+        left[loser] = 0;
+      } else if (m.resign) {
         ended = { over: true, winner: 1 - p, reason: 'resign' };
       } else if (m.draw === 'offer') {
         if (drawOffer !== null) throw new Error('Draw already offered');
@@ -483,17 +512,25 @@
         state = rules.apply(state, m, p);
         status = rules.status(state);
         drawOffer = null;
+        if (clock) {
+          if (moved[p] > 0) left[p] = Math.max(0, left[p] - Math.max(0, Math.min(Number(e.t) || 0, 86400000)));
+          left[p] += clock.inc;
+          moved[p]++;
+        }
       }
     }
-    return { state, status: ended || status, drawOffer };
+    const final = ended || status;
+    // Whose clock runs now: nobody's before their first move or after the end.
+    const running = clock && !final.over && moved[final.turn] > 0 ? final.turn : null;
+    return { state, status: final, drawOffer, clock: clock ? { ...clock, left, running } : null };
   }
 
   // Checks that `entry` may be added to the game; returns the new result.
-  function play(type, entries, entry) {
-    return replay(type, (entries || []).concat(entry));
+  function play(type, entries, entry, options) {
+    return replay(type, (entries || []).concat(entry), options);
   }
 
-  const Games = { RULES, replay, play, TYPES: Object.keys(RULES) };
+  const Games = { RULES, replay, play, cleanClock, TYPES: Object.keys(RULES) };
   if (typeof module !== 'undefined' && module.exports) module.exports = Games;
   else root.Games = Games;
 }(typeof window !== 'undefined' ? window : globalThis));

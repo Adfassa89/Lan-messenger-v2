@@ -3,9 +3,15 @@ body {
   display: flex; flex-direction: column; box-sizing: border-box; padding: 24px 26px 22px;
   background: linear-gradient(160deg, #dc2626, #991b1b); color: #fff;
   font: 14px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; user-select: none;
-  -webkit-app-region: drag; border: 3px solid #fecaca; animation: pulse 1.2s ease-in-out infinite;
+  -webkit-app-region: drag; border: 3px solid #7f1d1d;
 }
-@keyframes pulse { 50% { border-color: #7f1d1d; } }
+/* Flashing light border, faded in and out by the graphics card without
+   repainting the window (the alert may stay open for hours). */
+body::after {
+  content: ""; position: fixed; inset: 0; border: 3px solid #fecaca; pointer-events: none;
+  animation: flash 1.2s ease-in-out infinite; will-change: opacity;
+}
+@keyframes flash { 50% { opacity: 0; } }
 .head { display: flex; align-items: center; gap: 14px; }
 .siren { font-size: 44px; line-height: 1; animation: wobble 1s ease-in-out infinite; font-family: "Segoe UI Emoji", sans-serif; }
 @keyframes wobble { 25% { transform: rotate(-12deg); } 75% { transform: rotate(12deg); } }

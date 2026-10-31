@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { makePair, waitFor } = require('./helpers');
 const { signMeta, verifyMeta, compareVersions, sha256FileSync } = require('../src/core/update');
+const Games = require('../src/shared/games');
 
 // Starts two connected PCs, runs fn, always shuts them down.
 async function withPair(fn) {
@@ -273,3 +274,65 @@ test('a PC whose firewall blocks incoming connections can still chat, play and s
     await bob.stop();
   }
 });
+
+test('a transfer can be stopped by the sender or the receiver while it runs', () => withPair(async (alice, bob) => {
+  const big = path.join(alice.dir, 'survey-scan.bin');
+  fs.writeFileSync(big, Buffer.alloc(0));
+  fs.truncateSync(big, 400 * 1024 * 1024);
+  const progress = [];
+  alice.on('file-progress', (p) => progress.push(p));
+
+  // The receiver cancels: the sender's progress is cleared, the file can be downloaded again.
+  bob.setSettings({ autoAccept: false });
+  let [offer] = alice.sendFiles(bob.id, [big]);
+  await waitFor(() => msgAt(bob, alice.id, offer.id), 5000, 'offer');
+  bob.acceptFile(alice.id, offer.id);
+  await waitFor(() => progress.some((p) => p.msgId === offer.id && p.done > 0), 10000, 'upload started');
+  bob.cancelFile(alice.id, offer.id);
+  await waitFor(() => msgAt(bob, alice.id, offer.id).file.state === 'offered', 5000, 'receiver cancelled');
+  await waitFor(() => progress.some((p) => p.msgId === offer.id && p.stopped), 5000, 'sender told it stopped');
+
+  // The sender stops sending: the receiver's download ends and cannot be retried.
+  [offer] = alice.sendFiles(bob.id, [big]);
+  await waitFor(() => msgAt(bob, alice.id, offer.id), 5000, 'offer 2');
+  bob.acceptFile(alice.id, offer.id);
+  await waitFor(() => progress.some((p) => p.msgId === offer.id && p.done > 0), 10000, 'upload 2 started');
+  alice.cancelSend(bob.id, offer.id);
+  await waitFor(() => msgAt(bob, alice.id, offer.id).file.state === 'cancelled', 8000, 'receiver sees it was stopped');
+  assert.strictEqual(msgAt(alice, bob.id, offer.id).file.state, 'cancelled');
+  await bob.acceptFile(alice.id, offer.id);
+  assert.strictEqual(msgAt(bob, alice.id, offer.id).file.state, 'cancelled');
+  assert.ok(!fs.existsSync(path.join(bob.settings.downloadDir, 'survey-scan.bin')));
+}));
+
+test('timed chess: the inviter picks a side, clocks count down and running out of time loses', () => withPair(async (alice, bob) => {
+  const game = alice.createGame(bob.id, 'chess', { side: 'first', clock: { base: 300000, inc: 3000 } });
+  assert.deepStrictEqual(game.game.players, [alice.id, bob.id]); // Alice plays white
+  await waitFor(() => msgAt(bob, alice.id, game.id), 5000, 'invite');
+  assert.deepStrictEqual(msgAt(bob, alice.id, game.id).game.clock, { base: 300000, inc: 3000 });
+
+  // First moves are free.
+  alice.gameMove(bob.id, game.id, { from: 'e2', to: 'e4' });
+  await waitFor(() => msgAt(bob, alice.id, game.id).game.moves.length === 1, 5000, 'e4');
+  bob.gameMove(alice.id, game.id, { from: 'e7', to: 'e5' });
+  await waitFor(() => msgAt(alice, bob.id, game.id).game.moves.length === 2, 5000, 'e5');
+  // Alice thinks for 20 seconds on her second move.
+  msgAt(alice, bob.id, game.id).game.at -= 20000;
+  alice.gameMove(bob.id, game.id, { from: 'g1', to: 'f3' });
+  await waitFor(() => msgAt(bob, alice.id, game.id).game.moves.length === 3, 5000, 'Nf3');
+  for (const [m, conv] of [[alice, bob.id], [bob, alice.id]]) {
+    const g = msgAt(m, conv, game.id).game;
+    const r = Games.replay('chess', g.moves, g);
+    assert.ok(Math.abs(r.clock.left[0] - (300000 + 3000 + 3000 - 20000)) < 1500, `white clock ${r.clock.left[0]}`);
+    assert.strictEqual(r.clock.running, 1);
+  }
+
+  // Bob's clock runs out: his own PC declares it at once, and both agree.
+  msgAt(bob, alice.id, game.id).game.at -= 310000;
+  await waitFor(() => {
+    const g = msgAt(alice, bob.id, game.id).game;
+    const r = Games.replay('chess', g.moves, g);
+    return r.status.over && r.status.reason === 'timeout' && r.status.winner === 0;
+  }, 5000, 'white wins on time');
+
+}));

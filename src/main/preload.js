@@ -20,6 +20,7 @@ const CHANNELS = {
   readImage: 'read-image',
   acceptFile: 'accept-file',
   cancelFile: 'cancel-file',
+  cancelSend: 'cancel-send',
   openFile: 'open-file',
   showInFolder: 'show-in-folder',
   openExternal: 'open-external',

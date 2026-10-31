@@ -132,6 +132,9 @@ class FileTransfers {
       clearTimeout(idle);
       this.uploads.delete(link);
       if (link.stream) link.stream.destroy();
+      // Stopped half-way (either side cancelled): clear the sender's progress bar.
+      const cur = link.sending;
+      if (cur && !cur.finished) this.m.emit('file-progress', { conv: cur.conv, msgId: cur.msgId, peerId: hello.id, upload: true, stopped: true });
     });
     const error = (msg) => link.sendJson({ type: 'file-error', error: msg });
 
@@ -164,12 +167,16 @@ class FileTransfers {
       if (actual !== size) return error('File was changed on the sender PC');
       const offset = Math.max(0, Math.min(Number(req.offset) || 0, size));
       link.sendJson({ type: 'file-meta', size, offset });
+      link.tid = req.tid;
+      const cur = { conv: offer.conv, msgId: offer.msgId, finished: false };
+      link.sending = cur;
 
       let last = 0;
       this._stream(link, fs.createReadStream(filePath, { start: offset, highWaterMark: CHUNK }), offset, (sent, force) => {
         const now = Date.now();
         if (!force && now - last < PROGRESS_INTERVAL) return;
         last = now;
+        if (base + sent >= offer.size) cur.finished = true;
         this.m.emit('file-progress', {
           conv: offer.conv, msgId: offer.msgId, peerId: hello.id, upload: true, done: base + sent, size: offer.size,
         });
@@ -227,7 +234,7 @@ class FileTransfers {
     const msg = this.m.store.getMessage(conv, msgId);
     if (!msg || msg.kind !== 'file' || msg.from === this.m.id) return;
     const f = msg.file;
-    if (f.state === 'done' || this.downloads.has(f.tid)) return;
+    if (f.state === 'done' || f.state === 'cancelled' || this.downloads.has(f.tid)) return;
     const peer = this.m.peers.get(msg.from);
     if (!peer || !peer.online || !peer.host) {
       return this._fail(conv, msgId, 'Sender is offline. Try again when they are online.');
@@ -284,7 +291,7 @@ class FileTransfers {
     } catch (err) {
       if (job.cancelled) {
         if (!f.folder) for (const p of job.parts) fs.rmSync(p, { force: true });
-        this._update(conv, msgId, { state: 'offered', error: null });
+        this._update(conv, msgId, { state: job.cancelled === 'sender' ? 'cancelled' : 'offered', error: null });
       } else {
         const text = /ECONNREFUSED|ETIMEDOUT|timeout/i.test(err.message) ? `Could not reach sender (${err.message})` : err.message;
         this._fail(conv, msgId, text);
@@ -329,11 +336,17 @@ class FileTransfers {
     return root;
   }
 
-  cancel(tid) {
+  // reason 'sender': the sender withdrew the file, so it cannot be retried.
+  cancel(tid, reason = 'me') {
     const job = this.downloads.get(tid);
     if (!job) return;
-    job.cancelled = true;
+    job.cancelled = reason;
     if (job.link) job.link.close();
+  }
+
+  // Sender side: ends every transfer of this file that is running now.
+  stopUploads(tid) {
+    for (const link of this.uploads) if (link.tid === tid) link.close();
   }
 
   // Downloads another PC's app update package to `dest`.

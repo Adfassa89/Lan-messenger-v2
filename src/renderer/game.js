@@ -9,7 +9,7 @@ const Game = (() => {
   const TITLES = { chess: 'Chess', checkers: 'Checkers', ttt: 'Tic-tac-toe', c4: 'Connect Four', tetris: 'Tetris Battle' };
   const ICONS = { chess: '♞', checkers: '⛀', ttt: '#', c4: '●', tetris: '▦' };
   const ABOUT = {
-    chess: 'Classic chess, colors drawn at random',
+    chess: 'Pick your side and a time control, like on chess.com',
     checkers: 'Captures are compulsory, kings move both ways',
     ttt: 'Three in a row wins',
     c4: 'Four in a row wins',
@@ -17,9 +17,45 @@ const Game = (() => {
   };
   let open = null; // { conv, id, back, selected }
 
+  // Game preferences, kept per PC: last time control and side chosen,
+  // premoves and game sounds.
+  const PREFS_KEY = 'lanmsg.games.v1';
+  const prefs = { clock: 'none', side: 'random', premoves: true, sounds: true };
+  try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch { /* defaults */ }
+  const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* not saved */ } };
+
+  // Time controls like chess.com's: minutes + increment seconds.
+  const CLOCKS = [
+    ['Bullet', ['1+0', '1+1', '2+1']],
+    ['Blitz', ['3+0', '3+2', '5+0']],
+    ['Rapid', ['10+0', '15+10', '30+0']],
+  ];
+  const clockFromKey = (k) => {
+    const m = /^(\d+)\+(\d+)$/.exec(k || '');
+    return m ? { base: Number(m[1]) * 60000, inc: Number(m[2]) * 1000 } : null;
+  };
+  const clockLabel = (c) => {
+    if (!c) return t('No time limit');
+    return c.inc ? `${c.base / 60000} | ${c.inc / 1000}` : t('{n} min', { n: c.base / 60000 });
+  };
+  function fmtClock(ms) {
+    const v = Math.max(0, ms);
+    const s = Math.floor(v / 1000);
+    const two = (n) => String(n).padStart(2, '0');
+    if (v >= 3600000) return `${Math.floor(s / 3600)}:${two(Math.floor(s / 60) % 60)}:${two(s % 60)}`;
+    if (v >= 20000) return `${Math.floor(s / 60)}:${two(s % 60)}`;
+    return `${Math.floor(s / 60)}:${two(s % 60)}.${Math.floor((v % 1000) / 100)}`;
+  }
+  // Time left on a player's clock right now.
+  function clockLeft(msg, r, i) {
+    if (!r.clock) return 0;
+    const running = r.clock.running === i ? Date.now() - (msg.game.at || msg.ts) : 0;
+    return Math.max(0, r.clock.left[i] - running);
+  }
+
   function result(msg) {
     try {
-      return Games.replay(msg.game.type, msg.game.moves);
+      return Games.replay(msg.game.type, msg.game.moves, msg.game);
     } catch {
       return null;
     }
@@ -49,16 +85,21 @@ const Game = (() => {
     return i === 0 ? t('Red') : t('Yellow');
   }
 
+  function reasonText(st) {
+    return {
+      checkmate: t('Checkmate'), stalemate: t('Stalemate'), insufficient: t('Not enough pieces to win'),
+      fifty: t('50-move rule'), resign: t('Resigned'), agreed: t('Draw agreed'), line: '', full: t('Board full'),
+      blocked: t('No moves left'), quiet: t('40 moves without a capture'), ko: 'K.O.',
+      timeout: t('Time out'), timeoutDraw: t('Time out against a lone king'),
+    }[st.reason] || '';
+  }
+
   function statusText(msg, r) {
     if (!r) return t('This game could not be loaded');
     const me = myIndex(msg);
     const st = r.status;
     if (st.over) {
-      const why = {
-        checkmate: t('Checkmate'), stalemate: t('Stalemate'), insufficient: t('Not enough pieces to win'),
-        fifty: t('50-move rule'), resign: t('Resigned'), agreed: t('Draw agreed'), line: '', full: t('Board full'),
-        blocked: t('No moves left'), quiet: t('40 moves without a capture'), ko: 'K.O.',
-      }[st.reason] || '';
+      const why = reasonText(st);
       let head;
       if (st.winner === null) head = t('Draw');
       else if (st.winner === me) head = t('You won! 🎉');
@@ -75,7 +116,7 @@ const Game = (() => {
   }
 
   // ------------------------------------------------------------------ boards
-  function chessBoard(msg, r, { interactive, selected, targets } = {}) {
+  function chessBoard(msg, r, { interactive, selected, targets, marks, premove } = {}) {
     const st = r.state;
     const flip = myIndex(msg) === 1;
     const kingInCheck = r.status.check || r.status.reason === 'checkmate'
@@ -91,6 +132,8 @@ const Game = (() => {
         if (s === selected) cls.push('sel');
         if (targets && targets.has(s)) cls.push(st.board[s] ? 'cap' : 'dot');
         if (s === kingInCheck) cls.push('check');
+        if (premove && (premove.from === s || premove.to === s)) cls.push('pre');
+        if (marks && marks.sq.has(s)) cls.push('mark');
         // Coordinates sit inside the edge squares, like on chess.com.
         const coords = `${col === 0 ? `<i class="rk">${rank + 1}</i>` : ''}${row === 7 ? `<i class="fl">${'abcdefgh'[file]}</i>` : ''}`;
         html += `<div class="${cls.join(' ')}" ${interactive ? `data-sq="${s}"` : ''}>${pieceHtml(st.board[s])}${coords}</div>`;
@@ -157,7 +200,7 @@ const Game = (() => {
     const myTurn = r && !r.status.over && r.status.turn === me;
     const players = [0, 1].map((i) => `${esc(sideName(msg, i))} <small>(${esc(colorName(msg.game.type, i))})</small>`).join(` ${esc(t('vs'))} `);
     return `<div class="game-card">
-      <div class="gc-head"><span class="gc-icon">${ICONS[msg.game.type]}</span><div><b>${esc(t(TITLES[msg.game.type]))}</b><div class="gc-players">${players}</div></div></div>
+      <div class="gc-head"><span class="gc-icon">${ICONS[msg.game.type]}</span><div><b>${esc(t(TITLES[msg.game.type]))}</b>${msg.game.clock ? ` <span class="gc-clock">⏱ ${esc(clockLabel(msg.game.clock))}</span>` : ''}<div class="gc-players">${players}</div></div></div>
       ${r && msg.game.type !== 'tetris' ? `<div class="gc-preview">${boardHtml(msg, r)}</div>` : ''}
       ${msg.game.type === 'tetris' ? '<div class="gc-tetris"><i class="t1"></i><i class="t2"></i><i class="t3"></i><i class="t4"></i></div>' : ''}
       <div class="gc-status${myTurn ? ' turn' : ''}">${esc(statusText(msg, r))}</div>
@@ -174,7 +217,9 @@ const Game = (() => {
     }
     close();
     const back = el('div', 'modal-back game-back');
-    back.addEventListener('mousedown', (e) => { if (e.target === back) close(); });
+    // Decided on pointerdown: a click on the board can redraw it, and the
+    // mousedown that follows would then look like a click on the backdrop.
+    back.addEventListener('pointerdown', (e) => { if (e.target === back) close(); });
     $('#modalRoot').append(back);
     open = { conv, id, back, selected: null };
     document.addEventListener('keydown', onKey, true);
@@ -193,6 +238,8 @@ const Game = (() => {
 
   function close() {
     if (!open) return;
+    clearInterval(open.ticker);
+    EndFx.close();
     leave(open.back);
     open = null;
     document.removeEventListener('keydown', onKey, true);
@@ -231,11 +278,18 @@ const Game = (() => {
     const adv = i === 0 ? mat.score : -mat.score;
     const moving = !r.status.over && r.status.turn === i;
     const peer = S.peers.get(id);
+    let clock;
+    if (r.clock) {
+      const left = clockLeft(msg, r, i);
+      clock = `<div class="cc-clock timed${r.clock.running === i ? ' on' : ''}${left < 20000 ? ' low' : ''}" data-clock="${i}">${pieceHtml(i === 0 ? 'K' : 'k')}<span>${fmtClock(left)}</span></div>`;
+    } else {
+      clock = `<div class="cc-clock${moving ? ' on' : ''}">${pieceHtml(i === 0 ? 'K' : 'k')}<span>${esc(moving ? (i === me ? t('Your turn') : t('To move')) : (i === 0 ? t('White') : t('Black')))}</span></div>`;
+    }
     return `<div class="cc-player">
       ${avatarHtml('direct', id, id === S.me.id ? S.me.name : (peer ? peer.name : ''), null, 'cc-avatar')}
       <div class="cc-who"><div class="cc-name">${esc(id === S.me.id ? S.me.name : peerName(id))}${i === me ? ` <span class="cc-you">(${esc(t('You'))})</span>` : ''}</div>
         <div class="cc-captured">${caps.map((p) => pieceHtml(p)).join('')}${adv > 0 ? `<span class="cc-adv">+${adv}</span>` : ''}</div></div>
-      <div class="cc-clock${moving ? ' on' : ''}">${pieceHtml(i === 0 ? 'K' : 'k')}<span>${esc(moving ? (i === me ? t('Your turn') : t('To move')) : (i === 0 ? t('White') : t('Black')))}</span></div>
+      ${clock}
     </div>`;
   }
 
@@ -261,12 +315,25 @@ const Game = (() => {
     const offerFromOther = !over && r.drawOffer === 1 - me;
     const opp = 1 - (me < 0 ? 0 : me);
     const self = me < 0 ? 0 : me;
+    const C = Games.RULES.chess;
+    // A queued premove plays as soon as it is our turn, if it is still legal.
+    if (open.premove && (myTurn || over)) {
+      const pm = open.premove;
+      open.premove = null;
+      const legal = !over && C.legalMoves(r.state).find((mv) => mv.from === pm.from && mv.to === pm.to);
+      if (legal) setTimeout(() => move({ from: C.squareName(pm.from), to: C.squareName(pm.to), ...(legal.promo ? { promo: 'q' } : {}) }), 50);
+    }
+    // Right-click marks and arrows are cleared when the position changes.
+    if (open.seen !== msg.game.moves.length) {
+      open.seen = msg.game.moves.length;
+      open.marks = { sq: new Set(), arrows: [] };
+    }
     open.back.innerHTML = `<div class="modal game-modal chesscom${open.drawn ? ' still' : ''}">
-      <div class="modal-head"><h2>${esc(t('Chess'))}</h2><button class="icon-btn" data-close title="${esc(t('Close'))}">✕</button></div>
+      <div class="modal-head"><h2>${esc(t('Chess'))}</h2>${settingsHtml(true)}<button class="icon-btn" data-close title="${esc(t('Close'))}">✕</button></div>
       <div class="cc-body">
         <div class="cc-left">
           ${playerBar(msg, r, opp)}
-          <div class="game-board-wrap">${chessBoard(msg, r, { interactive: myTurn })}
+          <div class="game-board-wrap">${chessBoard(msg, r, { interactive: me >= 0 && !over, marks: open.marks, premove: open.premove })}${arrowsSvg(me === 1, open.marks)}
             ${open.promo ? `<div class="promo">${'qnrb'.split('').map((p) => `<button data-promo="${p}">${pieceHtml(me === 0 ? p.toUpperCase() : p)}</button>`).join('')}</div>` : ''}
           </div>
           ${playerBar(msg, r, self)}
@@ -287,25 +354,95 @@ const Game = (() => {
     modal.addEventListener('click', (e) => onClick(e, msg, r));
     const list = modal.querySelector('.cc-moves');
     list.scrollTop = list.scrollHeight;
-    if (myTurn && !open.promo) bindChessBoard(modal.querySelector('.board.chess'), msg, r);
-    if (open.selected !== null) showTargets(modal, r, open.selected);
+    // The running clock ticks without redrawing the whole window.
+    clearInterval(open.ticker);
+    if (r.clock && r.clock.running !== null) {
+      const i = r.clock.running;
+      const box = modal.querySelector(`.cc-clock[data-clock="${i}"]`);
+      open.ticker = setInterval(() => {
+        const left = clockLeft(msg, r, i);
+        box.lastChild.textContent = fmtClock(left);
+        box.classList.toggle('low', left < 20000);
+        if (i === me && left < 10000 && left > 0 && open.warned !== msg.id) {
+          open.warned = msg.id; // "ten seconds left", once per game
+          Sfx.play('lowtime');
+        }
+      }, 100);
+    }
+    if (me >= 0 && !over && !open.promo) bindChessBoard(modal.querySelector('.board.chess'), msg, r);
+    if (open.selected !== null) showTargets(modal, r, open.selected, pieceMoves(msg, r, open.selected));
   }
 
-  function showTargets(root, r, from) {
+  // Where a piece can go: its legal moves on our turn; otherwise where it
+  // could go next turn (for looking ahead and premoves).
+  function pieceMoves(msg, r, from) {
+    const C = Games.RULES.chess;
+    const st = r.state;
+    const me = myIndex(msg);
+    if (!r.status.over && r.status.turn === me) return C.legalMoves(st).filter((mv) => mv.from === from);
+    const color = me === 0 ? 'w' : 'b';
+    const list = C.legalMoves({ ...st, turn: color, ep: null }).filter((mv) => mv.from === from);
+    // A pawn may premove a capture: an enemy piece may be on that square by then.
+    const p = st.board[from];
+    if (p && p.toLowerCase() === 'p') {
+      for (const df of [-1, 1]) {
+        const f = (from & 7) + df;
+        const to = from + (color === 'w' ? 8 : -8) + df;
+        const occ = st.board[to];
+        const ownPiece = occ && (occ === occ.toUpperCase()) === (color === 'w');
+        if (f >= 0 && f < 8 && to >= 0 && to < 64 && !ownPiece && !list.some((mv) => mv.to === to)) list.push({ from, to });
+      }
+    }
+    return list;
+  }
+
+  function showTargets(root, r, from, moves = []) {
     for (const e of root.querySelectorAll('.sq.sel, .sq.dot, .sq.cap')) e.classList.remove('sel', 'dot', 'cap');
     if (from === null) return;
     const sqEl = (s) => root.querySelector(`.sq[data-sq="${s}"]`);
     if (sqEl(from)) sqEl(from).classList.add('sel');
-    for (const mv of Games.RULES.chess.legalMoves(r.state)) {
-      if (mv.from === from && sqEl(mv.to)) sqEl(mv.to).classList.add(r.state.board[mv.to] || mv.ep ? 'cap' : 'dot');
+    for (const mv of moves) {
+      if (sqEl(mv.to)) sqEl(mv.to).classList.add(r.state.board[mv.to] || mv.ep ? 'cap' : 'dot');
     }
   }
 
-  // Click-to-move and drag-and-drop on the chess board.
+  // Right-drag arrows, drawn over the board (knight moves bend like an L).
+  function arrowsSvg(flip, marks) {
+    if (!marks || !marks.arrows.length) return '';
+    const pt = (s) => [(flip ? 7 - (s & 7) : (s & 7)) + 0.5, (flip ? (s >> 3) : 7 - (s >> 3)) + 0.5];
+    const shapes = marks.arrows.map(([a, b]) => {
+      const [x1, y1] = pt(a);
+      const [x2, y2] = pt(b);
+      const ax = Math.abs(x2 - x1);
+      const ay = Math.abs(y2 - y1);
+      const knight = (ax === 1 && ay === 2) || (ax === 2 && ay === 1);
+      const corner = knight ? (ax > ay ? [x2, y1] : [x1, y2]) : [x1, y1];
+      const len = Math.hypot(x2 - corner[0], y2 - corner[1]);
+      const ux = (x2 - corner[0]) / len;
+      const uy = (y2 - corner[1]) / len;
+      const tip = [x2 + ux * 0.12, y2 + uy * 0.12]; // the point sits just past the square's centre
+      const base = [tip[0] - ux * 0.42, tip[1] - uy * 0.42];
+      const head = [[tip[0], tip[1]], [base[0] - uy * 0.26, base[1] + ux * 0.26], [base[0] + uy * 0.26, base[1] - ux * 0.26]];
+      const start = knight ? [x1, y1] : [x1 + ux * 0.25, y1 + uy * 0.25];
+      const pts = knight ? `${start} ${corner} ${base}` : `${start} ${base}`;
+      return `<polyline points="${pts}"/><polygon points="${head.map((p) => p.join(',')).join(' ')}"/>`;
+    }).join('');
+    return `<svg class="cc-arrows" viewBox="0 0 8 8" aria-hidden="true">${shapes}</svg>`;
+  }
+
+  // ⚙ in the chess window: premoves and game sounds.
+  function settingsHtml(chess) {
+    const sw = (k, label) => `<label class="gset-row"><span>${esc(label)}</span><input type="checkbox" data-pref="${k}"${prefs[k] ? ' checked' : ''}></label>`;
+    return `<div class="gset"><button class="icon-btn gset-btn" data-action="settings" title="${esc(t('Settings'))}">⚙</button>
+      ${open && open.settings ? `<div class="gset-pop">${chess ? sw('premoves', t('Premoves (move before your turn)')) : ''}${sw('sounds', t('Game sounds'))}</div>` : ''}</div>`;
+  }
+
+  // Click-to-move and drag-and-drop on the chess board; right-click marks.
   function bindChessBoard(board, msg, r) {
     const st = r.state;
     const me = myIndex(msg);
     const C = Games.RULES.chess;
+    const myTurn = !r.status.over && r.status.turn === me;
     const mine = (s) => st.board[s] && ((st.board[s] === st.board[s].toUpperCase()) === (me === 0));
     const sqAt = (x, y) => {
       const e = document.elementFromPoint(x, y);
@@ -313,8 +450,17 @@ const Game = (() => {
       return sq ? Number(sq.dataset.sq) : null;
     };
     const tryMove = (from, to) => {
-      const legal = C.legalMoves(st).filter((mv) => mv.from === from && mv.to === to);
+      const legal = pieceMoves(msg, r, from).filter((mv) => mv.to === to);
       if (!legal.length) return false;
+      if (!myTurn) {
+        // Not our turn: queue it as a premove (if they are switched on).
+        if (!prefs.premoves) return false;
+        open.premove = { from, to };
+        open.selected = null;
+        Sfx.play('premove');
+        render();
+        return true;
+      }
       const m = { from: C.squareName(from), to: C.squareName(to) };
       if (legal[0].promo) {
         open.promo = m;
@@ -326,9 +472,21 @@ const Game = (() => {
       return true;
     };
     let drag = null;
+    let right = null;
+    board.addEventListener('contextmenu', (e) => e.preventDefault());
     board.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
       const s = sqAt(e.clientX, e.clientY);
+      if (e.button === 2) {
+        right = s;
+        return;
+      }
+      if (e.button !== 0) return;
+      // A left click clears the right-click marks, as on chess.com.
+      if (open.marks.sq.size || open.marks.arrows.length) {
+        open.marks = { sq: new Set(), arrows: [] };
+        board.querySelectorAll('.sq.mark').forEach((x) => x.classList.remove('mark'));
+        board.parentElement.querySelector('.cc-arrows')?.remove();
+      }
       if (s === null) return;
       if (open.selected !== null && open.selected !== s && tryMove(open.selected, s)) return;
       if (!mine(s)) {
@@ -345,7 +503,7 @@ const Game = (() => {
       ghost.style.height = `${size}px`;
       drag = { from: s, x0: e.clientX, y0: e.clientY, ghost, piece, size, moved: false, wasSelected: open.selected === s, hover: null };
       open.selected = s;
-      showTargets(board, r, s);
+      showTargets(board, r, s, pieceMoves(msg, r, s));
       board.setPointerCapture(e.pointerId);
     });
     board.addEventListener('pointermove', (e) => {
@@ -366,6 +524,27 @@ const Game = (() => {
       }
     });
     const finish = (e) => {
+      if (e.button === 2 && e.type === 'pointerup') {
+        // Right-click a square to mark it, right-drag to draw an arrow.
+        const s = sqAt(e.clientX, e.clientY);
+        const from = right;
+        right = null;
+        if (open.premove) {
+          open.premove = null;
+          render();
+          return;
+        }
+        if (from === null || s === null) return;
+        if (from === s) {
+          if (!open.marks.sq.delete(s)) open.marks.sq.add(s);
+        } else {
+          const i = open.marks.arrows.findIndex(([a, b]) => a === from && b === s);
+          if (i >= 0) open.marks.arrows.splice(i, 1);
+          else open.marks.arrows.push([from, s]);
+        }
+        render();
+        return;
+      }
       if (!drag) return;
       const d = drag;
       drag = null;
@@ -375,6 +554,7 @@ const Game = (() => {
       if (d.moved) {
         const s = e.type === 'pointerup' ? sqAt(e.clientX, e.clientY) : null;
         if (s !== null && s !== d.from && tryMove(d.from, s)) return;
+        if (s !== null && s !== d.from) Sfx.play('illegal');
       } else if (d.wasSelected) {
         open.selected = null;
         showTargets(board, r, null);
@@ -435,7 +615,7 @@ const Game = (() => {
     const opp = 1 - (me < 0 ? 0 : me);
     const self = me < 0 ? 0 : me;
     open.back.innerHTML = `<div class="modal game-modal chesscom${open.drawn ? ' still' : ''}">
-      <div class="modal-head"><h2>${esc(t('Checkers'))}</h2><button class="icon-btn" data-close title="${esc(t('Close'))}">✕</button></div>
+      <div class="modal-head"><h2>${esc(t('Checkers'))}</h2>${settingsHtml(false)}<button class="icon-btn" data-close title="${esc(t('Close'))}">✕</button></div>
       <div class="cc-body">
         <div class="cc-left">
           ${checkersBar(msg, r, opp)}
@@ -487,11 +667,78 @@ const Game = (() => {
     }
   }
 
+  // Sounds for each new move, and the end screen when the game finishes
+  // while the window is open.
+  function pieceCount(r) {
+    const cells = r.state.board || r.state.cells || [];
+    return cells.filter((x) => x !== null && x !== undefined && x !== '').length;
+  }
+
+  function moveSound(type, r, before) {
+    if (type === 'ttt') return 'place';
+    if (type === 'c4') return 'drop';
+    if (type === 'chess') {
+      const san = (r.state.log || [])[r.state.log.length - 1] || '';
+      if (/[+#]/.test(san)) return 'check';
+      if (san.startsWith('O-O')) return 'castle';
+      if (san.includes('=')) return 'promote';
+    }
+    return pieceCount(r) < before ? 'capture' : 'move';
+  }
+
+  function reactToChange(msg, r) {
+    const n = msg.game.moves.length;
+    const first = open.count === undefined;
+    const prev = open.count;
+    open.count = n;
+    if (!r) return;
+    if (first) {
+      if (!n) Sfx.play('start');
+      open.wasOver = r.status.over;
+    } else if (n > prev) {
+      const m = msg.game.moves[n - 1].m || {};
+      if (m.draw === 'offer') Sfx.play('notify');
+      else if (!m.resign && !m.draw && !m.timeout) Sfx.play(moveSound(msg.game.type, r, open.pieces));
+    }
+    open.pieces = pieceCount(r);
+    if (r.status.over && !open.wasOver) {
+      open.wasOver = true;
+      setTimeout(() => endScreen(msg.id), 500);
+    }
+  }
+
+  function endScreen(id) {
+    const msg = current();
+    if (!msg || msg.id !== id) return;
+    const r = result(msg);
+    if (!r) return;
+    const me = myIndex(msg);
+    const st = r.status;
+    const outcome = st.winner === null ? 'draw' : st.winner === me ? 'win' : 'lose';
+    const title = { win: t('You won!'), lose: t('You lost'), draw: t('Draw') }[outcome];
+    EndFx.show({
+      outcome,
+      title,
+      detail: reasonText(st),
+      buttons: [{ label: t('New game'), primary: true, action: () => rematch(msg) }, { label: t('Close') }],
+    });
+  }
+
+  // Same settings, colours swapped (as on chess.com).
+  function rematch(msg) {
+    const conv = open ? open.conv : null;
+    if (!conv) return;
+    const me = myIndex(msg);
+    const options = { side: me === 0 ? 'second' : 'first', clock: msg.game.clock || null };
+    call(api.createGame(conv, msg.game.type, options)).then((g) => { if (g) show(conv, g.id); });
+  }
+
   function render() {
     const msg = current();
     if (!open) return;
     if (!msg) return close();
     const r = result(msg);
+    reactToChange(msg, r);
     if (msg.game.type === 'chess' && r) return renderChess(msg, r);
     if (msg.game.type === 'checkers' && r) return renderCheckers(msg, r);
     const me = myIndex(msg);
@@ -510,7 +757,7 @@ const Game = (() => {
         <span>${esc(sideName(msg, i))}</span></div>`).join('');
 
     open.back.innerHTML = `<div class="modal game-modal${open.drawn ? ' still' : ''}">
-      <div class="modal-head"><h2>${ICONS[type]} ${esc(t(TITLES[type]))}</h2><button class="icon-btn" data-close title="${esc(t('Close'))}">✕</button></div>
+      <div class="modal-head"><h2>${ICONS[type]} ${esc(t(TITLES[type]))}</h2>${settingsHtml(false)}<button class="icon-btn" data-close title="${esc(t('Close'))}">✕</button></div>
       <div class="game-body">
         <div class="game-board-wrap">${r ? boardHtml(msg, r, { interactive: myTurn, selected: open.selected, targets }) : ''}
           ${open.promo ? `<div class="promo">${'qrbn'.split('').map((p) => `<button data-promo="${p}">${pieceHtml(me === 0 ? p.toUpperCase() : p)}</button>`).join('')}</div>` : ''}
@@ -545,8 +792,19 @@ const Game = (() => {
 
   function onClick(e, msg, r) {
     const me = myIndex(msg);
+    const pref = e.target.closest('[data-pref]');
+    if (pref) {
+      prefs[pref.dataset.pref] = pref.checked;
+      savePrefs();
+      return undefined;
+    }
     const b = e.target.closest('[data-cell],[data-col],[data-promo],[data-draw],[data-action]');
     if (!b || !r) return;
+    if (b.dataset.action === 'settings') {
+      open.settings = !open.settings;
+      render();
+      return undefined;
+    }
     if (b.dataset.cell !== undefined) return move({ cell: Number(b.dataset.cell) });
     if (b.dataset.col !== undefined) return move({ col: Number(b.dataset.col) });
     if (b.dataset.draw) return move({ draw: b.dataset.draw });
@@ -555,10 +813,7 @@ const Game = (() => {
       return confirmModal(t('Resign this game?'), t('{name} will win the game.', { name: sideName(msg, 1 - me) }), t('Resign'), () => move({ resign: true }));
     }
     if (b.dataset.action === 'draw') return move({ draw: 'offer' });
-    if (b.dataset.action === 'rematch') {
-      const { conv } = open;
-      return call(api.createGame(conv, msg.game.type)).then((g) => { if (g) show(conv, g.id); });
-    }
+    if (b.dataset.action === 'rematch') return rematch(msg);
     return undefined;
   }
 
@@ -578,11 +833,56 @@ const Game = (() => {
     back.querySelector('.game-picker').onclick = async (e) => {
       const b = e.target.closest('[data-type]');
       if (!b) return;
+      const type = b.dataset.type;
+      if (type === 'chess' || type === 'checkers') return setupView(back, conv, type, done);
       done();
-      const g = await call(api.createGame(conv, b.dataset.type));
+      const g = await call(api.createGame(conv, type));
       if (g) setTimeout(() => show(conv, g.id), 50);
+      return undefined;
     };
     $('#modalRoot').append(back);
+  }
+
+  // Second step for chess and checkers: time control and side, then invite.
+  function setupView(back, conv, type, done) {
+    const m = back.querySelector('.modal');
+    const sides = type === 'chess'
+      ? [['first', pieceHtml('K'), t('White')], ['random', '<span class="gs-q">?</span>', t('Random')], ['second', pieceHtml('k'), t('Black')]]
+      : [['first', '<span class="ck-piece p0"></span>', t('Black')], ['random', '<span class="gs-q">?</span>', t('Random')], ['second', '<span class="ck-piece p1"></span>', t('Red')]];
+    const draw = () => {
+      m.innerHTML = `<div class="modal-head"><h2>${ICONS[type]} ${esc(t(TITLES[type]))}</h2><button class="icon-btn" data-close>✕</button></div>
+        <div class="modal-body game-setup">
+          ${type === 'chess' ? `<div class="gs-label">${esc(t('Time control'))}</div>
+            ${CLOCKS.map(([kind, keys]) => `<div class="gs-row"><span class="gs-kind">${esc(t(kind))}</span>${keys.map((k) => `<button class="gs-opt${prefs.clock === k ? ' on' : ''}" data-clock="${k}">${esc(clockLabel(clockFromKey(k)))}</button>`).join('')}</div>`).join('')}
+            <button class="gs-opt wide${!clockFromKey(prefs.clock) ? ' on' : ''}" data-clock="none">∞ ${esc(t('No time limit'))}</button>` : ''}
+          <div class="gs-label">${esc(t('I play as'))}</div>
+          <div class="gs-sides">${sides.map(([k, icon, label]) => `<button class="gs-side${prefs.side === k ? ' on' : ''}" data-side="${k}">${icon}<span>${esc(label)}</span></button>`).join('')}</div>
+        </div>
+        <div class="modal-foot"><button class="btn" data-back>${esc(t('Back'))}</button><button class="btn primary" data-go>${esc(t('Send invite'))}</button></div>`;
+      m.querySelector('[data-close]').onclick = done;
+    };
+    draw();
+    m.onclick = async (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.clock) {
+        prefs.clock = b.dataset.clock;
+        savePrefs();
+        draw();
+      } else if (b.dataset.side) {
+        prefs.side = b.dataset.side;
+        savePrefs();
+        draw();
+      } else if (b.dataset.back !== undefined) {
+        done();
+        newGameModal(conv);
+      } else if (b.dataset.go !== undefined) {
+        done();
+        const options = { side: prefs.side, clock: type === 'chess' ? clockFromKey(prefs.clock) : null };
+        const g = await call(api.createGame(conv, type, options));
+        if (g) setTimeout(() => show(conv, g.id), 50);
+      }
+    };
   }
 
   return { cardHtml, show, close, onMessage, newGameModal, isOpen: (id) => open && open.id === id };

@@ -148,6 +148,7 @@ const Controls = (() => {
         ${slider('arr', 'Sliding speed', 'ms', '(ARR – time between steps, 0 = instant)')}
         ${slider('soft', 'Soft drop speed', 'ms', '(time per row while holding soft drop)')}
         <label class="ctl-check"><input type="checkbox" data-ghost ${state.handling.ghost ? 'checked' : ''}> ${t('Show ghost piece (where the piece will land)')}</label>
+        <label class="ctl-check"><input type="checkbox" data-sounds ${Sfx.enabled() ? 'checked' : ''}> ${t('Game sounds')}</label>
         <div class="ctl-foot"><button class="ctl-done" data-close>${t('Done')}</button></div>
       </div>`;
       drawn = true;
@@ -207,6 +208,14 @@ const Controls = (() => {
       if (e.target.dataset.ghost !== undefined) {
         state.handling.ghost = e.target.checked;
         save();
+      }
+      if (e.target.dataset.sounds !== undefined) {
+        // Shared with the other games (see game-fx.js).
+        try {
+          const prefs = JSON.parse(localStorage.getItem('lanmsg.games.v1') || '{}');
+          prefs.sounds = e.target.checked;
+          localStorage.setItem('lanmsg.games.v1', JSON.stringify(prefs));
+        } catch { /* not saved */ }
       }
     });
     document.addEventListener('keydown', onKey, true);
