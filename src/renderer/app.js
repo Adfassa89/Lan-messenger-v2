@@ -1674,6 +1674,54 @@ async function jumpTo(conv, msgId) {
   }
 }
 
+// The newest release, for PCs that cannot get an update from the network.
+const RELEASES_URL = 'https://github.com/Adfassa89/Lan-messenger-v2/releases/latest';
+
+// The "Updates" box in Settings: what is happening and what you can do.
+function updateBoxHtml(st) {
+  const time = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  let line;
+  let bar = '';
+  let icon = '🔄';
+  switch (st && st.state) {
+    case 'dev':
+      line = t('Updates work in the installed app.');
+      break;
+    case 'downloading': {
+      const pct = st.size ? Math.min(100, Math.round((st.done / st.size) * 100)) : 0;
+      line = t('Downloading version {v} from {name}… {pct}%', { v: st.target, name: st.from, pct });
+      bar = `<div class="progress"><div style="width:${pct}%"></div></div>`;
+      icon = '⬇️';
+      break;
+    }
+    case 'ready':
+      line = t('Version {v} is ready. It is installed when the app restarts.', { v: st.staged || st.target });
+      icon = '✅';
+      break;
+    case 'error':
+      line = t('The update could not be downloaded: {error}', { error: st.error || '' });
+      icon = '⚠️';
+      break;
+    case 'none':
+      line = t('You have the newest version on the network.');
+      icon = '✅';
+      break;
+    default:
+      line = !st || st.auto ? t('Other PCs are checked for a newer version every minute.') : t('Automatic updates are off. Use "Check for updates".');
+  }
+  const extra = st && st.newest && !st.newest.compatible
+    ? `<div class="hint">${esc(t("Version {v} on {name}'s PC must be installed with its installer (see the download page).", { v: st.newest.version, name: st.newest.from }))}</div>` : '';
+  const checked = st && st.checkedAt && st.state !== 'downloading' ? ` <span class="upd-when">${esc(t('Checked at {time}', { time: time(st.checkedAt) }))}</span>` : '';
+  const ready = st && (st.state === 'ready' || st.staged);
+  return `<div class="upd-head"><span class="upd-icon">${icon}</span><div><b>${esc(t('LAN Messenger 2 version {v}', { v: (st && st.current) || S.version || '' }))}</b>
+      <div class="upd-line">${esc(line)}${checked}</div>${bar}${extra}</div></div>
+    <div class="upd-btns">
+      ${ready ? `<button class="btn primary" data-upd="restart">${esc(t('Restart now'))}</button>` : ''}
+      <button class="btn${ready ? '' : ' primary'}" data-upd="check"${st && st.state === 'downloading' ? ' disabled' : ''}>${esc(t('Check for updates'))}</button>
+      <button class="btn" data-upd="page">${esc(t('Open download page'))}</button>
+    </div>`;
+}
+
 function toggleRow(key, title, sub) {
   return `<label class="toggle-row"><div class="tl"><div>${esc(title)}</div>${sub ? `<div>${esc(sub)}</div>` : ''}</div>
     <span class="switch"><input type="checkbox" data-set="${key}" ${S.settings[key] ? 'checked' : ''}><span></span></span></label>`;
@@ -1716,6 +1764,7 @@ function settingsModal() {
     ${toggleRow('minimizeToTray', t('Keep running in the tray when closed'), t('So you never miss a message'))}
     ${toggleRow('autoAway', t('Set me as Away when idle'), t('After 5 minutes without mouse or keyboard activity'))}
     ${toggleRow('autoUpdate', t('Update automatically from the network'), t('Newer versions on other PCs are installed safely (digitally signed)'))}
+    <div class="upd-box" id="sUpd">${updateBoxHtml(null)}</div>
 
     <div class="section-title">${esc(t('Network'))}</div>
     <div class="kv" style="margin-bottom:12px"><div>${esc(t('This PC'))}</div><div>${esc((me.addresses || []).join(', ') || t('No network'))}</div><div>${esc(t('Port'))}</div><div>${me.port || '—'}</div><div>${esc(t('Version'))}</div><div>${esc(S.version || '')}</div></div>
@@ -1781,6 +1830,22 @@ function settingsModal() {
         S.avatars.delete(S.me.id);
         drawAvatar();
         renderMe();
+      });
+      // Updates: status, "Check for updates", "Restart now".
+      const showUpd = (st) => { if (st && $('#sUpd', m)) $('#sUpd', m).innerHTML = updateBoxHtml(st); };
+      api.updateStatus().then(showUpd);
+      $('#sUpd', m).addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-upd]');
+        if (!b) return;
+        if (b.dataset.upd === 'check') {
+          b.disabled = true;
+          b.textContent = t('Checking…');
+          showUpd(await call(api.checkUpdate()));
+        } else if (b.dataset.upd === 'restart') {
+          api.restartUpdate();
+        } else if (b.dataset.upd === 'page') {
+          api.openExternal(RELEASES_URL);
+        }
       });
       $('#sDirBtn', m).addEventListener('click', async () => {
         const dir = await api.pickFolder();
@@ -1953,6 +2018,9 @@ function handleEvent({ type, payload }) {
     case 'update-ready':
       S.updateReady = payload;
       renderUpdateBanner();
+      break;
+    case 'update-status':
+      if ($('#sUpd')) $('#sUpd').innerHTML = updateBoxHtml(payload);
       break;
     case 'rtc':
       Share.onRtc(payload);

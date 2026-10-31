@@ -55,7 +55,7 @@ function channel(link) {
 }
 
 // Sends one request and receives one reply (a list, or a file written to `part`).
-function request(link, ch, req, { part, append = false, onData, fsMod = fs } = {}) {
+function request(link, ch, req, { part, append = false, onData, onMeta, fsMod = fs } = {}) {
   return new Promise((resolve, reject) => {
     let ws = null;
     let meta = null;
@@ -77,6 +77,7 @@ function request(link, ch, req, { part, append = false, onData, fsMod = fs } = {
       json(m) {
         if (m.type === 'file-meta' || m.type === 'update-meta') {
           meta = m;
+          if (onMeta) onMeta(m);
           ws = fsMod.createWriteStream(part, { flags: append ? 'a' : 'w' });
           ws.on('error', fail);
         } else if (m.type === 'file-list') {
@@ -350,13 +351,21 @@ class FileTransfers {
   }
 
   // Downloads another PC's app update package to `dest`.
-  async fetchUpdate(peerId, dest, fsMod = fs) {
+  // onProgress(done, size) reports the download as it goes.
+  async fetchUpdate(peerId, dest, fsMod = fs, onProgress) {
     const peer = this.m.peers.get(peerId);
     if (!peer || !peer.online) throw new Error('Peer offline');
     const link = await this._open(peer);
     try {
       const ch = channel(link);
-      const meta = await request(link, ch, { type: 'update-get' }, { part: dest, fsMod });
+      let size = 0;
+      let done = 0;
+      const meta = await request(link, ch, { type: 'update-get' }, {
+        part: dest,
+        fsMod,
+        onMeta: (m) => { size = Number(m.size) || 0; },
+        onData: (n) => { done += n; if (onProgress) onProgress(done, size); },
+      });
       if (!meta || fileSize(dest, fsMod) !== meta.size) throw new Error('Update download incomplete');
       return meta;
     } finally {

@@ -825,6 +825,8 @@ function registerIpc() {
     send('open-conv', conv);
   });
   h('restart-update', () => restartForUpdate());
+  h('update-status', () => (updater ? updater.getStatus() : null));
+  h('check-update', () => (updater ? updater.check({ manual: true }) : null));
   // The page reports its current colors so the window buttons match the style.
   h('set-title-bar', (panel, text, bg) => {
     if (!win || process.platform === 'darwin') return;
@@ -903,6 +905,7 @@ app.whenReady().then(async () => {
       send('update-ready', v);
       updateTray();
     },
+    onStatus: (st) => send('update-status', st),
   });
   try {
     await updater.start();

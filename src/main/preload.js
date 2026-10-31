@@ -70,6 +70,8 @@ const CHANNELS = {
   callEnded: 'call-ended',
   openConv: 'open-conv',
   restartUpdate: 'restart-update',
+  updateStatus: 'update-status',
+  checkUpdate: 'check-update',
   setBadge: 'set-badge',
   setTitleBar: 'set-title-bar',
 };

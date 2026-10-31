@@ -1413,8 +1413,8 @@ class Messenger extends EventEmitter {
   }
 
   // ------------------------------------------------------------------ app updates shared between PCs
-  fetchUpdate(peerId, dest, { fs: ofs = fs } = {}) {
-    return this.files.fetchUpdate(peerId, dest, ofs);
+  fetchUpdate(peerId, dest, { fs: ofs = fs, onProgress } = {}) {
+    return this.files.fetchUpdate(peerId, dest, ofs, onProgress);
   }
 
   // ------------------------------------------------------------------ groups
