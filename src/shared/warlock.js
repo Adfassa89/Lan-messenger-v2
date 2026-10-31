@@ -790,7 +790,7 @@
           sp: Object.fromEntries(Object.entries(p.spells).map(([k, v]) => [k, [v.key, v.level]])),
           it: p.items,
         })),
-        b: this.projectiles.map((b) => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.r, b.owner, b.k === 'linked' ? b.target : b.life > 0 ? r1(b.life) : 0]),
+        b: this.projectiles.map((b) => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.r, b.owner, b.k === 'linked' ? b.target : b.life > 0 ? r1(b.life) : 0, b.id]),
         fx: this.effects,
       };
       this.effects = [];

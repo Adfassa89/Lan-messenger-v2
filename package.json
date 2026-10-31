@@ -1,7 +1,7 @@
 {
   "name": "lan-messenger",
   "productName": "LAN Messenger 2",
-  "version": "2.11.0",
+  "version": "2.12.0",
   "description": "Fast, secure, serverless messenger for your local network",
   "main": "src/main/boot.js",
   "author": "LAN Messenger 2",
@@ -14,7 +14,8 @@
   },
   "devDependencies": {
     "electron": "^44.9.0",
-    "electron-builder": "^26.15.0"
+    "electron-builder": "^26.15.0",
+    "three": "^0.170.0"
   },
   "build": {
     "appId": "com.lanmessenger.v2",

@@ -119,6 +119,7 @@
     "This match has already started.": "Энэ тоглолт аль хэдийн эхэлсэн.",
     "{name} closed the arena.": "{name} талбайг хаалаа.",
     "{name} burned in the lava": "{name} лаавад шатлаа",
+    "3D graphics are not available on this PC.": "Энэ компьютер дээр 3D график ажиллахгүй байна.",
     "FIGHT!": "ТУЛАЛДААН!",
     "ROUND WON!": "ҮЕ ХОЖЛОО!",
     "{name} wins the round": "{name} үеийг хожлоо",

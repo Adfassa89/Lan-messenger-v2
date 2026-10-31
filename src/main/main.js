@@ -35,6 +35,9 @@ app.setAppUserModelId(APP_ID);
 app.commandLine.appendSwitch('disable-features', 'WebRtcHideLocalIpsWithMdns');
 // Alert and notification sounds must play even before anyone clicks in the app.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+// PCs without a usable graphics driver still get WebGL (for the 3D Warlock
+// arena) through Chromium's software renderer.
+app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 
 let win = null;
 let tray = null;

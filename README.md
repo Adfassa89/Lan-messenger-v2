@@ -170,3 +170,5 @@ Third-party parts keep their own licenses (see Credits).
   [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), taken from
   [cm-chessboard](https://github.com/shaack/cm-chessboard). Source: `build/third-party/chess-pieces-cburnett.svg`;
   `scripts/make-pieces.py` turns it into `src/renderer/pieces.css`.
+- 3D graphics: [three.js](https://threejs.org) by the three.js authors, licensed MIT
+  (`src/renderer/vendor/three`, copied by `scripts/vendor-three.js`).
