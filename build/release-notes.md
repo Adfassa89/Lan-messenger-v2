@@ -6,6 +6,7 @@ A fast, modern and secure messenger for Windows PCs on the same office or site n
 |---|---|
 | **LAN-Messenger-2-Setup-….exe** | Normal installer (recommended) |
 | **LAN-Messenger-2-Portable-….exe** | Runs without installing, e.g. from a USB stick |
+| app.asar, app.asar.sig | Used by the app to update itself (*Settings → Check for updates*). No need to download these. |
 
 ## Install
 
