@@ -226,7 +226,8 @@
     // garbage rise. Returns what happened.
     lock() {
       const spin = this.tspin();
-      for (const [x, y] of this.cells()) this.board[y * W + x] = this.active.type;
+      const placed = this.cells(); // for the lock flash in the window
+      for (const [x, y] of placed) this.board[y * W + x] = this.active.type;
       const lockedAbove = this.cells().every(([, y]) => y < H - VISIBLE);
       this.stats.pieces++;
       const full = [];
@@ -281,7 +282,7 @@
       if (lines === 0) risen = this.riseGarbage();
 
       const result = {
-        lines, spin, perfect, combo: this.combo, b2b: b2bBonus ? this.b2b : 0, attack, sent, risen,
+        lines, spin, perfect, combo: this.combo, b2b: b2bBonus ? this.b2b : 0, attack, sent, risen, rows: full, placed,
       };
       this.holdUsed = false;
       if (lockedAbove || this.dead) {

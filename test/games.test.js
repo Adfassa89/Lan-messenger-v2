@@ -153,3 +153,19 @@ test('checkers can be played with a clock too', () => {
   assert.deepStrictEqual([out.status.winner, out.status.reason], [0, 'timeout']);
   assert.strictEqual(Games.replay('ttt', [], opts).clock, null); // only chess and checkers have clocks
 });
+
+test('tetris matches are best of 1, 3, 5, 7 or 9', () => {
+  const ko = (p) => ({ p, m: { ko: true } });
+  // Best of 5: first to three knockouts.
+  const opts = { bestOf: 5 };
+  let r = Games.replay('tetris', [ko(1), ko(0), ko(1)], opts);
+  assert.deepStrictEqual([r.state.wins, r.status.over], [[2, 1], false]);
+  r = Games.replay('tetris', [ko(1), ko(0), ko(1), ko(0), ko(1)], opts);
+  assert.deepStrictEqual([r.status.over, r.status.winner], [true, 0]);
+  assert.throws(() => Games.replay('tetris', [ko(1), ko(1), ko(1), ko(0)], opts), /over/);
+  // Leaving gives up the whole match.
+  r = Games.replay('tetris', [ko(0), { p: 1, m: { forfeit: true } }], { bestOf: 9 });
+  assert.deepStrictEqual([r.status.over, r.status.winner, r.state.wins], [true, 0, [5, 1]]);
+  // Anything else counts as best of 1.
+  assert.strictEqual(Games.replay('tetris', [ko(0)], { bestOf: 4 }).status.over, true);
+});

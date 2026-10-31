@@ -15,7 +15,7 @@ Available in **English** and **Монгол**.
 | 📞 **Voice and video calls** | Call a colleague or a whole group (up to about 6 people) from the chat header. Calls go directly PC-to-PC over the network, with no internet or server. Incoming calls pop up with a ringtone; you can mute, switch the camera on or off, and choose microphone, camera and speaker. Missed calls appear in the chat with a **Call back** button. |
 | ♟️ **Games in chats** | Play **Chess** (with a chess.com-style board), **Checkers**, **Tic-tac-toe**, **Connect Four** or **Tetris Battle** with a colleague in a private chat (＋ → Play a game). Turn-based moves are delivered like messages, so a game can run across shifts; each PC checks every move against the rules. |
 | ♟️ **Chess like chess.com** | Choose your side (White, Black or random) and a time control (bullet, blitz, rapid or no limit; checkers has clocks too). Premoves, right-click marks and arrows, and you can look at your pieces' moves while waiting. Every game has sound effects and the same win / lose screen. |
-| 🧱 **Tetris Battle** | A live head-to-head match in the style of TETR.IO: both players get the same pieces, and clearing lines sends garbage rows to the opponent. Controls can be changed like in old Facebook Tetris Battle: rebind every key, pick the *Classic* or *Modern* preset, and adjust the sliding delay, sliding speed and soft-drop speed. |
+| 🧱 **Tetris Battle** | A live head-to-head match in the style of TETR.IO, as one round or best of 3, 5, 7 or 9: both players get the same pieces, and clearing lines sends garbage rows to the opponent, with line-clear, attack and K.O. effects and sounds. Controls can be changed like in old Facebook Tetris Battle: rebind every key, pick the *Classic* or *Modern* preset, and adjust the sliding delay, sliding speed and soft-drop speed. |
 | 🖥️ **Screen sharing** | Show your screen (or one window) live to a colleague or a whole group. It goes directly PC-to-PC over the network. Viewers can only watch; they can't control your PC. |
 | ✏️ **Screenshot with drawing** | `Ctrl + Shift + S` (or **＋ → Screenshot with drawing**) takes a screenshot. Crop it, add arrows, boxes, highlights and text, then send. Pasted pictures can be drawn on too. |
 | 🇲🇳 **Mongolian / English** | Switch language in **Settings → Language**. Every screen is translated. |
@@ -78,7 +78,7 @@ Without the secret, everything else works normally; builds just won't pass thems
 ### If people don't appear
 
 - Make sure LAN Messenger 2 is running on both PCs.
-- Make sure the firewall allows **LAN Messenger 2** (see above). IT can open **UDP port 50100** and **TCP port 50101**.
+- Make sure the firewall allows **LAN Messenger 2**: **Settings → Network → Windows Firewall** shows whether it does and has an **Allow through Windows Firewall** button (Windows asks for permission; on some PCs an administrator password). IT can open **UDP port 50100** and **TCP port 50101**.
   If only one of two PCs blocks the app, chat, games and file transfers still work (the open PC is used for both directions), but people appear more slowly. If **both** PCs block it, they cannot reach each other at all.
 - If the PCs are on different network segments (different subnets/VLANs), open **Settings → Network → Add a computer by IP address** and type the other PC's IP. The other PC's IP is shown in its own Settings → Network.
 

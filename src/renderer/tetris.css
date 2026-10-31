@@ -150,3 +150,35 @@ body {
 @keyframes tPanel { from { opacity: 0; transform: scale(.94); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 .ctl-panel.still { animation: none; }
+
+/* ---------------------------------------------------------------- match, effects and looks */
+body { background: radial-gradient(ellipse at 50% -10%, #3a2563 0%, #1a1230 38%, #0b0912 75%); }
+.board-wrap canvas {
+  background: linear-gradient(180deg, rgba(14, 10, 26, .92), rgba(6, 4, 12, .95));
+  box-shadow: 0 0 0 1px rgba(150, 120, 255, .12), 0 0 50px rgba(120, 80, 255, .22), inset 0 0 40px rgba(0, 0, 0, .5);
+}
+.board-wrap { transition: filter .3s; }
+/* Knocked out: the board turns grey. */
+.board-wrap canvas.dead { filter: grayscale(1) brightness(.55); transition: filter .6s; }
+/* Stack near the top: a red glow (only while it lasts). */
+.board-wrap.danger canvas { animation: danger 1s ease-in-out infinite; }
+@keyframes danger { 50% { box-shadow: 0 0 0 2px rgba(255, 60, 90, .7), 0 0 60px rgba(255, 40, 80, .45), inset 0 0 40px rgba(120, 0, 30, .35); } }
+/* Score of the match. */
+.vs b#score.on { font-size: 18px; letter-spacing: 1px; color: #fff; border: 0; padding: 4px 12px; border-radius: 10px;
+  background: linear-gradient(135deg, #ff5fa2, #8b5cf6); box-shadow: 0 4px 18px rgba(255, 95, 162, .35); font-variant-numeric: tabular-nums; }
+.vs .bo { font-size: 12px; font-weight: 700; color: #b7b0d6; letter-spacing: .5px; }
+.overlay.round { white-space: pre-line; font-size: 26px; line-height: 1.35; color: #7dffb2; text-shadow: 0 0 24px rgba(125, 255, 178, .45); animation: roundIn .5s cubic-bezier(.3, 1.4, .5, 1); }
+.overlay.ko { animation: koIn .45s cubic-bezier(.3, 1.6, .5, 1); text-shadow: 0 0 30px rgba(255, 77, 109, .8); }
+.overlay.count { animation: countIn .9s ease-out; }
+@keyframes roundIn { from { opacity: 0; transform: scale(.6); } }
+@keyframes koIn { from { opacity: 0; transform: scale(2.4); } }
+@keyframes countIn { 0% { opacity: 0; transform: scale(1.8); } 25% { opacity: 1; transform: scale(1); } 100% { opacity: .2; transform: scale(.85); } }
+/* Attack sent to the opponent. */
+.orb {
+  position: fixed; left: 0; top: 0; z-index: 30; pointer-events: none; border-radius: 50%; display: grid; place-items: center;
+  font: 800 13px "Segoe UI", system-ui, sans-serif; color: #fff;
+  background: radial-gradient(circle at 35% 35%, #fff 0, #ffb3d1 18%, #ff3d7f 55%, rgba(255, 61, 127, 0) 72%);
+  box-shadow: 0 0 24px 8px rgba(255, 61, 127, .55);
+}
+.action div { text-shadow: 0 0 18px currentColor; }
+@media (prefers-reduced-motion: reduce) { .board-wrap.danger canvas, .overlay.round, .overlay.ko, .overlay.count { animation: none; } }

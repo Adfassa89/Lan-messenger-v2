@@ -24,7 +24,9 @@ let info = null;
 let me = 0;
 let oppId = null;
 let game = null;
-let phase = 'waiting'; // waiting | countdown | playing | over
+let phase = 'waiting'; // waiting | countdown | playing | between (rounds) | over
+let bestOf = 1;
+let wins = [0, 0]; // knockouts won, by player index
 let startedAt = 0;
 let peerHere = false;
 let helloTimer = null;
@@ -66,15 +68,160 @@ function sizeBoards() {
   fit('oppNext', 80, 250, ROWS * Math.round(cell * 0.72) - 24);
 }
 
+// Glossy blocks, drawn once per colour and size and then copied (fast).
+const sprites = new Map();
+function shade(hex, k) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = [n >> 16, (n >> 8) & 255, n & 255].map((c) => Math.round(k > 0 ? c + (255 - c) * k : c * (1 + k)));
+  return `rgb(${ch.join(',')})`;
+}
+function sprite(color, size) {
+  const key = `${color}|${size}`;
+  let c = sprites.get(key);
+  if (c) return c;
+  c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  const r = Math.max(1, size * 0.16);
+  const body = g.createLinearGradient(0, 0, 0, size);
+  body.addColorStop(0, shade(color, 0.28));
+  body.addColorStop(0.55, color);
+  body.addColorStop(1, shade(color, -0.28));
+  g.fillStyle = body;
+  g.beginPath();
+  g.roundRect(0.5, 0.5, size - 1, size - 1, r);
+  g.fill();
+  // Shine on the upper half and a light rim, like polished tiles.
+  const gloss = g.createLinearGradient(0, 0, 0, size * 0.5);
+  gloss.addColorStop(0, 'rgba(255,255,255,.38)');
+  gloss.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gloss;
+  g.beginPath();
+  g.roundRect(size * 0.12, size * 0.1, size * 0.76, size * 0.4, r * 0.8);
+  g.fill();
+  g.strokeStyle = 'rgba(255,255,255,.28)';
+  g.lineWidth = Math.max(1, size * 0.06);
+  g.beginPath();
+  g.roundRect(size * 0.08, size * 0.08, size * 0.84, size * 0.84, r * 0.8);
+  g.stroke();
+  g.strokeStyle = 'rgba(0,0,0,.45)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.roundRect(0.5, 0.5, size - 1, size - 1, r);
+  g.stroke();
+  sprites.set(key, c);
+  return c;
+}
+
 function block(ctx, x, y, size, color, alpha = 1) {
   ctx.globalAlpha = alpha;
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y, size, size);
-  ctx.fillStyle = 'rgba(255,255,255,.25)';
-  ctx.fillRect(x, y, size, Math.max(2, size * 0.14));
-  ctx.fillStyle = 'rgba(0,0,0,.22)';
-  ctx.fillRect(x, y + size - Math.max(2, size * 0.14), size, Math.max(2, size * 0.14));
+  ctx.drawImage(sprite(color, size), x, y);
   ctx.globalAlpha = 1;
+}
+
+// Where the piece will land: an outline in its colour.
+function ghost(ctx, x, y, size, color) {
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.14;
+  ctx.fillRect(x + 1, y + 1, size - 2, size - 2);
+  ctx.globalAlpha = 0.75;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1.5, size * 0.07);
+  ctx.strokeRect(x + 2, y + 2, size - 4, size - 4);
+  ctx.globalAlpha = 1;
+}
+
+// ------------------------------------------------------------------ effects
+// Short-lived effects drawn over my board: line flashes, particles, the
+// hard-drop trail and the lock flash. They only run while playing.
+const fx = [];
+const addFx = (f) => fx.push({ t0: performance.now(), ...f });
+const PARTICLE_COLORS = ['#ffffff', '#ffe27a', '#7fe8ff', '#ff9ad5', '#b8ff9a'];
+
+function drawFx(ctx, now) {
+  const top = H - ROWS;
+  for (let i = fx.length - 1; i >= 0; i--) {
+    const f = fx[i];
+    const p = (now - f.t0) / f.dur;
+    if (p >= 1) { fx.splice(i, 1); continue; }
+    if (f.kind === 'rows') {
+      for (const y of f.rows) {
+        const h = cell * (1 - p);
+        ctx.fillStyle = `rgba(255,255,255,${0.95 * (1 - p)})`;
+        ctx.fillRect(0, (y - top) * cell + (cell - h) / 2, W * cell, h);
+      }
+    } else if (f.kind === 'lock') {
+      ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - p)})`;
+      for (const [x, y] of f.cells) if (y >= top) ctx.fillRect(x * cell, (y - top) * cell, cell, cell);
+    } else if (f.kind === 'trail') {
+      for (const [x, y0, y1] of f.cols) {
+        const g = ctx.createLinearGradient(0, (y0 - top) * cell, 0, (y1 - top + 1) * cell);
+        g.addColorStop(0, 'rgba(255,255,255,0)');
+        g.addColorStop(1, `rgba(255,255,255,${0.35 * (1 - p)})`);
+        ctx.fillStyle = g;
+        ctx.fillRect(x * cell + cell * 0.15, (y0 - top) * cell, cell * 0.7, (y1 - y0 + 1) * cell);
+      }
+    } else if (f.kind === 'spark') {
+      const t = (now - f.t0) / 1000;
+      ctx.globalAlpha = 1 - p;
+      for (const s of f.parts) {
+        ctx.fillStyle = s.c;
+        ctx.fillRect(s.x + s.vx * t, s.y + s.vy * t + 900 * t * t, s.s, s.s);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+function sparks(rows) {
+  const top = H - ROWS;
+  const parts = [];
+  for (const y of rows) {
+    for (let i = 0; i < 16; i++) {
+      parts.push({
+        x: Math.random() * W * cell, y: (y - top + 0.5) * cell,
+        vx: (Math.random() - 0.5) * 420, vy: -Math.random() * 380 - 60,
+        s: Math.random() * 3 + 2, c: PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)],
+      });
+    }
+  }
+  addFx({ kind: 'spark', dur: 700, parts });
+}
+
+// Moves the board (Web Animations: smooth and cheap).
+function shake(id, kind) {
+  const el = $(id).parentElement;
+  const frames = {
+    thump: [{ transform: 'translateY(0)' }, { transform: 'translateY(5px)' }, { transform: 'translateY(0)' }],
+    hit: [{ transform: 'translateX(0)' }, { transform: 'translateX(-7px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(0)' }],
+    ko: [{ transform: 'scale(1)' }, { transform: 'scale(1.03) rotate(-1deg)' }, { transform: 'scale(.98) rotate(1deg)' }, { transform: 'scale(1)' }],
+  }[kind];
+  el.animate(frames, { duration: kind === 'thump' ? 140 : kind === 'ko' ? 500 : 320, easing: 'ease-out' });
+}
+
+function koEffect(id) {
+  $(id).classList.add('dead');
+  shake(id, 'ko');
+  Sfx.play('ko');
+}
+
+// A glowing orb flies to the opponent's board with the lines we sent.
+function attackOrb(lines) {
+  const a = $('board').getBoundingClientRect();
+  const b = $('oppBoard').getBoundingClientRect();
+  const orb = document.createElement('div');
+  orb.className = 'orb';
+  orb.textContent = `+${lines}`;
+  const size = 26 + Math.min(lines, 8) * 4;
+  orb.style.width = orb.style.height = `${size}px`;
+  document.body.append(orb);
+  const from = [a.left + a.width / 2 - size / 2, a.top + a.height * 0.6];
+  const to = [b.left + b.width / 2 - size / 2, b.top + b.height * 0.75];
+  orb.animate([
+    { transform: `translate(${from[0]}px, ${from[1]}px) scale(.4)`, opacity: 0 },
+    { transform: `translate(${(from[0] + to[0]) / 2}px, ${Math.min(from[1], to[1]) - 120}px) scale(1.15)`, opacity: 1, offset: 0.45 },
+    { transform: `translate(${to[0]}px, ${to[1]}px) scale(.7)`, opacity: 0.2 },
+  ], { duration: 520, easing: 'cubic-bezier(.4,0,.6,1)' }).onfinish = () => orb.remove();
 }
 
 function drawGrid(ctx, size) {
@@ -111,13 +258,18 @@ function drawMine() {
     if (H_().ghost) {
       const gy = game.ghostY();
       for (const [x, y] of game.cells({ ...game.active, y: gy })) {
-        if (y >= top) block(ctx, x * cell, (y - top) * cell, cell, COLORS[game.active.type], 0.22);
+        if (y >= top) ghost(ctx, x * cell, (y - top) * cell, cell, COLORS[game.active.type]);
       }
     }
     for (const [x, y] of game.cells()) {
       if (y >= top) block(ctx, x * cell, (y - top) * cell, cell, COLORS[game.active.type]);
     }
   }
+  if (fx.length) drawFx(ctx, performance.now());
+  // Red glow when the stack reaches the top quarter.
+  let high = false;
+  for (let i = (H - VISIBLE) * W; i < (H - VISIBLE + 5) * W && !high; i++) if (game.board[i]) high = true;
+  $('board').parentElement.classList.toggle('danger', high && phase === 'playing');
   $('meter').style.height = `${Math.min(100, (game.pendingGarbage() / VISIBLE) * 100)}%`;
 }
 
@@ -210,8 +362,27 @@ function showAction(r) {
 
 // ------------------------------------------------------------------ game flow
 function onLocked(r) {
-  Sfx.play(r.lines ? 'clear' : 'lock', r.lines);
-  if (r.sent > 0) send({ kind: 'tt-attack', lines: r.sent });
+  if (r.placed) addFx({ kind: 'lock', dur: 160, cells: r.placed });
+  if (r.lines) {
+    addFx({ kind: 'rows', dur: 260, rows: r.rows || [] });
+    sparks(r.rows || []);
+    if (r.perfect) Sfx.play('allclear');
+    else if (r.spin) Sfx.play('tspin', r.lines);
+    else Sfx.play(['', 'single', 'double', 'triple', 'quad'][Math.min(4, r.lines)], r.combo);
+    if (r.b2b > 0) Sfx.play('b2b');
+    if (r.lines >= 4 || r.spin) shake('board', 'thump');
+  } else {
+    Sfx.play('lock');
+  }
+  if (r.risen > 0) {
+    shake('board', 'hit');
+    Sfx.play('garbageRise');
+  }
+  if (r.sent > 0) {
+    send({ kind: 'tt-attack', lines: r.sent });
+    attackOrb(r.sent);
+    Sfx.play('send', r.sent);
+  }
   showAction(r);
   sendState(true);
   resetLock();
@@ -237,14 +408,35 @@ function afterShift(ok) {
 }
 
 function hardDrop() {
+  // A light trail from where the piece was to where it lands.
+  const from = game.cells();
+  const gy = game.ghostY() - game.active.y;
+  const cols = new Map();
+  for (const [x, y] of from) {
+    const c = cols.get(x);
+    cols.set(x, c ? [x, Math.min(c[1], y), Math.max(c[2], y + gy)] : [x, y, y + gy]);
+  }
+  if (gy > 0) addFx({ kind: 'trail', dur: 220, cols: [...cols.values()] });
+  shake('board', 'thump');
+  Sfx.play('harddrop');
   onLocked(game.hardDrop());
 }
 
 function start(seed) {
-  if (phase !== 'waiting') return;
+  if (phase !== 'waiting' && phase !== 'between') return;
   clearInterval(helloTimer);
+  clearTimeout(nextRoundTimer);
   game = new Tetris(seed);
+  opp = null;
+  held.clear();
+  das.dir = 0;
+  frame.stats = null;
+  drawOpponent.stats = null;
+  fx.length = 0;
+  $('board').classList.remove('dead');
+  $('oppBoard').classList.remove('dead');
   phase = 'countdown';
+  renderScore();
   let n = 3;
   setOverlay('overlay', String(n), 'count');
   setOverlay('oppOverlay', '');
@@ -268,6 +460,43 @@ function start(seed) {
   Sfx.play('countdown');
 }
 
+// Score in the header for matches of several rounds.
+function renderScore() {
+  if (bestOf <= 1) return;
+  $('score').textContent = `${wins[me]} : ${wins[1 - me]}`;
+  $('score').classList.add('on');
+  const round = Math.min(wins[0] + wins[1] + 1, bestOf);
+  $('bo').textContent = `${t('Best of {n}', { n: bestOf })} · ${t('Round {n}', { n: round })}`;
+}
+
+// A knockout ends the round; the match goes on until someone has enough.
+let nextRoundTimer = null;
+function roundOver(won, why) {
+  if (phase === 'over' || phase === 'between') return;
+  wins[won ? me : 1 - me]++;
+  const target = (bestOf + 1) / 2;
+  if (wins[me] >= target || wins[1 - me] >= target) {
+    renderScore();
+    const score = bestOf > 1 ? ` · ${wins[me]} – ${wins[1 - me]}` : '';
+    finish(won, why + score);
+    return;
+  }
+  phase = 'between';
+  held.clear();
+  renderScore();
+  Sfx.play(won ? 'roundWin' : 'roundLose');
+  const head = won ? t('Round to you!') : t('Round to {name}', { name: info.people[oppId].name });
+  setOverlay(won ? 'overlay' : 'oppOverlay', `${head}\n${wins[me]} – ${wins[1 - me]}`, 'round');
+  // Player 1 starts the next round with a new shared piece order.
+  if (me === 0) {
+    nextRoundTimer = setTimeout(() => {
+      const seed = Math.floor(Math.random() * 2 ** 31);
+      send({ kind: 'tt-start', seed });
+      start(seed);
+    }, 3500);
+  }
+}
+
 function finish(won, why) {
   if (phase === 'over') return;
   phase = 'over';
@@ -282,11 +511,12 @@ function finish(won, why) {
 }
 
 function lose() {
-  if (phase === 'over') return;
+  if (phase !== 'playing' && phase !== 'countdown') return;
   setOverlay('overlay', 'K.O.', 'ko');
+  koEffect('board');
   send({ kind: 'tt-ko' });
   api.gameMove(conv, gameId, { ko: true }).catch(() => {});
-  finish(false, t('{name} wins this round', { name: info.people[oppId].name }));
+  roundOver(false, t('{name} knocked you out', { name: info.people[oppId].name }));
 }
 
 function sendState(force = false) {
@@ -429,14 +659,17 @@ api.on(({ type, payload }) => {
       if (phase === 'playing' || phase === 'countdown') {
         game.receive(Math.max(0, Math.min(20, Number(d.lines) || 0)));
         Sfx.play('garbage');
+        $('meter').parentElement.animate([{ filter: 'brightness(2.2)' }, { filter: 'brightness(1)' }], { duration: 400 });
       }
       break;
     case 'tt-ko':
+      if (phase !== 'playing' && phase !== 'countdown') break;
       setOverlay('oppOverlay', 'K.O.', 'ko');
-      finish(true, t('You knocked out {name}', { name: info.people[oppId].name }));
+      koEffect('oppBoard');
+      roundOver(true, t('You knocked out {name}', { name: info.people[oppId].name }));
       break;
     case 'tt-leave':
-      if (phase === 'playing' || phase === 'countdown') {
+      if (phase === 'playing' || phase === 'countdown' || phase === 'between') {
         setOverlay('oppOverlay', t('Left the game'));
         finish(true, t('{name} left the game', { name: info.people[oppId].name }));
       } else if (phase === 'waiting') {
@@ -471,7 +704,7 @@ async function init() {
   $('btnClose').textContent = t('Close');
   $('btnClose').onclick = () => window.close();
   $('btnRematch').onclick = async () => {
-    const msg = await api.createGame(conv, 'tetris').catch(() => null);
+    const msg = await api.createGame(conv, 'tetris', { bestOf }).catch(() => null);
     if (msg) {
       await api.openTetris(conv, msg.id);
       window.close();
@@ -480,6 +713,9 @@ async function init() {
   sizeBoards();
   window.addEventListener('resize', sizeBoards);
   game = new Tetris(1);
+  bestOf = info.bestOf || 1;
+  wins = (info.wins || [0, 0]).slice();
+  renderScore();
   if (info.over) {
     setOverlay('overlay', t('This battle has finished'));
     $('result').classList.remove('hidden');
@@ -494,7 +730,8 @@ async function init() {
   }
   window.addEventListener('beforeunload', () => {
     send({ kind: 'tt-leave' });
-    if (phase === 'playing' || phase === 'countdown') api.gameMove(conv, gameId, { ko: true }).catch(() => {});
+    // Leaving during a match gives up the whole match.
+    if (phase === 'playing' || phase === 'countdown' || phase === 'between') api.gameMove(conv, gameId, { forfeit: true }).catch(() => {});
   });
   requestAnimationFrame(frame);
 }

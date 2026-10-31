@@ -48,6 +48,7 @@ function defaultSettings(downloadDir) {
     enterToSend: true,
     autoUpdate: true,
     internetUpdates: true,
+    updateEvery: 'day',
   };
 }
 
@@ -466,6 +467,8 @@ class Messenger extends EventEmitter {
       if (h.purpose === 'file') return this.files.serve(link, h);
       if (h.purpose === 'file-back') return this._onDialBack(link, h);
       if (h.purpose === 'chat') {
+        // Another PC reached us: incoming connections work (firewall is fine).
+        if (!/^(127\.|::1$)/.test(link.remoteAddress)) this.inboundOk = true;
         link.on('json', (obj) => this._onWire(h.id, obj, link));
         let set = this.inboundChat.get(h.id);
         if (!set) this.inboundChat.set(h.id, (set = new Set()));
@@ -798,6 +801,7 @@ class Messenger extends EventEmitter {
         || !players.includes(this.id) || !players.includes(peerId)) return;
       msg.game = { type: g.type, players: [players[0], players[1]], moves: [], at: Date.now() };
       const clock = Games.cleanClock(g.clock);
+      if (g.type === 'tetris' && Games.bestOf(g) > 1) msg.game.bestOf = Games.bestOf(g);
       if (clock && Games.CLOCKED.includes(g.type)) {
         msg.game.clock = clock;
         this.clockGames.set(msg.id, conv);
@@ -811,7 +815,7 @@ class Messenger extends EventEmitter {
       const f = msg.file;
       const auto = f.voice
         ? f.size <= VOICE_MAX
-        : this.settings.autoAccept && f.size <= this.settings.autoAcceptMaxMB * 1024 * 1024;
+        : this.settings.autoAccept && (!(this.settings.autoAcceptMaxMB > 0) || f.size <= this.settings.autoAcceptMaxMB * 1024 * 1024);
       if (auto) setImmediate(() => this.files.download(conv, msg.id));
     }
   }
@@ -917,7 +921,11 @@ class Messenger extends EventEmitter {
     if (msg.replyTo) wire.replyTo = msg.replyTo;
     if (msg.urgent) wire.urgent = true;
     if (msg.poll) wire.poll = { question: msg.poll.question, options: msg.poll.options, multi: msg.poll.multi };
-    if (msg.game) wire.game = { type: msg.game.type, players: msg.game.players, ...(msg.game.clock ? { clock: msg.game.clock } : {}) };
+    if (msg.game) {
+      wire.game = { type: msg.game.type, players: msg.game.players };
+      if (msg.game.clock) wire.game.clock = msg.game.clock;
+      if (msg.game.bestOf) wire.game.bestOf = msg.game.bestOf;
+    }
     const type = this._convType(conv);
     if (type === 'broadcast') wire.broadcast = true;
     if (type === 'group') wire.group = this.groups[conv.slice(2)];
@@ -1246,7 +1254,7 @@ class Messenger extends EventEmitter {
   // side: 'first' (white / dark pieces), 'second' or 'random'. In chess and
   // checkers the inviter chooses (random by default); otherwise the inviter starts.
   // clock: { base, inc } in ms for timed chess or checkers, or nothing for no time limit.
-  createGame(conv, type, { side = 'random', clock } = {}) {
+  createGame(conv, type, { side = 'random', clock, bestOf } = {}) {
     if (this._convType(conv) !== 'direct') throw new Error('Games can be played in private chats');
     if (!Games.TYPES.includes(type)) throw new Error('Unknown game');
     const choose = type === 'chess' || type === 'checkers';
@@ -1255,6 +1263,7 @@ class Messenger extends EventEmitter {
     const game = { type, players, moves: [] };
     const c = Games.CLOCKED.includes(type) ? Games.cleanClock(clock) : null;
     if (c) game.clock = c;
+    if (type === 'tetris' && Games.bestOf({ bestOf }) > 1) game.bestOf = Games.bestOf({ bestOf });
     const msg = this._sendMsg(conv, { kind: 'game', text: '', game });
     const stored = this.store.getMessage(conv, msg.id);
     if (stored && stored.game) {

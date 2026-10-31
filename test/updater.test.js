@@ -81,7 +81,7 @@ function fakeGitHub(release) {
 }
 
 function fakeMessenger() {
-  return { peers: new Map(), settings: { autoUpdate: true, internetUpdates: true }, infoExtras: {}, emit() {} };
+  return { peers: new Map(), settings: { autoUpdate: true, internetUpdates: true }, config: {}, infoExtras: {}, emit() {} };
 }
 
 test('"Check for updates" also takes a signed release from GitHub, and refuses a forged one', async () => {
@@ -116,4 +116,28 @@ test('"Check for updates" also takes a signed release from GitHub, and refuses a
   const offline = new Updater(fakeMessenger(), { version: '2.6.0', onReady() {}, releasesUrl: 'http://127.0.0.1:9/latest' });
   const st = await offline.check({ manual: true });
   assert.deepStrictEqual([st.state, st.internet], ['none', 'offline']);
+});
+
+test('the automatic check follows the chosen schedule and remembers the last check', () => {
+  const m = fakeMessenger();
+  const updater = new Updater(m, { version: '2.6.0', onReady() {}, releasesUrl: 'http://127.0.0.1:9/latest' });
+  let checks = 0;
+  updater.check = () => { checks++; };
+  m.config.updateCheckedAt = Date.now() - 2 * 3600000; // two hours ago
+  for (const [every, due] of [['hour', true], ['12h', false], ['day', false], ['week', false], ['month', false]]) {
+    m.settings.updateEvery = every;
+    const before = checks;
+    updater._tick();
+    assert.strictEqual(checks > before, due, every);
+  }
+  m.config.updateCheckedAt = Date.now() - 8 * 86400000; // eight days ago
+  m.settings.updateEvery = 'week';
+  updater._tick();
+  assert.strictEqual(checks, 2);
+  m.settings.autoUpdate = false; // switched off: never automatically
+  updater._tick();
+  assert.strictEqual(checks, 2);
+  m.settings.autoUpdate = true;
+  m.settings.updateEvery = 'day';
+  assert.ok(Math.abs(updater.getStatus().nextCheck - Date.now()) < 1000, 'overdue: next check is now');
 });

@@ -71,6 +71,8 @@ const CHANNELS = {
   openConv: 'open-conv',
   restartUpdate: 'restart-update',
   updateStatus: 'update-status',
+  firewallStatus: 'firewall-status',
+  firewallAllow: 'firewall-allow',
   checkUpdate: 'check-update',
   setBadge: 'set-badge',
   setTitleBar: 'set-title-bar',

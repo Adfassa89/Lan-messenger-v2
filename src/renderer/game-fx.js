@@ -59,6 +59,12 @@ const Sfx = (() => {
   }
 
   const notes = (list, gap, opts) => list.forEach((f, i) => tone(f, { at: i * gap, ...opts }));
+  // A bright chord for line clears, a semitone higher for each combo step.
+  const clearChord = (freqs, combo) => {
+    const up = 2 ** (Math.min(Math.max(combo, 0), 12) / 12);
+    freqs.forEach((f, i) => tone(f * up, { at: i * 0.035, len: 0.22, vol: 0.06, type: 'square' }));
+    knock({ freq: 2400, len: 0.04, vol: 0.2 });
+  };
 
   const SOUNDS = {
     move: () => { knock({ freq: 750 }); tone(170, { len: 0.07, vol: 0.08 }); },
@@ -83,7 +89,21 @@ const Sfx = (() => {
     clear: (lines = 1) => notes([523, 659, 784, 1046].slice(0, Math.min(4, lines + 1)), 0.05, { len: 0.16, vol: 0.06, type: 'square' }),
     garbage: () => tone(130, { len: 0.18, vol: 0.09, type: 'sawtooth', slide: 0.6 }),
     countdown: () => tone(440, { len: 0.08, vol: 0.06, type: 'triangle' }),
-    go: () => tone(880, { len: 0.16, vol: 0.07, type: 'triangle' }),
+    go: () => notes([660, 990], 0.06, { len: 0.2, vol: 0.07, type: 'triangle' }),
+    harddrop: () => { knock({ freq: 260, len: 0.09, vol: 0.55, q: 0.8 }); tone(90, { len: 0.12, vol: 0.12, slide: 0.6 }); },
+    // Line clears rise with the number of lines; combos raise the pitch.
+    single: (combo = 0) => clearChord([523], combo),
+    double: (combo = 0) => clearChord([523, 659], combo),
+    triple: (combo = 0) => clearChord([523, 659, 784], combo),
+    quad: (combo = 0) => { clearChord([523, 659, 784, 1046], combo); tone(130, { len: 0.35, vol: 0.12, type: 'sawtooth', slide: 0.5 }); },
+    tspin: () => { notes([392, 587, 784, 1175], 0.045, { len: 0.18, vol: 0.06, type: 'square' }); tone(1568, { at: 0.2, len: 0.25, vol: 0.04 }); },
+    b2b: () => tone(1318, { at: 0.12, len: 0.22, vol: 0.05, type: 'triangle' }),
+    allclear: () => notes([523, 659, 784, 1046, 1318, 1568], 0.06, { len: 0.3, vol: 0.06, type: 'triangle' }),
+    send: (lines = 1) => tone(300 + lines * 60, { len: 0.22, vol: 0.06, type: 'sawtooth', slide: 3 }),
+    garbageRise: () => { tone(110, { len: 0.25, vol: 0.1, type: 'square', slide: 0.7 }); knock({ freq: 180, len: 0.1, vol: 0.4 }); },
+    ko: () => { tone(220, { len: 0.6, vol: 0.12, type: 'sawtooth', slide: 0.25 }); knock({ freq: 120, len: 0.25, vol: 0.6, q: 0.6 }); },
+    roundWin: () => notes([659, 784, 1046], 0.09, { len: 0.22, vol: 0.06, type: 'triangle' }),
+    roundLose: () => notes([440, 349, 294], 0.12, { len: 0.25, vol: 0.06, type: 'sine' }),
   };
 
   function play(name, arg) {

@@ -11,6 +11,7 @@ const {
 } = require('electron');
 const { Messenger, preview } = require('../core/messenger');
 const { Updater } = require('./updater');
+const { Firewall } = require('./firewall');
 const I18N = require('../shared/i18n');
 const Games = require('../shared/games');
 
@@ -39,6 +40,12 @@ let win = null;
 let tray = null;
 let messenger = null;
 let updater = null;
+let firewallHelper = null;
+function firewall() {
+  if (!firewallHelper) firewallHelper = new Firewall({ exe: process.execPath, ports: () => ({ tcp: messenger.port, udp: messenger.udpPort }) });
+  return firewallHelper;
+}
+let notifiedInstaller = null; // version we already told the user needs the installer
 let quitting = false;
 let activeConv = null;
 let autoAway = false;
@@ -480,9 +487,14 @@ function tetrisInfo(conv, id) {
     };
   }
   let over = false;
-  try { over = Games.replay('tetris', msg.game.moves, msg.game).status.over; } catch { /* ignore */ }
+  let wins = [0, 0];
+  try {
+    const r = Games.replay('tetris', msg.game.moves, msg.game);
+    over = r.status.over;
+    wins = r.state.wins;
+  } catch { /* ignore */ }
   return {
-    me: messenger.id, players: msg.game.players, people, over, language: messenger.settings.language,
+    me: messenger.id, players: msg.game.players, people, over, wins, bestOf: msg.game.bestOf || 1, language: messenger.settings.language,
     sound: messenger.settings.sound,
   };
 }
@@ -825,6 +837,8 @@ function registerIpc() {
     send('open-conv', conv);
   });
   h('restart-update', () => restartForUpdate());
+  h('firewall-status', async () => ({ ...(await firewall().check()), inbound: !!messenger.inboundOk }));
+  h('firewall-allow', async () => ({ ...(await firewall().allow()), inbound: !!messenger.inboundOk }));
   h('update-status', () => (updater ? updater.getStatus() : null));
   h('check-update', () => (updater ? updater.check({ manual: true }) : null));
   // The page reports its current colors so the window buttons match the style.
@@ -900,10 +914,25 @@ app.whenReady().then(async () => {
   wireEvents();
   updater = new Updater(messenger, {
     version: VERSION,
-    onReady: (v) => {
+    onReady: (v, { manual } = {}) => {
       updateReady = v;
       send('update-ready', v);
       updateTray();
+      // Found by the automatic check: tell the user (once per version).
+      if (!manual) {
+        showNotification({
+          title: t('Update ready: version {v}', { v }),
+          body: t('Restart LAN Messenger 2 to finish updating. Click here to see it.'),
+        }, () => openInWindow('open-updates'));
+      }
+    },
+    onInstaller: (v, page, { manual } = {}) => {
+      if (manual || notifiedInstaller === v) return;
+      notifiedInstaller = v;
+      showNotification({
+        title: t('New version {v} is available', { v }),
+        body: t('This version has to be installed from the download page. Click here to open it.'),
+      }, () => { if (/^https:\/\//.test(page)) shell.openExternal(page); });
     },
     onStatus: (st) => send('update-status', st),
   });

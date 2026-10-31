@@ -356,13 +356,39 @@ function renderMe() {
     <svg class="ico chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>`;
 }
 
+// Bottom-left: who is online, as faces and a count. Click for the list.
 function renderNet() {
-  const n = onlineCount();
+  const online = [...S.peers.values()].filter((p) => p.online).sort((a, b) => a.name.localeCompare(b.name));
+  const n = online.length;
   // The dot pulses only when the number changes: an endless pulse kept the
   // graphics card redrawing all day.
   const changed = S.onlineShown !== undefined && S.onlineShown !== n;
   S.onlineShown = n;
-  $('#netInfo').innerHTML = `<span class="pulse${changed ? ' ping' : ''}"></span>${n === 0 ? t('Looking for people…') : esc(t('Online now: {n}', { n }))}`;
+  const box = $('#netInfo');
+  box.classList.toggle('empty', !n);
+  box.title = n ? online.map((p) => p.name).join(', ') : '';
+  if (!n) {
+    box.innerHTML = `<span class="net-radar"><i></i></span>
+      <span class="net-text"><b>${esc(t('Looking for people…'))}</b><small>${esc(t('Nobody else is online yet'))}</small></span>`;
+    return;
+  }
+  const faces = online.slice(0, 3).map((p) => avatarHtml('direct', p.id, p.name, null, 'net-face')).join('');
+  box.innerHTML = `<span class="net-faces">${faces}${n > 3 ? `<span class="net-more">+${n - 3}</span>` : ''}</span>
+    <span class="net-text"><b><span class="net-dot${changed ? ' ping' : ''}"></span>${esc(t('{n} online', { n }))}</b><small>${esc(t('on your network'))}</small></span>`;
+}
+
+function netMenu() {
+  const online = [...S.peers.values()].filter((p) => p.online).sort((a, b) => a.name.localeCompare(b.name));
+  const r = $('#netInfo').getBoundingClientRect();
+  const items = online.slice(0, 20).map((p) => ({
+    icon: avatarHtml('direct', p.id, p.name, p.status, 'net-face'),
+    label: p.name,
+    hint: p.dept || statusText(p.status),
+    action: () => openConv(p.id),
+  }));
+  if (online.length > 20) items.push({ label: t('…and {n} more', { n: online.length - 20 }), action: () => {} });
+  if (!online.length) items.push({ label: t('Add a computer by IP address…'), action: settingsModal });
+  showMenu(items, r.left, r.top - Math.min(items.length, 21) * 40 - 16);
 }
 
 function renderUpdateBanner() {
@@ -1299,7 +1325,7 @@ function popoverOpen() {
 
 document.addEventListener('mousedown', (e) => {
   const pop = $('#popover');
-  if (popoverOpen() && !pop.contains(e.target) && !e.target.closest('#btnEmoji, #me, #hdrMore, #btnPlus, [data-act="quick-react"], [data-act="menu"]')) hidePopover();
+  if (popoverOpen() && !pop.contains(e.target) && !e.target.closest('#btnEmoji, #me, #hdrMore, #btnPlus, #netInfo, [data-act="quick-react"], [data-act="menu"]')) hidePopover();
 });
 
 function statusMenu() {
@@ -1674,6 +1700,29 @@ async function jumpTo(conv, msgId) {
   }
 }
 
+// Settings → Network: can other PCs connect to this one through Windows Firewall?
+function firewallBoxHtml(st) {
+  const state = st && st.inbound && st.state !== 'blocked' ? 'ok' : (st && st.state) || 'unknown';
+  const fine = state === 'ok' || state === 'off';
+  const text = {
+    checking: t('Checking Windows Firewall…'),
+    ok: t('Connection settings are OK: other PCs can connect to this PC.'),
+    off: t('Windows Firewall is off on this PC, so nothing blocks LAN Messenger 2.'),
+    blocked: t('Windows Firewall blocks LAN Messenger 2, so other PCs cannot send you files or reach you directly.'),
+    missing: t('LAN Messenger 2 is not allowed through Windows Firewall yet. Other PCs may not be able to reach this PC.'),
+    cancelled: t('Permission was not given. Try again, or ask your IT team for an administrator password.'),
+    unknown: t('Could not check Windows Firewall. If people cannot send you files, allow the app below.'),
+  }[state] || '';
+  const icon = fine ? '✅' : state === 'checking' ? '🛡️' : '⚠️';
+  const btn = fine
+    ? `<button class="btn fw-ok" disabled>✓ ${esc(t('Firewall OK'))}</button>`
+    : `<button class="btn primary" data-fw="allow"${state === 'checking' ? ' disabled' : ''}>🛡️ ${esc(t('Allow through Windows Firewall'))}</button>`;
+  return `<div class="upd-head"><span class="upd-icon">${icon}</span><div><b>${esc(t('Windows Firewall'))}</b>
+      <div class="upd-line">${esc(text)}</div>
+      ${fine || state === 'checking' ? '' : `<div class="hint">${esc(t('Windows asks for permission first; on some PCs an administrator password is needed.'))}</div>`}</div></div>
+    <div class="upd-btns">${btn}</div>`;
+}
+
 // The newest release, for PCs that cannot get an update from the network.
 const RELEASES_URL = 'https://github.com/Adfassa89/Lan-messenger-v2/releases/latest';
 
@@ -1716,7 +1765,10 @@ function updateBoxHtml(st) {
       icon = '✅';
       break;
     default:
-      line = !st || st.auto ? t('Other PCs are checked for a newer version every minute.') : t('Automatic updates are off. Use "Check for updates".');
+      line = !st || st.auto ? t('Updates are checked automatically.') : t('Automatic updates are off. Use "Check for updates".');
+  }
+  if (st && st.auto && st.nextCheck && st.state !== 'downloading' && st.state !== 'checking') {
+    line += ` ${t('Next check: {when}.', { when: new Date(st.nextCheck).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) })}`;
   }
   const extra = st && st.newest && !st.newest.compatible
     ? `<div class="hint">${esc(t("Version {v} on {name}'s PC must be installed with its installer (see the download page).", { v: st.newest.version, name: st.newest.from }))}</div>` : '';
@@ -1729,6 +1781,15 @@ function updateBoxHtml(st) {
       <button class="btn${ready || (st && st.state === 'installer') ? '' : ' primary'}" data-upd="check"${st && (st.state === 'downloading' || st.state === 'checking') ? ' disabled' : ''}>${esc(t('Check for updates'))}</button>
       <button class="btn${st && st.state === 'installer' ? ' primary' : ''}" data-upd="page">${esc(t('Open download page'))}</button>
     </div>`;
+}
+
+// A setting chosen from a list; options are [value, label] pairs.
+function selectRow(key, title, sub, options, { disabled = false } = {}) {
+  const cur = String(S.settings[key]);
+  return `<label class="toggle-row select-row${disabled ? ' disabled' : ''}"><div class="tl"><div>${esc(title)}</div>${sub ? `<div>${esc(sub)}</div>` : ''}</div>
+    <select class="input select" data-set="${key}"${typeof S.settings[key] === 'number' ? ' data-num' : ''}${disabled ? ' disabled' : ''}>
+      ${options.map(([v, l]) => `<option value="${esc(String(v))}"${String(v) === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}
+    </select></label>`;
 }
 
 function toggleRow(key, title, sub) {
@@ -1766,17 +1827,25 @@ function settingsModal() {
     <div class="section-title">${esc(t('Files'))}</div>
     <div class="field"><label>${esc(t('Save received files to'))}</label>
       <div class="row-inline"><input class="input" id="sDir" readonly value="${esc(S.settings.downloadDir)}"><button class="btn" id="sDirBtn">${esc(t('Change…'))}</button></div></div>
-    ${toggleRow('autoAccept', t('Download files automatically'), t('Files up to {n} MB download as soon as they arrive', { n: S.settings.autoAcceptMaxMB }))}
+    ${toggleRow('autoAccept', t('Receive files and folders automatically'), t('When off, every file waits until you click Download'))}
+    ${selectRow('autoAcceptMaxMB', t('Receive automatically up to'), t('Bigger files and folders wait until you click Download'), [
+    [10, '10 MB'], [25, '25 MB'], [50, '50 MB'], [100, '100 MB'], [250, '250 MB'], [500, '500 MB'],
+    [1024, '1 GB'], [2048, '2 GB'], [5120, '5 GB'], [0, t('Any size')],
+  ], { disabled: !S.settings.autoAccept })}
 
     <div class="section-title">${esc(t('Startup and updates'))}</div>
     ${S.platform === 'linux' ? '' : toggleRow('startWithWindows', t('Start when Windows starts'), t('Opens quietly in the system tray'))}
     ${toggleRow('minimizeToTray', t('Keep running in the tray when closed'), t('So you never miss a message'))}
     ${toggleRow('autoAway', t('Set me as Away when idle'), t('After 5 minutes without mouse or keyboard activity'))}
-    ${toggleRow('autoUpdate', t('Update automatically from the network'), t('Newer versions on other PCs are installed safely (digitally signed)'))}
-    ${toggleRow('internetUpdates', t('Also look for updates on the internet'), t('Every few hours, on GitHub (only the version number is asked; nothing about you is sent)'))}
+    ${toggleRow('autoUpdate', t('Check for updates automatically'), t('New versions come from other PCs on the network or from GitHub, and are digitally signed'))}
+    ${selectRow('updateEvery', t('How often'), t('You get a notification when a new version is ready'), [
+    ['hour', t('Every hour')], ['12h', t('Every 12 hours')], ['day', t('Daily')], ['week', t('Weekly')], ['month', t('Monthly')],
+  ], { disabled: !S.settings.autoUpdate })}
+    ${toggleRow('internetUpdates', t('Also look on the internet (GitHub)'), t('Only the version number is asked; nothing about you is sent'))}
     <div class="upd-box" id="sUpd">${updateBoxHtml(null)}</div>
 
     <div class="section-title">${esc(t('Network'))}</div>
+    ${S.platform === 'win32' ? `<div class="upd-box fw-box" id="sFw">${firewallBoxHtml({ state: 'checking' })}</div>` : ''}
     <div class="kv" style="margin-bottom:12px"><div>${esc(t('This PC'))}</div><div>${esc((me.addresses || []).join(', ') || t('No network'))}</div><div>${esc(t('Port'))}</div><div>${me.port || '—'}</div><div>${esc(t('Version'))}</div><div>${esc(S.version || '')}</div></div>
     <div class="field"><label>${esc(t('Add a computer by IP address'))}</label>
       <div class="row-inline"><input class="input" id="sPeer" placeholder="${esc(t('e.g. 10.20.5.31'))}"><button class="btn primary" id="sPeerBtn">${esc(t('Add'))}</button></div>
@@ -1803,7 +1872,16 @@ function settingsModal() {
     ],
     onOpen: (m, close) => {
       m.querySelectorAll('[data-set]').forEach((cb) => cb.addEventListener('change', async () => {
-        S.settings = await call(api.setSettings({ [cb.dataset.set]: cb.checked })) || S.settings;
+        let value = cb.value;
+        if (cb.type === 'checkbox') value = cb.checked;
+        else if (cb.dataset.num !== undefined) value = Number(cb.value);
+        S.settings = await call(api.setSettings({ [cb.dataset.set]: value })) || S.settings;
+        // A list that only matters when a switch is on follows that switch.
+        for (const [sw, dep] of [['autoAccept', 'autoAcceptMaxMB'], ['autoUpdate', 'updateEvery']]) {
+          if (cb.dataset.set !== sw) continue;
+          const sel = m.querySelector(`[data-set="${dep}"]`);
+          if (sel) { sel.disabled = !cb.checked; sel.closest('.select-row').classList.toggle('disabled', !cb.checked); }
+        }
       }));
       $('#sTheme', m).addEventListener('click', async (e) => {
         const b = e.target.closest('[data-v]');
@@ -1841,6 +1919,17 @@ function settingsModal() {
         drawAvatar();
         renderMe();
       });
+      // Windows Firewall: check when Settings opens, and the "Allow" button.
+      if ($('#sFw', m)) {
+        const showFw = (st) => { if ($('#sFw', m)) $('#sFw', m).innerHTML = firewallBoxHtml(st); };
+        api.firewallStatus().then(showFw).catch(() => showFw({ state: 'unknown' }));
+        $('#sFw', m).addEventListener('click', async (e) => {
+          const b = e.target.closest('[data-fw="allow"]');
+          if (!b) return;
+          showFw({ state: 'checking' });
+          showFw(await call(api.firewallAllow()) || { state: 'unknown' });
+        });
+      }
       // Updates: status, "Check for updates", "Restart now".
       const showUpd = (st) => { if (st && $('#sUpd', m)) $('#sUpd', m).innerHTML = updateBoxHtml(st); };
       api.updateStatus().then(showUpd);
@@ -2029,6 +2118,11 @@ function handleEvent({ type, payload }) {
       S.updateReady = payload;
       renderUpdateBanner();
       break;
+    case 'open-updates':
+      // From the "update ready" notification: show the Updates box.
+      if (!$('#sUpd')) settingsModal();
+      setTimeout(() => $('#sUpd')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 250);
+      break;
     case 'update-status':
       if ($('#sUpd')) $('#sUpd').innerHTML = updateBoxHtml(payload);
       break;
@@ -2044,6 +2138,7 @@ function handleEvent({ type, payload }) {
 function wire() {
   $('#me').addEventListener('click', statusMenu);
   $('#btnSettings').addEventListener('click', settingsModal);
+  $('#netInfo').addEventListener('click', () => (popoverOpen() ? hidePopover() : netMenu()));
   $('#btnNewGroup').addEventListener('click', newGroupModal);
   $('#btnSearch').addEventListener('click', searchModal);
   $('#btnPlus').addEventListener('click', () => {

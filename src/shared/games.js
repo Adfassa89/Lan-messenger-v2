@@ -442,18 +442,24 @@
   };
 
   // ------------------------------------------------------------------ tetris battle
-  // Played in real time in its own window. Only the result is stored here:
-  // a player sends { ko: true } when they top out.
+  // A match of rounds: "best of" 1, 3, 5, 7 or 9 (first to 1-5 knockouts).
+  // The knocked-out player records { ko: true }; { forfeit: true } gives up
+  // the whole match (for example by closing the window).
+  const BEST_OF = [1, 3, 5, 7, 9];
+  const bestOf = (o) => (BEST_OF.includes(Number(o && o.bestOf)) ? Number(o.bestOf) : 1);
   const tetris = {
     title: 'Tetris Battle',
     realtime: true,
-    init: () => ({ ko: null }),
+    init: (o) => ({ ko: null, wins: [0, 0], target: (bestOf(o) + 1) / 2 }),
     apply(st, m, player) {
-      if (!m.ko || st.ko !== null) throw new Error('Illegal move');
-      return { ko: player };
+      if (!m.ko && !m.forfeit) throw new Error('Illegal move');
+      const wins = st.wins.slice();
+      wins[1 - player] = m.forfeit ? st.target : wins[1 - player] + 1;
+      return { ...st, ko: player, wins };
     },
     status(st) {
-      return st.ko === null ? { over: false, turn: null } : { over: true, winner: 1 - st.ko, reason: 'ko' };
+      const w = st.wins.findIndex((n) => n >= st.target);
+      return w < 0 ? { over: false, turn: null } : { over: true, winner: w, reason: 'ko' };
     },
   };
 
@@ -483,7 +489,7 @@
     const clock = CLOCKED.includes(type) && options ? cleanClock(options.clock) : null;
     const left = clock ? [clock.base, clock.base] : null;
     const moved = [0, 0];
-    let state = rules.init();
+    let state = rules.init(options);
     let status = rules.status(state);
     let drawOffer = null;
     let ended = null; // { winner, reason } for resignations and agreed draws
@@ -532,7 +538,7 @@
     return replay(type, (entries || []).concat(entry), options);
   }
 
-  const Games = { RULES, replay, play, cleanClock, CLOCKED, TYPES: Object.keys(RULES) };
+  const Games = { RULES, replay, play, cleanClock, CLOCKED, BEST_OF, bestOf, TYPES: Object.keys(RULES) };
   if (typeof module !== 'undefined' && module.exports) module.exports = Games;
   else root.Games = Games;
 }(typeof window !== 'undefined' ? window : globalThis));

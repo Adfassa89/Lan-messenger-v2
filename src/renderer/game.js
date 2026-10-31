@@ -20,7 +20,7 @@ const Game = (() => {
   // Game preferences, kept per PC: last time control and side chosen,
   // premoves and game sounds.
   const PREFS_KEY = 'lanmsg.games.v1';
-  const prefs = { clock: 'none', ckClock: 'none', side: 'random', premoves: true, sounds: true };
+  const prefs = { clock: 'none', ckClock: 'none', side: 'random', bestOf: 3, premoves: true, sounds: true };
   try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch { /* defaults */ }
   const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* not saved */ } };
 
@@ -139,7 +139,11 @@ const Game = (() => {
     if (r.drawOffer !== null && r.drawOffer !== undefined) {
       return r.drawOffer === me ? t('Draw offered – waiting for an answer') : t('{name} offers a draw', { name: sideName(msg, r.drawOffer) });
     }
-    if (msg.game.type === 'tetris') return t('Battle ready – both players press Play');
+    if (msg.game.type === 'tetris') {
+      const w = r.state.wins || [0, 0];
+      const mine = me < 0 ? 0 : me;
+      return w[0] + w[1] ? t('Score {a} – {b}', { a: w[mine], b: w[1 - mine] }) : t('Battle ready – both players press Play');
+    }
     const turn = st.turn;
     const check = st.check ? ` · ${t('Check!')}` : '';
     return (turn === me ? t('Your turn') : t('Waiting for {name}', { name: sideName(msg, turn) })) + check;
@@ -230,7 +234,7 @@ const Game = (() => {
     const myTurn = r && !r.status.over && r.status.turn === me;
     const players = [0, 1].map((i) => `${esc(sideName(msg, i))} <small>(${esc(colorName(msg.game.type, i))})</small>`).join(` ${esc(t('vs'))} `);
     return `<div class="game-card">
-      <div class="gc-head"><span class="gc-icon">${ICONS[msg.game.type]}</span><div><b>${esc(t(TITLES[msg.game.type]))}</b>${msg.game.clock ? ` <span class="gc-clock">⏱ ${esc(clockLabel(msg.game.clock))}</span>` : ''}<div class="gc-players">${players}</div></div></div>
+      <div class="gc-head"><span class="gc-icon">${ICONS[msg.game.type]}</span><div><b>${esc(t(TITLES[msg.game.type]))}</b>${msg.game.clock ? ` <span class="gc-clock">⏱ ${esc(clockLabel(msg.game.clock))}</span>` : ''}${msg.game.bestOf > 1 ? ` <span class="gc-clock">${esc(t('Best of {n}', { n: msg.game.bestOf }))}</span>` : ''}<div class="gc-players">${players}</div></div></div>
       ${r && msg.game.type !== 'tetris' ? `<div class="gc-preview">${boardHtml(msg, r)}</div>` : ''}
       ${msg.game.type === 'tetris' ? '<div class="gc-tetris"><i class="t1"></i><i class="t2"></i><i class="t3"></i><i class="t4"></i></div>' : ''}
       <div class="gc-status${myTurn ? ' turn' : ''}">${esc(statusText(msg, r))}</div>
@@ -855,7 +859,7 @@ const Game = (() => {
       const b = e.target.closest('[data-type]');
       if (!b) return;
       const type = b.dataset.type;
-      if (type === 'chess' || type === 'checkers') return setupView(back, conv, type, done);
+      if (type === 'chess' || type === 'checkers' || type === 'tetris') return setupView(back, conv, type, done);
       done();
       const g = await call(api.createGame(conv, type));
       if (g) setTimeout(() => show(conv, g.id), 50);
@@ -864,9 +868,11 @@ const Game = (() => {
     $('#modalRoot').append(back);
   }
 
-  // Second step for chess and checkers: time control and side, then invite.
+  // Second step: time control and side for chess and checkers, match
+  // length for Tetris Battle; then the invite.
   function setupView(back, conv, type, done) {
     const m = back.querySelector('.modal');
+    if (type === 'tetris') return tetrisSetup(m, conv, done);
     const sides = type === 'chess'
       ? [['first', pieceHtml('K'), t('White')], ['random', '<span class="gs-q">?</span>', t('Random')], ['second', pieceHtml('k'), t('Black')]]
       : [['first', '<span class="ck-piece p0"></span>', t('Black')], ['random', '<span class="gs-q">?</span>', t('Random')], ['second', '<span class="ck-piece p1"></span>', t('Red')]];
@@ -901,6 +907,36 @@ const Game = (() => {
         done();
         const options = { side: prefs.side, clock: clockFromKey(prefs[clockPref(type)]) };
         const g = await call(api.createGame(conv, type, options));
+        if (g) setTimeout(() => show(conv, g.id), 50);
+      }
+    };
+  }
+
+  function tetrisSetup(m, conv, done) {
+    const draw = () => {
+      m.innerHTML = `<div class="modal-head"><h2>${ICONS.tetris} ${esc(t(TITLES.tetris))}</h2><button class="icon-btn" data-close>✕</button></div>
+        <div class="modal-body game-setup">
+          <div class="gs-label">${esc(t('Match length'))}</div>
+          <div class="gs-sides five">${Games.BEST_OF.map((n) => `<button class="gs-side${prefs.bestOf === n ? ' on' : ''}" data-bo="${n}">
+            <b class="gs-bo">${n}</b><span>${esc(n === 1 ? t('One round') : t('Best of {n}', { n }))}</span><small>${esc(t('First to {n}', { n: (n + 1) / 2 }))}</small></button>`).join('')}</div>
+        </div>
+        <div class="modal-foot"><button class="btn" data-back>${esc(t('Back'))}</button><button class="btn primary" data-go>${esc(t('Send invite'))}</button></div>`;
+      m.querySelector('[data-close]').onclick = done;
+    };
+    draw();
+    m.onclick = async (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.bo) {
+        prefs.bestOf = Number(b.dataset.bo);
+        savePrefs();
+        draw();
+      } else if (b.dataset.back !== undefined) {
+        done();
+        newGameModal(conv);
+      } else if (b.dataset.go !== undefined) {
+        done();
+        const g = await call(api.createGame(conv, 'tetris', { bestOf: prefs.bestOf }));
         if (g) setTimeout(() => show(conv, g.id), 50);
       }
     };

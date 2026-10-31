@@ -10,17 +10,17 @@ const { app, net } = require('electron');
 const { compareVersions, verifyMeta, sha256File } = require('../core/update');
 const PUBLIC_KEY = require('./update-key');
 
-const CHECK_INTERVAL = 60000;
-const INTERNET_INTERVAL = 6 * 3600000;
+// How often the automatic check runs (Settings → "Check for updates").
+const EVERY = { hour: 3600000, '12h': 12 * 3600000, day: 86400000, week: 7 * 86400000, month: 30 * 86400000 };
 const RELEASES_URL = 'https://api.github.com/repos/Adfassa89/Lan-messenger-v2/releases/latest';
 
 class Updater {
   // onStatus(status) is called whenever the update status changes, so the
   // Settings window can show what is happening.
-  constructor(messenger, { version, onReady, onStatus, releasesUrl = RELEASES_URL }) {
+  constructor(messenger, { version, onReady, onStatus, onInstaller, releasesUrl = RELEASES_URL }) {
+    this.onInstaller = onInstaller;
     this.m = messenger;
     this.releasesUrl = releasesUrl;
-    this.internetAt = 0;
     this.version = version;
     this.onReady = onReady;
     this.onStatus = onStatus || (() => {});
@@ -37,8 +37,9 @@ class Updater {
   async start() {
     this.m.infoExtras.em = this.em;
     await this._offerOwnPackage();
-    this.timer = setInterval(() => this.check(), CHECK_INTERVAL);
-    setTimeout(() => this.check(), 15000);
+    // A minute's tick decides whether the chosen schedule says it is time.
+    this.timer = setInterval(() => this._tick(), 60000);
+    setTimeout(() => this._tick(), 15000);
     // Running fine for a while: reset the crash counter of a booted update.
     setTimeout(() => this._markHealthy(), 30000);
   }
@@ -81,6 +82,16 @@ class Updater {
     } catch { /* ignore */ }
   }
 
+  _every() {
+    return EVERY[this.m.settings.updateEvery] || EVERY.day;
+  }
+
+  _tick() {
+    if (!this.m.settings.autoUpdate) return;
+    if (Date.now() - (this.m.config.updateCheckedAt || 0) < this._every()) return;
+    this.check();
+  }
+
   getStatus() {
     // The newest version anyone on the network runs, even one this PC cannot
     // take over the network (a different Electron version needs the installer).
@@ -89,7 +100,11 @@ class Updater {
       if (!p.online || !p.upd || compareVersions(p.upd, this.staged || this.version) <= 0) continue;
       if (!newest || compareVersions(p.upd, newest.version) > 0) newest = { version: p.upd, from: p.name, compatible: p.em === this.em };
     }
-    return { ...this.status, current: this.version, staged: this.staged, newest, auto: !!this.m.settings.autoUpdate };
+    const last = this.m.config.updateCheckedAt || 0;
+    return {
+      ...this.status, current: this.version, staged: this.staged, newest, auto: !!this.m.settings.autoUpdate,
+      lastCheck: last, nextCheck: this.m.settings.autoUpdate ? Math.max(Date.now(), last + this._every()) : 0,
+    };
   }
 
   _set(patch) {
@@ -111,20 +126,22 @@ class Updater {
     return best;
   }
 
-  // Runs every minute when automatic updates are on (the internet only every
-  // few hours); manual = the "Check for updates" button, which works even
-  // when they are off and always looks on the internet too.
+  // Runs on the chosen schedule when automatic checks are on; manual = the
+  // "Check for updates" button, which works even when they are off and
+  // always looks on the internet too. Looks on the network first.
   async check({ manual = false } = {}) {
     if (this.busy) return this.getStatus();
+    this.manual = manual;
     if (!app.isPackaged) {
       if (manual) this._set({ state: 'dev', checkedAt: Date.now() });
       return this.getStatus();
     }
     if (!manual && !this.m.settings.autoUpdate) return this.getStatus();
+    this.m.config.updateCheckedAt = Date.now();
+    if (this.m.store) this.m.store.touch('config');
     const peer = this._candidate(manual);
     if (peer) return this._fromPeer(peer);
-    const internet = manual || (this.m.settings.internetUpdates !== false && Date.now() - this.internetAt > INTERNET_INTERVAL);
-    if (internet) return this._fromInternet();
+    if (manual || this.m.settings.internetUpdates !== false) return this._fromInternet();
     if (this.status.state !== 'installer') this._set({ state: this.staged ? 'ready' : 'none', checkedAt: Date.now(), error: null });
     return this.getStatus();
   }
@@ -152,7 +169,6 @@ class Updater {
   // The newest release on GitHub. Its app.asar.sig must carry our signature.
   async _fromInternet() {
     this.busy = true;
-    this.internetAt = Date.now();
     const current = this.staged || this.version;
     this._set({ state: 'checking', checkedAt: Date.now(), error: null });
     let tmp = null;
@@ -175,7 +191,10 @@ class Updater {
       const asset = (name) => (rel.assets || []).find((x) => x.name === name);
       const sigAsset = asset('app.asar.sig');
       const asarAsset = asset('app.asar');
-      const installer = () => this._set({ state: 'installer', target: version, page, internet: 'newer' });
+      const installer = () => {
+        this._set({ state: 'installer', target: version, page, internet: 'newer' });
+        if (this.onInstaller) this.onInstaller(version, page, { manual: this.manual });
+      };
       if (!sigAsset || !asarAsset) {
         installer();
         return this.getStatus();
@@ -247,7 +266,7 @@ class Updater {
     this._cleanup(file);
     this.staged = version;
     this._set({ state: 'ready', target: version });
-    this.onReady(version);
+    this.onReady(version, { manual: this.manual });
   }
 
   // Keep only the newest downloaded update (and the one we are running).
