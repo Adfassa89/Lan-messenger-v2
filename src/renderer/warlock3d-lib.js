@@ -672,3 +672,25 @@ export function addLavaHeat(mat, uniforms) {
   mat.customProgramCacheKey = () => 'lavaheat';
   return mat;
 }
+
+// Recolours the strongly red parts of a texture (cloth, cape) to the
+// player's colour, keeping their shading; gold, skin and the orb stay.
+export function addTeamColor(mat, color) {
+  const prev = mat.onBeforeCompile;
+  mat.userData.team = { value: col(color) };
+  mat.onBeforeCompile = (shader, r) => {
+    if (prev) prev(shader, r);
+    shader.uniforms.uTeam = mat.userData.team;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uTeam;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        {
+          vec3 c = diffuseColor.rgb;
+          float red = smoothstep(0.02, 0.08, c.r - max(c.g, c.b) * 1.8) * step(c.g, c.r * 0.45);
+          float lum = dot(c, vec3(0.6, 0.3, 0.1));
+          diffuseColor.rgb = mix(c, uTeam * lum * 2.2, red);
+        }`);
+  };
+  mat.customProgramCacheKey = () => 'rim-team';
+  return mat;
+}

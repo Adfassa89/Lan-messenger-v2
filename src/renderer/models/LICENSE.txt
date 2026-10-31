@@ -1,4 +1,4 @@
-warlock.glb: "Hooded Adventurer" from Quaternius's Ultimate Animated Character Pack
-(https://quaternius.com), released under CC0 1.0 (public domain). Taken from the npm package
-@netforge/asset-library-files (which records the licence per asset) and decompressed
-(meshopt removed) so it loads without WebAssembly.
+warlock.glb: "red_super_wizard" by letmetankher (https://sketchfab.com/letmetankher),
+https://sketchfab.com/3d-models/red-super-wizard-26193351377c48d59ef5e2dddf4f8596
+licensed under Creative Commons Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/).
+Used unchanged; in the game its red cloth is recoloured to each player's colour.

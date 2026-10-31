@@ -10,16 +10,16 @@ import { OutputPass } from './vendor/three/postprocessing/OutputPass.js';
 import { GLTFLoader } from './vendor/three/loaders/GLTFLoader.js';
 import * as SkeletonUtils from './vendor/three/utils/SkeletonUtils.js';
 import {
-  rand, col, Particles, particleAtlas, TILE_GLOW, TILE_FLAME, TILE_SMOKE, TILE_SPARK,
+  rand, col, Particles, particleAtlas, addTeamColor, TILE_GLOW, TILE_FLAME, TILE_SMOKE, TILE_SPARK,
   lavaMaterial, orbMaterial, bubbleMaterial, shockMaterial, beamMaterial, swirlMaterial, ribbonMaterial, HazeShader,
   stoneTexture, clothTexture, scorchTexture, magmaRockTexture, addRim, addLavaHeat,
 } from './warlock3d-lib.js';
 
 const { TILE, RADIUS, COLORS, SPELLS } = window.Warlock;
 const MODEL_SCALE = 1.6;
-const MODEL_HEIGHT = 200; // the animated model, in arena units (it is 1.84 m tall)
-// Parts of the animated model dyed in the player's colour.
-const DYED = { LightBrown: 1, Brown2: 0.55, DarkBrown: 0.35 };
+const MODEL_HEIGHT = 210; // the animated model with its staff, in arena units
+const MODEL_CLIPS = { Idle: 'wizard_fight_idle', Run: 'wizard_run', Cast: 'wizard_attack1', Death: 'wizard_dead' };
+const MODEL_HIT = 0.46; // seconds into the attack clip when the staff swing lands
 const PITCH = 0.98; // camera angle above the ground (~56°)
 const FOV = 40;
 const FOLLOW_DIST = 2050;
@@ -438,13 +438,15 @@ export class View {
     };
   }
 
-  // The animated model: skinned mesh with Idle, Run, cast, hit and death clips.
+  // The animated hero model ("Red Super Wizard" by letmetankher, CC BY 4.0):
+  // its red cloth is recoloured to the player's colour in the shader.
   makeModelWarlock(color) {
     const main = col(color);
     const rimCol = new THREE.Color(1.0, 0.45, 0.15).lerp(main, 0.25);
+    const info = this.modelInfo();
     const root = new THREE.Group();
     const model = SkeletonUtils.clone(this.gltf.scene);
-    model.scale.setScalar(MODEL_HEIGHT / 1.84);
+    model.scale.setScalar(info.scale);
     model.rotation.y = Math.PI / 2; // the model faces +Z; the game's facing 0 is +X
     root.add(model);
     const mats = [];
@@ -453,76 +455,83 @@ export class View {
       o.castShadow = true;
       o.frustumCulled = false;
       const m = o.material.clone();
-      if (DYED[m.name] !== undefined) m.color.copy(main).multiplyScalar(DYED[m.name]);
-      if (m.name === 'Black') m.color.copy(main).multiplyScalar(0.12);
-      addRim(m, rimCol, 0.7);
+      addTeamColor(addRim(m, rimCol, 0.6), main);
       mats.push(m);
       o.material = m;
     });
-    // Swap the sword for a staff: same bone, centred on the grip, crystal on top.
-    const sword = model.getObjectByName('Sword');
-    const crystalMat = new THREE.MeshBasicMaterial({ color: main.clone().lerp(new THREE.Color(1, 0.75, 0.4), 0.45).multiplyScalar(1.7) });
-    const staff = new THREE.Group();
-    const woodMat = addRim(new THREE.MeshStandardMaterial({ color: 0x4a2c16, roughness: 0.75 }), rimCol, 0.7);
-    const ironMat = addRim(new THREE.MeshStandardMaterial({ color: 0x7a6a58, roughness: 0.4, metalness: 0.75 }), rimCol, 0.7);
-    mats.push(woodMat, ironMat);
-    const curve = new THREE.CatmullRomCurve3([V(0, -95, 0), V(2, -50, 1.5), V(-1.5, 0, -1), V(2, 45, 1), V(0, 88, 0), V(-3, 98, 0)]);
-    const pole = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 3.4, 8), woodMat);
-    pole.castShadow = true;
-    staff.add(pole);
-    for (let k = 0; k < 3; k++) {
-      const a = (k / 3) * TAU;
-      const claw = new THREE.Mesh(new THREE.ConeGeometry(2.2, 20, 6), ironMat);
-      claw.position.set(Math.cos(a) * 7, 106, Math.sin(a) * 7);
-      claw.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5);
-      staff.add(claw);
-    }
-    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(8.5, 0), crystalMat);
-    crystal.position.y = 112;
-    crystal.scale.set(0.8, 1.5, 0.8);
-    staff.add(crystal);
-    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow(), color: crystalMat.color.clone().multiplyScalar(0.5), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-    halo.scale.setScalar(40);
-    crystal.add(halo);
-    if (sword) {
-      sword.visible = false;
-      sword.parent.add(staff);
-      staff.position.copy(sword.position);
-      staff.quaternion.copy(sword.quaternion);
-      model.updateMatrixWorld(true);
-      const ws = V();
-      sword.getWorldScale(ws);
-      staff.scale.setScalar(sword.scale.x / ws.x);
-    } else model.add(staff);
-    // Magic gathering in the free (left) hand.
+    const bone = (re) => { let f = null; model.traverse((o) => { if (!f && o.isBone && re.test(o.name)) f = o; }); return f; };
+    // Glow on the staff's orb and in the free hand, in the colour of the spell.
+    const prop = bone(/Prop1/);
+    const crystalMat = new THREE.SpriteMaterial({ map: this.glow(), color: col('#ffae50').multiplyScalar(0.8), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+    const crystal = new THREE.Sprite(crystalMat);
+    if (prop) {
+      prop.add(crystal);
+      crystal.position.copy(info.orb);
+    } else model.add(crystal);
+    model.updateMatrixWorld(true);
+    const ws = V();
+    crystal.getWorldScale(ws);
+    crystal.scale.multiplyScalar(60 / ws.x);
     const handGlowMat = new THREE.MeshBasicMaterial({ color: col('#ff7a1a').multiplyScalar(3), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
     const handGlow = new THREE.Mesh(this.sphereGeo, handGlowMat);
-    const wristL = model.getObjectByName('Wrist.L') || model;
-    wristL.add(handGlow);
+    const handL = bone(/L_?Hand/) || model;
+    handL.add(handGlow);
     model.updateMatrixWorld(true);
-    const wsl = V();
-    wristL.getWorldScale(wsl);
-    handGlow.scale.setScalar(10 / wsl.x);
-    // Animations.
+    handGlow.getWorldScale(ws);
+    handGlow.scale.multiplyScalar(11 / ws.x);
+    // Animations: idle, run, the staff attack for casting, death.
     const mixer = new THREE.AnimationMixer(model);
-    const clip = (n) => this.gltf.animations.find((a) => a.name.endsWith(`|${n}`));
     const actions = {};
-    for (const n of ['Idle', 'Run', 'Walk', 'Sword_Slash', 'Punch_Left', 'HitRecieve', 'Death', 'Wave']) {
-      const c = clip(n);
-      if (c) actions[n] = mixer.clipAction(c);
+    for (const [k, name] of Object.entries(MODEL_CLIPS)) {
+      const c = this.gltf.animations.find((a) => a.name === name);
+      if (c) actions[k] = mixer.clipAction(c);
     }
-    for (const n of ['Sword_Slash', 'Punch_Left', 'HitRecieve', 'Death']) {
-      if (!actions[n]) continue;
-      actions[n].setLoop(THREE.LoopOnce, 1);
-      actions[n].clampWhenFinished = true;
+    for (const k of ['Cast', 'Death']) {
+      if (!actions[k]) continue;
+      actions[k].setLoop(THREE.LoopOnce, 1);
+      actions[k].clampWhenFinished = true;
     }
     if (actions.Idle) actions.Idle.play();
     const extras = this.pawnExtras(root, main);
     this.scene.add(root);
     return {
-      ...extras, root, model, mixer, actions, cur: 'Idle', staff, crystal, crystalMat, crystalBase: crystalMat.color.clone(), handGlow, handGlowMat, mats,
+      ...extras, root, model, mixer, actions, cur: 'Idle', crystal, crystalMat, crystalBase: crystalMat.color.clone(), handGlow, handGlowMat, mats,
       x: 0, y: 0, f: 0, seen: false, run: 0, slide: 0, speed: 0, hitT: -9, rel: null, wind: 0, windKey: '', death: null, invis: false,
     };
+  }
+
+  // Size of the model and where its staff's orb sits (measured once).
+  modelInfo() {
+    if (this.info) return this.info;
+    const scene = this.gltf.scene;
+    scene.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(scene);
+    const h = box.max.y - box.min.y || 1;
+    // The orb is the far end of the staff: the vertices bound to the prop bone
+    // that lie furthest from it.
+    const orb = V(0, 0, 0);
+    scene.traverse((o) => {
+      if (!o.isSkinnedMesh) return;
+      const j = o.skeleton.bones.findIndex((b) => /Prop1/.test(b.name));
+      if (j < 0) return;
+      const pos = o.geometry.attributes.position;
+      const si = o.geometry.attributes.skinIndex;
+      const sw = o.geometry.attributes.skinWeight;
+      const toBone = o.skeleton.boneInverses[j].clone().multiply(o.bindMatrix);
+      const v = V();
+      let best = -1;
+      for (let i = 0; i < pos.count; i++) {
+        let w = 0;
+        for (let c = 0; c < 4; c++) if (si.getComponent(i, c) === j) w += sw.getComponent(i, c);
+        if (w < 0.5) continue;
+        v.fromBufferAttribute(pos, i).applyMatrix4(toBone);
+        const d = v.length();
+        if (d > best) { best = d; orb.copy(v); }
+      }
+      orb.multiplyScalar(0.9);
+    });
+    this.info = { scale: MODEL_HEIGHT / h, orb };
+    return this.info;
   }
 
   // Selection circle, shadow blob, bubbles and the name label (both kinds of model).
@@ -593,47 +602,41 @@ export class View {
     w.run = approach(w.run, walking ? 1 : 0, dt, 10);
     const relAge = w.rel ? t - w.rel.t : 9;
     const castKey = p.cast ? p.cs : relAge < 0.6 ? w.rel.k : '';
-    const sym = NO_AIM.includes(castKey);
-    if (p.cast && w.castStart === undefined) w.castStart = t;
-    if (!p.cast && relAge > 0.05) w.castStart = undefined;
-    if (p.cast || (relAge < 0.6 && !walking)) {
-      // The swing's hit frame (~40% in) lines up with the end of the cast point.
-      const name = sym ? (castKey === 'scourge' ? 'Sword_Slash' : 'Wave') : 'Sword_Slash';
-      const clip = w.actions[name];
-      if (clip) {
-        const castPoint = castKey && SPELLS[castKey] ? SPELLS[castKey].cast : 0.2;
-        const hit = clip.getClip().duration * 0.4;
-        clip.timeScale = castPoint > 0.05 ? hit / castPoint : 2.2;
-        if (w.cur !== name || (p.cast && w.castStart === t)) this.play(w, name, 0.08, true);
+    const castPoint = castKey && SPELLS[castKey] ? SPELLS[castKey].cast : 0.2;
+    if (p.cast && !w.casting) { w.casting = true; w.castStart = t; }
+    if (!p.cast) w.casting = false;
+    const cast = w.actions.Cast;
+    if (cast && (p.cast || (relAge < 0.6 && !walking))) {
+      // Dota timing: the swing lands when the spell leaves (end of the cast
+      // point), then the backswing plays out unless the warlock walks away.
+      const started = p.cast ? w.castStart === t : relAge <= dt * 1.5 && w.cur !== 'Cast';
+      cast.timeScale = castPoint > 0.05 ? MODEL_HIT / castPoint : MODEL_HIT / 0.12;
+      if (started || w.cur !== 'Cast') {
+        this.play(w, 'Cast', 0.06, true);
+        // Instant spells start the swing at the hit, so the effect and the swing line up.
+        if (castPoint <= 0.05 && !p.cast) cast.time = MODEL_HIT * 0.6;
       }
     } else if (walking) {
       this.play(w, 'Run', 0.15);
-      if (w.actions.Run) w.actions.Run.timeScale = Math.max(0.6, speed / 260);
-    } else if (t - w.hitT < 0.35 && w.actions.HitRecieve) {
-      if (w.cur !== 'HitRecieve') this.play(w, 'HitRecieve', 0.06, true);
+      if (w.actions.Run) w.actions.Run.timeScale = Math.max(0.6, speed / 230);
     } else {
       this.play(w, 'Idle', 0.2);
     }
     w.mixer.update(dt);
+    // Knocked back: the body leans away while sliding.
+    const sliding = !p.mv && !p.cast && speed > 140;
+    w.slide = approach(w.slide, sliding ? 1 : 0, dt, 8);
+    const hit = Math.max(0, 1 - (t - w.hitT) / 0.3);
+    w.model.rotation.z = approach(w.model.rotation.z, 0.25 * w.slide + 0.18 * hit, dt, 14);
     // Glows.
     const magic = p.cast ? Math.max(0.3, p.cp) : relAge < 0.3 ? 1 - relAge / 0.3 : 0;
-    // Keep the staff upright like a wizard's, leaning it forward at the target
-    // through the cast and swinging back after.
-    const swing = p.cast ? -0.5 * Math.max(0.3, p.cp) : relAge < 0.6 ? (relAge < 0.1 ? relAge / 0.1 : 1 - (relAge - 0.1) / 0.5) * 1.3 : 0;
-    w.tilt = approach(w.tilt || 0, 0.12 + swing + 0.15 * w.run, dt, 18);
-    const parent = w.staff.parent;
-    w.root.updateMatrixWorld(true);
-    const pq = parent.getWorldQuaternion(new THREE.Quaternion());
-    const want = w.root.quaternion.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -w.tilt)));
-    w.staff.quaternion.copy(pq.invert().multiply(want));
-    w.crystal.rotation.y += dt * 1.5;
-    w.crystalMat.color.copy(w.crystalBase).multiplyScalar(1 + magic * 1.5 + 0.15 * Math.sin(t * 4));
+    const spellCol = castKey && SPELL_COLOR[castKey];
+    w.crystalMat.color.copy(spellCol && magic > 0 ? col(spellCol) : w.crystalBase).multiplyScalar(0.8 + magic * 1.6 + 0.12 * Math.sin(t * 4));
     w.handGlowMat.opacity = Math.min(1, magic * 1.2);
-    if (castKey && SPELL_COLOR[castKey]) w.handGlowMat.color.set(SPELL_COLOR[castKey]).multiplyScalar(3);
-    const hit = Math.max(0, 1 - (t - w.hitT) / 0.3);
+    if (spellCol) w.handGlowMat.color.set(spellCol).multiplyScalar(3);
     const burn = onLava ? 0.35 + 0.15 * Math.sin(t * 20) : 0;
     for (const m of w.mats) {
-      if (m.userData.flash) m.userData.flash.value = hit * 1.4;
+      if (m.userData.flash) m.userData.flash.value = hit * 0.7;
       m.emissive.setRGB(burn, burn * 0.25, burn * 0.03);
     }
   }
@@ -841,7 +844,7 @@ export class View {
     const onLava = this.onLava(w.death.x, w.death.y, this.builtLayer);
     w.root.position.set(w.death.x, (onLava ? -12 : 0) - k * k * 160, w.death.y);
     if (w.model) {
-      if (w.cur !== 'Death') this.play(w, 'Death', 0.1, true);
+      if (w.cur !== 'Death') { this.play(w, 'Death', 0.1, true); if (w.actions.Death) w.actions.Death.timeScale = 1.2; }
       w.mixer.update(dt);
       for (const m of w.mats) { m.emissive.setRGB(1.2 * k, 0.3 * k, 0.03); if (m.userData.flash) m.userData.flash.value = 0; }
       if (Math.random() < dt * 60) this.fire.add({ p: [w.death.x + rand(-30, 30), rand(0, 90) - k * 100, w.death.y + rand(-30, 30)], v: [rand(-30, 30), rand(150, 300), rand(-30, 30)], c0: col('#ffe090'), c1: col('#b01800'), size: rand(26, 46), size1: 8, life: 0.6, tile: TILE_FLAME });
