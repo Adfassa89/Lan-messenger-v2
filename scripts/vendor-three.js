@@ -12,10 +12,13 @@ const files = [
   'postprocessing/EffectComposer.js', 'postprocessing/RenderPass.js', 'postprocessing/UnrealBloomPass.js',
   'postprocessing/OutputPass.js', 'postprocessing/ShaderPass.js', 'postprocessing/MaskPass.js', 'postprocessing/Pass.js',
   'shaders/CopyShader.js', 'shaders/LuminosityHighPassShader.js', 'shaders/OutputShader.js',
+  'loaders/GLTFLoader.js', 'utils/BufferGeometryUtils.js', 'utils/SkeletonUtils.js',
 ];
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(path.join(out, 'postprocessing'), { recursive: true });
 fs.mkdirSync(path.join(out, 'shaders'), { recursive: true });
+fs.mkdirSync(path.join(out, 'loaders'), { recursive: true });
+fs.mkdirSync(path.join(out, 'utils'), { recursive: true });
 fs.copyFileSync(path.join(src, 'build', 'three.module.min.js'), path.join(out, 'three.module.min.js'));
 fs.copyFileSync(path.join(src, 'LICENSE'), path.join(out, 'LICENSE'));
 for (const f of files) {

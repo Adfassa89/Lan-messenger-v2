@@ -1,0 +1,5 @@
+src/renderer/vendor/game-icons.js was generated from the npm package
+@iconify-json/game-icons (Game-icons.net, CC BY 3.0) by picking these icons:
+fireball, pentacle, lightning-branches, magic-swirl, boomerang, teleport, charging,
+body-swapping, fireflake, double-ringed-orb, meteor-impact, invisible, shield-reflect,
+run, vortex, andromeda-chain, diamond-ring, cloak, breastplate, leather-boot, warlock-hood.

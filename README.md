@@ -172,3 +172,8 @@ Third-party parts keep their own licenses (see Credits).
   `scripts/make-pieces.py` turns it into `src/renderer/pieces.css`.
 - 3D graphics: [three.js](https://threejs.org) by the three.js authors, licensed MIT
   (`src/renderer/vendor/three`, copied by `scripts/vendor-three.js`).
+- Warlock hero model and animations: "Hooded Adventurer" from the Ultimate Animated Character Pack by
+  [Quaternius](https://quaternius.com), CC0 (`src/renderer/models`).
+- Spell and item icon shapes: [Game-icons.net](https://game-icons.net) by Lorc, Delapouite and contributors,
+  licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) (`src/renderer/vendor/game-icons.js`);
+  painted in-app by `src/renderer/warlock-icons.js`.

@@ -112,14 +112,14 @@ test('Dota turning: walk and cast only once facing the target', () => {
   sim.input('p0', { move: [-1000, 0] }); // straight behind
   sim.step();
   assert.strictEqual(Math.round(a.x), 0, 'turns on the spot first');
-  run(sim, 0.2); // 180 degrees take about 0.175 s
+  run(sim, 0.12); // 180 degrees take about 0.09 s (turn rate 1.2)
   assert.ok(Math.abs(Math.abs(a.face) - Math.PI) < 0.01, 'faces the target');
   assert.ok(a.x < -1, 'then walks');
   // A fireball behind: turn, 0.2 s cast point, then the fireball.
   a.face = 0; a.cd = {};
   sim.input('p0', { cast: 0, x: -1000, y: 0 });
-  run(sim, 0.12);
-  assert.ok(!sim.projectiles.some((b) => b.k === 'fireball'), 'still turning');
+  run(sim, 0.07);
+  assert.ok(!sim.projectiles.some((b) => b.k === 'fireball'), 'still turning or winding up');
   run(sim, 0.4);
   assert.ok(sim.projectiles.some((b) => b.k === 'fireball' && b.vx < 0), 'fireball flies backwards');
 });

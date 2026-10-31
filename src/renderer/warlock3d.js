@@ -7,6 +7,8 @@ import { RenderPass } from './vendor/three/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './vendor/three/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from './vendor/three/postprocessing/ShaderPass.js';
 import { OutputPass } from './vendor/three/postprocessing/OutputPass.js';
+import { GLTFLoader } from './vendor/three/loaders/GLTFLoader.js';
+import * as SkeletonUtils from './vendor/three/utils/SkeletonUtils.js';
 import {
   rand, col, Particles, particleAtlas, TILE_GLOW, TILE_FLAME, TILE_SMOKE, TILE_SPARK,
   lavaMaterial, orbMaterial, bubbleMaterial, shockMaterial, beamMaterial, swirlMaterial, ribbonMaterial, HazeShader,
@@ -15,6 +17,9 @@ import {
 
 const { TILE, RADIUS, COLORS, SPELLS } = window.Warlock;
 const MODEL_SCALE = 1.6;
+const MODEL_HEIGHT = 200; // the animated model, in arena units (it is 1.84 m tall)
+// Parts of the animated model dyed in the player's colour.
+const DYED = { LightBrown: 1, Brown2: 0.55, DarkBrown: 0.35 };
 const PITCH = 0.98; // camera angle above the ground (~56°)
 const FOV = 40;
 const FOLLOW_DIST = 2050;
@@ -141,6 +146,10 @@ export class View {
     this.pawns = new Map();
     this.balls = new Map();
     this.debris = this.makeDebris();
+    this.selected = null;
+    // The animated hero model (Quaternius, CC0). Until it loads, or if it
+    // cannot, the built-in procedural warlock is used.
+    new GLTFLoader().load('models/warlock.glb', (g) => { this.gltf = g; }, undefined, (err) => console.warn('warlock model', err));
 
     this.moveMark = new THREE.Mesh(this.discGeo, shockMaterial('#4dff6a'));
     this.moveMark.visible = false;
@@ -419,33 +428,214 @@ export class View {
       cape.push(seg);
       parent = seg;
     }
-    // Shadow blob and the selection ring in the player's colour.
+    root.scale.setScalar(MODEL_SCALE);
+    this.scene.add(root);
+    const extras = this.pawnExtras(root, main);
+    const mats = [robeMat, darkMat, goldMat, ironMat, skinMat, beardMat, woodMat, leatherMat, pageMat];
+    return {
+      ...extras, root, hips, skirt, spine, head, L, R, staff, crystal, crystalMat, crystalBase: crystalMat.color.clone(), handGlow, handGlowMat, tomePivot, cape, mats,
+      x: 0, y: 0, f: 0, seen: false, run: 0, slide: 0, speed: 0, phase: 0, hitT: -9, rel: null, wind: 0, windKey: '', death: null, invis: false, pose: {},
+    };
+  }
+
+  // The animated model: skinned mesh with Idle, Run, cast, hit and death clips.
+  makeModelWarlock(color) {
+    const main = col(color);
+    const rimCol = new THREE.Color(1.0, 0.45, 0.15).lerp(main, 0.25);
+    const root = new THREE.Group();
+    const model = SkeletonUtils.clone(this.gltf.scene);
+    model.scale.setScalar(MODEL_HEIGHT / 1.84);
+    model.rotation.y = Math.PI / 2; // the model faces +Z; the game's facing 0 is +X
+    root.add(model);
+    const mats = [];
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true;
+      o.frustumCulled = false;
+      const m = o.material.clone();
+      if (DYED[m.name] !== undefined) m.color.copy(main).multiplyScalar(DYED[m.name]);
+      if (m.name === 'Black') m.color.copy(main).multiplyScalar(0.12);
+      addRim(m, rimCol, 0.7);
+      mats.push(m);
+      o.material = m;
+    });
+    // Swap the sword for a staff: same bone, centred on the grip, crystal on top.
+    const sword = model.getObjectByName('Sword');
+    const crystalMat = new THREE.MeshBasicMaterial({ color: main.clone().lerp(new THREE.Color(1, 0.75, 0.4), 0.45).multiplyScalar(1.7) });
+    const staff = new THREE.Group();
+    const woodMat = addRim(new THREE.MeshStandardMaterial({ color: 0x4a2c16, roughness: 0.75 }), rimCol, 0.7);
+    const ironMat = addRim(new THREE.MeshStandardMaterial({ color: 0x7a6a58, roughness: 0.4, metalness: 0.75 }), rimCol, 0.7);
+    mats.push(woodMat, ironMat);
+    const curve = new THREE.CatmullRomCurve3([V(0, -95, 0), V(2, -50, 1.5), V(-1.5, 0, -1), V(2, 45, 1), V(0, 88, 0), V(-3, 98, 0)]);
+    const pole = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 3.4, 8), woodMat);
+    pole.castShadow = true;
+    staff.add(pole);
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * TAU;
+      const claw = new THREE.Mesh(new THREE.ConeGeometry(2.2, 20, 6), ironMat);
+      claw.position.set(Math.cos(a) * 7, 106, Math.sin(a) * 7);
+      claw.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5);
+      staff.add(claw);
+    }
+    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(8.5, 0), crystalMat);
+    crystal.position.y = 112;
+    crystal.scale.set(0.8, 1.5, 0.8);
+    staff.add(crystal);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow(), color: crystalMat.color.clone().multiplyScalar(0.5), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    halo.scale.setScalar(40);
+    crystal.add(halo);
+    if (sword) {
+      sword.visible = false;
+      sword.parent.add(staff);
+      staff.position.copy(sword.position);
+      staff.quaternion.copy(sword.quaternion);
+      model.updateMatrixWorld(true);
+      const ws = V();
+      sword.getWorldScale(ws);
+      staff.scale.setScalar(sword.scale.x / ws.x);
+    } else model.add(staff);
+    // Magic gathering in the free (left) hand.
+    const handGlowMat = new THREE.MeshBasicMaterial({ color: col('#ff7a1a').multiplyScalar(3), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+    const handGlow = new THREE.Mesh(this.sphereGeo, handGlowMat);
+    const wristL = model.getObjectByName('Wrist.L') || model;
+    wristL.add(handGlow);
+    model.updateMatrixWorld(true);
+    const wsl = V();
+    wristL.getWorldScale(wsl);
+    handGlow.scale.setScalar(10 / wsl.x);
+    // Animations.
+    const mixer = new THREE.AnimationMixer(model);
+    const clip = (n) => this.gltf.animations.find((a) => a.name.endsWith(`|${n}`));
+    const actions = {};
+    for (const n of ['Idle', 'Run', 'Walk', 'Sword_Slash', 'Punch_Left', 'HitRecieve', 'Death', 'Wave']) {
+      const c = clip(n);
+      if (c) actions[n] = mixer.clipAction(c);
+    }
+    for (const n of ['Sword_Slash', 'Punch_Left', 'HitRecieve', 'Death']) {
+      if (!actions[n]) continue;
+      actions[n].setLoop(THREE.LoopOnce, 1);
+      actions[n].clampWhenFinished = true;
+    }
+    if (actions.Idle) actions.Idle.play();
+    const extras = this.pawnExtras(root, main);
+    this.scene.add(root);
+    return {
+      ...extras, root, model, mixer, actions, cur: 'Idle', staff, crystal, crystalMat, crystalBase: crystalMat.color.clone(), handGlow, handGlowMat, mats,
+      x: 0, y: 0, f: 0, seen: false, run: 0, slide: 0, speed: 0, hitT: -9, rel: null, wind: 0, windKey: '', death: null, invis: false,
+    };
+  }
+
+  // Selection circle, shadow blob, bubbles and the name label (both kinds of model).
+  pawnExtras(root, main) {
+    const k = 1 / root.scale.x; // sizes below are in arena units
     const blob = new THREE.Mesh(this.discGeo, new THREE.MeshBasicMaterial({ map: this.glow(), color: 0x000000, transparent: true, opacity: 0.55, depthWrite: false }));
-    blob.scale.setScalar(34);
+    blob.scale.setScalar(55 * k);
     blob.position.y = 1.5;
     root.add(blob);
     const circle = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: main.clone().multiplyScalar(1.8), transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
-    circle.scale.setScalar((RADIUS * 1.25) / MODEL_SCALE);
+    circle.scale.setScalar(RADIUS * 1.25 * k);
     circle.position.y = 2;
     root.add(circle);
-    root.scale.setScalar(MODEL_SCALE);
-    this.scene.add(root);
-
+    // Dota-style selection ring: green on your hero, red on an enemy.
+    const sel = new THREE.Mesh(this.discGeo, shockMaterial('#40ff60'));
+    sel.position.y = 3;
+    sel.scale.setScalar(70 * k);
+    sel.visible = false;
+    sel.material.uniforms.uProg.value = 0.82;
+    sel.material.uniforms.uWidth.value = 0.07;
+    root.add(sel);
     const shield = new THREE.Mesh(this.sphereGeo, bubbleMaterial('#7fd2ff'));
     shield.visible = false;
     this.scene.add(shield);
     const spawn = new THREE.Mesh(this.sphereGeo, bubbleMaterial('#ffd77a', false));
     spawn.visible = false;
     this.scene.add(spawn);
-    const mats = [robeMat, darkMat, goldMat, ironMat, skinMat, beardMat, woodMat, leatherMat, pageMat];
     const label = document.createElement('div');
     label.className = 'lbl';
     label.innerHTML = '<b></b><div class="bar"><i></i></div><small></small>';
     this.labels.append(label);
-    return {
-      root, hips, skirt, spine, head, L, R, staff, crystal, crystalMat, crystalBase: crystalMat.color.clone(), handGlow, handGlowMat, tomePivot, cape, circle, shield, spawn, mats, label,
-      x: 0, y: 0, f: 0, seen: false, run: 0, slide: 0, speed: 0, phase: 0, hitT: -9, rel: null, wind: 0, windKey: '', death: null, invis: false, pose: {},
-    };
+    return { circle, sel, shield, spawn, label };
+  }
+
+  // Which warlock is under the mouse (for selecting it), or null.
+  pawnAt(cx, cy, me) {
+    let best = null;
+    let bd = 60;
+    for (const [id, w] of this.pawns) {
+      if (!w.root.visible || w.death || (w.invis && id !== me)) continue;
+      const [sx, sy] = this.toScreen(w.x, w.y, 90);
+      const d = Math.hypot(sx - cx, sy - cy);
+      if (d < bd) { bd = d; best = id; }
+    }
+    return best;
+  }
+
+  // Plays a clip on the animated model with a short cross-fade.
+  play(w, name, fade = 0.15, restart = false) {
+    const next = w.actions[name];
+    if (!next) return;
+    if (w.cur === name && !restart) return;
+    const prev = w.actions[w.cur];
+    next.reset();
+    next.enabled = true;
+    next.setEffectiveWeight(1);
+    next.play();
+    if (prev && prev !== next) prev.crossFadeTo(next, fade, false);
+    w.cur = name;
+  }
+
+  // Dota-like animation for the model: idle, run at the speed it moves, the
+  // cast animation timed so the swing lands when the spell leaves (after the
+  // cast point), a backswing that walking cancels, hit flinches, death.
+  animateModel(w, p, dt, speed, onLava) {
+    const t = this.time;
+    const walking = p.mv && speed > 40 && !p.cast;
+    w.run = approach(w.run, walking ? 1 : 0, dt, 10);
+    const relAge = w.rel ? t - w.rel.t : 9;
+    const castKey = p.cast ? p.cs : relAge < 0.6 ? w.rel.k : '';
+    const sym = NO_AIM.includes(castKey);
+    if (p.cast && w.castStart === undefined) w.castStart = t;
+    if (!p.cast && relAge > 0.05) w.castStart = undefined;
+    if (p.cast || (relAge < 0.6 && !walking)) {
+      // The swing's hit frame (~40% in) lines up with the end of the cast point.
+      const name = sym ? (castKey === 'scourge' ? 'Sword_Slash' : 'Wave') : 'Sword_Slash';
+      const clip = w.actions[name];
+      if (clip) {
+        const castPoint = castKey && SPELLS[castKey] ? SPELLS[castKey].cast : 0.2;
+        const hit = clip.getClip().duration * 0.4;
+        clip.timeScale = castPoint > 0.05 ? hit / castPoint : 2.2;
+        if (w.cur !== name || (p.cast && w.castStart === t)) this.play(w, name, 0.08, true);
+      }
+    } else if (walking) {
+      this.play(w, 'Run', 0.15);
+      if (w.actions.Run) w.actions.Run.timeScale = Math.max(0.6, speed / 260);
+    } else if (t - w.hitT < 0.35 && w.actions.HitRecieve) {
+      if (w.cur !== 'HitRecieve') this.play(w, 'HitRecieve', 0.06, true);
+    } else {
+      this.play(w, 'Idle', 0.2);
+    }
+    w.mixer.update(dt);
+    // Glows.
+    const magic = p.cast ? Math.max(0.3, p.cp) : relAge < 0.3 ? 1 - relAge / 0.3 : 0;
+    // Keep the staff upright like a wizard's, leaning it forward at the target
+    // through the cast and swinging back after.
+    const swing = p.cast ? -0.5 * Math.max(0.3, p.cp) : relAge < 0.6 ? (relAge < 0.1 ? relAge / 0.1 : 1 - (relAge - 0.1) / 0.5) * 1.3 : 0;
+    w.tilt = approach(w.tilt || 0, 0.12 + swing + 0.15 * w.run, dt, 18);
+    const parent = w.staff.parent;
+    w.root.updateMatrixWorld(true);
+    const pq = parent.getWorldQuaternion(new THREE.Quaternion());
+    const want = w.root.quaternion.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -w.tilt)));
+    w.staff.quaternion.copy(pq.invert().multiply(want));
+    w.crystal.rotation.y += dt * 1.5;
+    w.crystalMat.color.copy(w.crystalBase).multiplyScalar(1 + magic * 1.5 + 0.15 * Math.sin(t * 4));
+    w.handGlowMat.opacity = Math.min(1, magic * 1.2);
+    if (castKey && SPELL_COLOR[castKey]) w.handGlowMat.color.set(SPELL_COLOR[castKey]).multiplyScalar(3);
+    const hit = Math.max(0, 1 - (t - w.hitT) / 0.3);
+    const burn = onLava ? 0.35 + 0.15 * Math.sin(t * 20) : 0;
+    for (const m of w.mats) {
+      if (m.userData.flash) m.userData.flash.value = hit * 1.4;
+      m.emissive.setRGB(burn, burn * 0.25, burn * 0.03);
+    }
   }
 
   glow() {
@@ -558,7 +748,8 @@ export class View {
     s.p.forEach((p, idx) => {
       alive.add(p.id);
       let w = this.pawns.get(p.id);
-      if (!w) { w = this.makeWarlock(COLORS[idx % 10]); this.pawns.set(p.id, w); }
+      if (w && !w.model && this.gltf) { this.dropPawn(w); w = null; }
+      if (!w) { w = this.gltf ? this.makeModelWarlock(COLORS[idx % 10]) : this.makeWarlock(COLORS[idx % 10]); this.pawns.set(p.id, w); }
       const invisible = p.m.includes('windwalk');
       // A dead warlock plays its death for a moment before disappearing.
       if (p.d && w.seen && !w.death) w.death = { t: this.time, x: w.x, y: w.y };
@@ -585,8 +776,14 @@ export class View {
       const onLava = this.onLava(tx, ty, s.layer);
       w.root.position.set(tx, onLava ? -12 : 0, ty);
       w.root.rotation.set(0, -w.f, 0);
-      this.animate(w, p, dt, w.speed, onLava);
+      if (w.model) this.animateModel(w, p, dt, w.speed, onLava);
+      else this.animate(w, p, dt, w.speed, onLava);
       w.circle.material.opacity = p.id === me ? 0.95 : 0.55;
+      w.sel.visible = this.selected === p.id;
+      if (w.sel.visible) {
+        w.sel.material.uniforms.uColor.value.set(p.id === me ? '#40ff60' : '#ff3a2a');
+        w.sel.material.uniforms.uAlpha.value = 0.75 + 0.25 * Math.sin(this.time * 6);
+      }
       if (onLava && Math.random() < dt * 40) this.fire.add({ p: [tx + rand(-28, 28), rand(0, 30), ty + rand(-28, 28)], v: [rand(-20, 20), rand(120, 260), rand(-20, 20)], c0: col('#ffd070'), c1: col('#c02000'), size: rand(22, 36), size1: 6, life: rand(0.4, 0.7), tile: TILE_FLAME, drag: 0.95 });
       if (onLava && Math.random() < dt * 8) this.smoke.add({ p: [tx, 60, ty], v: [rand(-20, 20), rand(60, 120), rand(-20, 20)], c0: col('#2a1a14'), size: 40, size1: 110, life: 1.4, a: 0.35, tile: TILE_SMOKE, spin: rand(-1, 1) });
       if (w.run > 0.5 && Math.random() < dt * 14) this.smoke.add({ p: [tx + rand(-12, 12), 6, ty + rand(-12, 12)], v: [rand(-20, 20), rand(15, 40), rand(-20, 20)], c0: col('#5a4a40'), size: 16, size1: 44, life: 0.7, a: 0.3, tile: TILE_SMOKE });
@@ -613,7 +810,7 @@ export class View {
         w.spawn.material.uniforms.uAlpha.value = 0.55 + 0.15 * Math.sin(this.time * 6);
       }
       // Label above the head.
-      const [lx, ly] = this.toScreen(tx, ty, (onLava ? -12 : 0) + 152 * MODEL_SCALE);
+      const [lx, ly] = this.toScreen(tx, ty, (onLava ? -12 : 0) + (w.model ? MODEL_HEIGHT + 30 : 152 * MODEL_SCALE));
       w.label.style.transform = `translate(${lx.toFixed(1)}px, ${ly.toFixed(1)}px) translate(-50%, -100%)`;
       const f = Math.max(0, p.hp / p.mx);
       const lk = `${names[p.id] || ''}|${p.hp}|${p.dp}|${p.id === me}`;
@@ -629,16 +826,27 @@ export class View {
     });
     for (const [id, w] of this.pawns) {
       if (alive.has(id)) continue;
-      for (const o of [w.root, w.shield, w.spawn]) this.scene.remove(o);
-      w.label.remove();
+      this.dropPawn(w);
       this.pawns.delete(id);
     }
+  }
+
+  dropPawn(w) {
+    for (const o of [w.root, w.shield, w.spawn]) this.scene.remove(o);
+    w.label.remove();
   }
 
   animateDeath(w, dt) {
     const k = (this.time - w.death.t) / 1.6;
     const onLava = this.onLava(w.death.x, w.death.y, this.builtLayer);
     w.root.position.set(w.death.x, (onLava ? -12 : 0) - k * k * 160, w.death.y);
+    if (w.model) {
+      if (w.cur !== 'Death') this.play(w, 'Death', 0.1, true);
+      w.mixer.update(dt);
+      for (const m of w.mats) { m.emissive.setRGB(1.2 * k, 0.3 * k, 0.03); if (m.userData.flash) m.userData.flash.value = 0; }
+      if (Math.random() < dt * 60) this.fire.add({ p: [w.death.x + rand(-30, 30), rand(0, 90) - k * 100, w.death.y + rand(-30, 30)], v: [rand(-30, 30), rand(150, 300), rand(-30, 30)], c0: col('#ffe090'), c1: col('#b01800'), size: rand(26, 46), size1: 8, life: 0.6, tile: TILE_FLAME });
+      return;
+    }
     w.spine.rotation.z = approach(w.spine.rotation.z, 0.9, dt, 4);
     w.L.shoulder.rotation.z = approach(w.L.shoulder.rotation.z, 2.6, dt, 6);
     w.R.shoulder.rotation.z = approach(w.R.shoulder.rotation.z, 2.4, dt, 6);

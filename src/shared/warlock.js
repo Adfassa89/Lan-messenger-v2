@@ -32,9 +32,11 @@
   const CASH_START = 30;
   const CASH_ROUND = 10;
   const CAST_POINT = 0.2;
-  // Dota 2 turning: Warlock's turn rate 0.6 turns 180 degrees in 0.175 s;
-  // a hero only starts walking or casting once it faces within 11.5 degrees.
-  const TURN_SPEED = Math.PI / 0.175;
+  // Dota 2 turning. Warlock Brawl's hero has MovementTurnRate 1.2
+  // (npc_heroes_custom.txt), twice Dota's own Warlock (0.6, 180 degrees in
+  // 0.175 s), so 180 degrees take about 0.0875 s. A hero only starts walking
+  // or casting once it faces within 11.5 degrees.
+  const TURN_SPEED = Math.PI / 0.0875;
   const FACE_TOLERANCE = (11.5 * Math.PI) / 180;
   // Spells without a direction are used on the spot, without turning.
   const NO_TURN = new Set(['scourge', 'windwalk', 'shield', 'rush']);

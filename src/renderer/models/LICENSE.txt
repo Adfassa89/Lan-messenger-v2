@@ -1,0 +1,4 @@
+warlock.glb: "Hooded Adventurer" from Quaternius's Ultimate Animated Character Pack
+(https://quaternius.com), released under CC0 1.0 (public domain). Taken from the npm package
+@netforge/asset-library-files (which records the licence per asset) and decompressed
+(meshopt removed) so it loads without WebAssembly.

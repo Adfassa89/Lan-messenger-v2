@@ -32,9 +32,16 @@
     <div class="scores" id="scores"></div>
     <div class="feed" id="feed"></div>
     <div class="banner hidden" id="banner"></div>
-    <div class="bottom">
-      <div class="me-bar"><div class="hp"><i id="hpFill"></i><span id="hpText"></span></div><div class="dp" id="dpText"></div></div>
+    <!-- Dota-style panel: the selected hero's portrait, health, spells and items. -->
+    <div class="card" id="card">
+      <div class="portrait" id="portrait"><img id="pImg" alt=""><span class="ptag" id="pTag"></span></div>
+      <div class="unit">
+        <div class="uname" id="uName"></div>
+        <div class="hp"><i id="hpFill"></i><span id="hpText"></span></div>
+        <div class="ustats" id="uStats"></div>
+      </div>
       <div class="spells" id="spellBar"></div>
+      <div class="items" id="itemGrid"></div>
     </div>
   </div>
 
