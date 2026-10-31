@@ -229,6 +229,14 @@ const Game = (() => {
 
   // ------------------------------------------------------------------ chat card
   function cardHtml(msg) {
+    if (msg.game.type === 'warlock') {
+      const host = msg.from === S.me.id ? t('You') : esc(msg.fromName || peerName(msg.from));
+      return `<div class="game-card warlock-card">
+        <div class="wl-card-art"><span>🔥</span></div>
+        <div class="gc-head"><div><b>Warlock</b><div class="gc-players">${esc(t('{name} opened an arena. Knock everyone into the lava!', { name: host }))}</div></div></div>
+        <button class="fbtn wl-join" data-act="game">${esc(t('Join the arena'))}</button>
+      </div>`;
+    }
     const r = result(msg);
     const me = myIndex(msg);
     const myTurn = r && !r.status.over && r.status.turn === me;
@@ -245,6 +253,10 @@ const Game = (() => {
   // ------------------------------------------------------------------ game window
   function show(conv, id) {
     const m = (S.msgs.get(conv) || []).find((x) => x.id === id);
+    if (m && m.game && m.game.type === 'warlock') {
+      call(api.openWarlock(conv, id));
+      return;
+    }
     if (m && m.game && m.game.type === 'tetris') {
       call(api.openTetris(conv, id));
       return;

@@ -793,7 +793,11 @@ class Messenger extends EventEmitter {
       msg.poll = cleanPoll(w.poll);
       if (!msg.poll) return;
     }
-    if (kind === 'game') {
+    if (kind === 'game' && w.game && w.game.type === 'warlock') {
+      // Warlock: an arena for a whole group, run by the PC that opened it.
+      if (type !== 'group') return;
+      msg.game = { type: 'warlock', host: peerId };
+    } else if (kind === 'game') {
       // Games are only between the two people of a private chat.
       const g = w.game || {};
       const players = Array.isArray(g.players) ? g.players : [];
@@ -925,6 +929,7 @@ class Messenger extends EventEmitter {
       wire.game = { type: msg.game.type, players: msg.game.players };
       if (msg.game.clock) wire.game.clock = msg.game.clock;
       if (msg.game.bestOf) wire.game.bestOf = msg.game.bestOf;
+      if (msg.game.type === 'warlock') wire.game = { type: 'warlock' };
     }
     const type = this._convType(conv);
     if (type === 'broadcast') wire.broadcast = true;
@@ -1272,6 +1277,12 @@ class Messenger extends EventEmitter {
       if (c) this.clockGames.set(msg.id, conv);
     }
     return stored || msg;
+  }
+
+  // "/warlock" in a group chat: opens an arena the group can join.
+  createWarlock(conv) {
+    if (this._convType(conv) !== 'group') throw new Error('Warlock can be played in group chats');
+    return this._sendMsg(conv, { kind: 'game', text: '', game: { type: 'warlock', host: this.id } });
   }
 
   // Timed chess: whoever's clock reaches zero loses. The player out of time

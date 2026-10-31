@@ -1189,6 +1189,15 @@ async function sendCurrent() {
     return;
   }
   if (!text) return;
+  // Secret: "/warlock" in a group chat opens a Warlock arena.
+  if (text.toLowerCase() === '/warlock') {
+    input.value = '';
+    autoGrow();
+    if (!S.active.startsWith('g:')) return toast(t('Warlock can be played in group chats'), 'error');
+    const g = await call(api.createWarlock(S.active));
+    if (g) call(api.openWarlock(S.active, g.id));
+    return undefined;
+  }
   const opts = S.replyTo ? { replyTo: S.replyTo.id } : {};
   input.value = '';
   autoGrow();

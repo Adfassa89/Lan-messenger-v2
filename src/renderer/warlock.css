@@ -1,0 +1,89 @@
+html, body { margin: 0; height: 100%; overflow: hidden; background: #120806; color: #f5e9dc; font: 14px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; user-select: none; }
+.hidden { display: none !important; }
+canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+button { font: inherit; cursor: pointer; }
+
+/* ---------------------------------------------------------------- lobby */
+.lobby { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgba(40, 10, 4, .55), rgba(8, 3, 2, .92)); }
+.lobby-card { width: min(460px, calc(100vw - 32px)); padding: 28px; border-radius: 18px; text-align: center;
+  background: linear-gradient(180deg, rgba(48, 24, 16, .95), rgba(22, 10, 7, .96)); border: 1px solid #6b3420;
+  box-shadow: 0 0 0 1px rgba(255, 120, 40, .1), 0 30px 80px rgba(0, 0, 0, .7), 0 0 80px rgba(255, 90, 20, .15); animation: rise .4s ease-out; }
+.logo { font: 900 44px/1 "Segoe UI Black", "Segoe UI", sans-serif; letter-spacing: 8px; color: #ffb35c;
+  text-shadow: 0 0 18px rgba(255, 110, 20, .8), 0 3px 0 #7a2a0a; }
+.lobby-sub { margin: 10px 0 16px; color: #d9b9a0; }
+.lobby-list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 6px; text-align: left; }
+.lobby-list li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: rgba(255, 255, 255, .05); animation: rise .3s ease-out; }
+.lobby-list i { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 10px currentColor; flex: none; }
+.lobby-list small { margin-left: auto; color: #c79b7a; }
+.lobby-opts { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 14px; color: #d9b9a0; }
+.seg { display: flex; gap: 4px; }
+.seg button { min-width: 38px; height: 32px; border-radius: 8px; border: 1px solid #6b3420; background: rgba(0, 0, 0, .3); color: #f5e9dc; font-weight: 700; }
+.seg button.on { background: linear-gradient(180deg, #ff9a3c, #d4521c); border-color: #ffb35c; color: #fff; }
+.big-btn { height: 46px; padding: 0 28px; border: 0; border-radius: 12px; font-weight: 800; letter-spacing: 1px; color: #fff;
+  background: linear-gradient(180deg, #ff8a2a, #c43d12); box-shadow: 0 6px 20px rgba(255, 90, 20, .4), inset 0 1px 0 rgba(255, 255, 255, .3); transition: transform .1s, filter .15s; }
+.big-btn:hover { filter: brightness(1.1); }
+.big-btn:active { transform: scale(.96); }
+.big-btn:disabled { filter: grayscale(.8) brightness(.7); cursor: default; }
+.big-btn.small { height: 34px; padding: 0 16px; font-size: 13px; }
+.big-btn.done { background: linear-gradient(180deg, #4fbf6c, #2a8a43); }
+.lobby-help { margin-top: 16px; font-size: 12px; color: #a98670; line-height: 1.6; }
+.lobby-help kbd { display: inline-block; min-width: 16px; padding: 0 5px; border-radius: 4px; background: rgba(255, 255, 255, .12); border-bottom: 2px solid rgba(0, 0, 0, .4); font: 700 11px "Segoe UI", sans-serif; color: #fff; }
+
+/* ---------------------------------------------------------------- HUD */
+.hud { position: fixed; inset: 0; pointer-events: none; }
+.top-bar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; padding: 6px 16px; border-radius: 20px;
+  background: rgba(10, 4, 2, .65); border: 1px solid rgba(255, 140, 60, .25); font-weight: 700; white-space: nowrap; }
+#phaseInfo { color: #ffb35c; }
+.scores { position: absolute; top: 10px; right: 10px; min-width: 190px; padding: 8px; border-radius: 12px; background: rgba(10, 4, 2, .65); border: 1px solid rgba(255, 140, 60, .2); }
+.scores .row { display: flex; align-items: center; gap: 8px; padding: 3px 4px; font-weight: 600; }
+.scores .row i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.scores .row b { margin-left: auto; font-variant-numeric: tabular-nums; color: #ffd27a; }
+.scores .row small { color: #b48c72; width: 34px; text-align: right; }
+.scores .row.dead { opacity: .45; text-decoration: line-through; }
+.feed { position: absolute; top: 56px; left: 12px; display: grid; gap: 4px; }
+.feed div { padding: 4px 10px; border-radius: 8px; background: rgba(10, 4, 2, .6); font-weight: 600; animation: rise .25s ease-out; }
+.banner { position: absolute; top: 34%; left: 0; right: 0; text-align: center; font: 900 54px/1.1 "Segoe UI Black", "Segoe UI", sans-serif; letter-spacing: 4px;
+  color: #ffd27a; text-shadow: 0 0 30px rgba(255, 110, 20, .9), 0 4px 0 #6b1d06; animation: bannerIn .5s cubic-bezier(.3, 1.5, .5, 1); }
+.banner small { display: block; font-size: 18px; letter-spacing: 1px; color: #f5e9dc; margin-top: 8px; }
+.bottom { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.me-bar { display: flex; align-items: center; gap: 10px; }
+.hp { position: relative; width: 340px; height: 18px; border-radius: 9px; background: rgba(0, 0, 0, .6); overflow: hidden; border: 1px solid rgba(255, 255, 255, .15); }
+.hp i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, #67e07b, #2a9d48); transition: width .15s; }
+.hp span { position: absolute; inset: 0; display: grid; place-items: center; font: 700 11px "Segoe UI", sans-serif; text-shadow: 0 1px 2px #000; }
+.dp { font-weight: 800; color: #ff9a5c; min-width: 80px; }
+.spells { display: flex; gap: 6px; pointer-events: auto; }
+.spell { position: relative; width: 54px; height: 54px; border-radius: 10px; display: grid; place-items: center; font: 26px/1 "Segoe UI Emoji", sans-serif;
+  background: linear-gradient(180deg, #3a2218, #1c0f0a); border: 2px solid #6b3420; box-shadow: 0 4px 12px rgba(0, 0, 0, .5); overflow: hidden; }
+.spell.empty { opacity: .35; }
+.spell .key { position: absolute; top: 2px; left: 4px; font: 800 11px "Segoe UI", sans-serif; color: #ffd27a; text-shadow: 0 1px 2px #000; }
+.spell .lvl { position: absolute; bottom: 2px; right: 4px; font: 700 10px "Segoe UI", sans-serif; color: #ddd; }
+.spell .cd { position: absolute; inset: 0; background: conic-gradient(rgba(0, 0, 0, .72) var(--cd, 0%), transparent 0); display: grid; place-items: center; font: 800 17px "Segoe UI", sans-serif; color: #fff; text-shadow: 0 1px 3px #000; }
+.spell.ready { border-color: #ff9a3c; }
+
+/* ---------------------------------------------------------------- shop */
+.shop { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(8, 3, 2, .55); }
+.shop-card { width: min(980px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; padding: 18px; border-radius: 16px;
+  background: linear-gradient(180deg, rgba(42, 22, 15, .97), rgba(20, 10, 7, .98)); border: 1px solid #6b3420; box-shadow: 0 30px 80px rgba(0, 0, 0, .7); animation: rise .3s ease-out; }
+.shop-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; font-size: 20px; }
+.gold { color: #ffd27a; font-weight: 800; }
+.shop-time { margin-left: auto; font-size: 14px; color: #d9b9a0; }
+.shop-cols { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.shop-col { display: grid; gap: 6px; align-content: start; }
+.shop-col h4 { margin: 0 0 2px; font-size: 11px; letter-spacing: 1px; color: #b48c72; text-align: center; }
+.buy { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 10px; border: 1px solid #5a2e1c;
+  background: rgba(255, 255, 255, .04); color: #f5e9dc; transition: transform .1s, border-color .15s, background .15s; }
+.buy:hover { border-color: #ff9a3c; background: rgba(255, 154, 60, .1); }
+.buy:active { transform: scale(.96); }
+.buy .ic { font: 26px/1 "Segoe UI Emoji", sans-serif; }
+.buy .nm { font-weight: 700; font-size: 12.5px; }
+.buy .pr { font-size: 12px; color: #ffd27a; font-weight: 700; }
+.buy .lv { font-size: 10px; color: #8fdc9a; letter-spacing: 2px; }
+.buy.owned { border-color: #8fdc9a; background: rgba(143, 220, 154, .08); }
+.buy.locked, .buy.poor { opacity: .4; }
+.shop-items { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.shop-items .buy { flex-direction: row; gap: 8px; padding: 8px 12px; }
+.shop-tip { margin-top: 10px; min-height: 18px; font-size: 12.5px; color: #d9b9a0; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+@keyframes bannerIn { from { opacity: 0; transform: scale(1.8); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }

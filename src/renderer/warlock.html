@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Warlock</title>
+  <link rel="stylesheet" href="warlock.css">
+  <link rel="stylesheet" href="game-fx.css">
+</head>
+<body>
+  <canvas id="view"></canvas>
+
+  <!-- Lobby: who has joined; the host chooses the rounds and starts. -->
+  <section class="lobby" id="lobby">
+    <div class="lobby-card">
+      <div class="logo">WARLOCK</div>
+      <div class="lobby-sub" id="lobbySub"></div>
+      <ul class="lobby-list" id="lobbyList"></ul>
+      <div class="lobby-opts hidden" id="lobbyOpts">
+        <span data-t="Rounds"></span>
+        <div class="seg" id="roundsSeg"></div>
+      </div>
+      <button class="big-btn hidden" id="btnStart"></button>
+      <div class="lobby-help" id="lobbyHelp"></div>
+    </div>
+  </section>
+
+  <!-- In-game HUD -->
+  <div class="hud hidden" id="hud">
+    <div class="top-bar"><span id="roundInfo"></span><span id="phaseInfo"></span></div>
+    <div class="scores" id="scores"></div>
+    <div class="feed" id="feed"></div>
+    <div class="banner hidden" id="banner"></div>
+    <div class="bottom">
+      <div class="me-bar"><div class="hp"><i id="hpFill"></i><span id="hpText"></span></div><div class="dp" id="dpText"></div></div>
+      <div class="spells" id="spellBar"></div>
+    </div>
+  </div>
+
+  <!-- Shop between rounds -->
+  <section class="shop hidden" id="shop">
+    <div class="shop-card">
+      <div class="shop-head"><b data-t="Shop"></b><span class="gold" id="gold"></span><span class="shop-time" id="shopTime"></span><button class="big-btn small" id="btnReady"></button></div>
+      <div class="shop-cols" id="shopCols"></div>
+      <div class="shop-items" id="shopItems"></div>
+      <div class="shop-tip" id="shopTip"></div>
+    </div>
+  </section>
+
+  <script src="../shared/i18n.js"></script>
+  <script src="../shared/warlock.js"></script>
+  <script src="game-fx.js"></script>
+  <script src="warlock.js"></script>
+</body>
+</html>
