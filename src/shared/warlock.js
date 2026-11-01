@@ -39,7 +39,7 @@
   const TURN_SPEED = Math.PI / 0.0875;
   const FACE_TOLERANCE = (11.5 * Math.PI) / 180;
   // Spells without a direction are used on the spot, without turning.
-  const NO_TURN = new Set(['scourge', 'windwalk', 'shield', 'rush']);
+  const NO_TURN = new Set(['scourge', 'windwalk', 'shield', 'rush', 'alteration', 'splitter']); // Splitter: IGNORE_TURN
   const COLORS = ['#e8443a', '#3a7be8', '#2fbf71', '#f2c230', '#a35ce8', '#f2862e', '#2fc6c9', '#e85ca8', '#9aa13a', '#8a8f99'];
 
   const lv = (arr, level) => arr[Math.min(arr.length, Math.max(1, level)) - 1];
@@ -63,9 +63,26 @@
     shield: { name: 'Shield', icon: '🛡️', col: 5, cd: [14, 13, 12, 11, 10, 9, 8], duration: 1.2, radius: steps(200, 10), cast: 0, buy: 12, up: [6, 7, 8, 9, 10, 11] },
     rush: { name: 'Rush', icon: '🏃', col: 5, cd: [21, 20, 19, 18, 17, 16, 15], duration: steps(6, 0.5), absorb: steps(50, 20), cast: 0, buy: 12, up: [6, 7, 8, 9, 10, 11] },
     gravity: { name: 'Gravity', icon: '🌀', col: 6, cd: steps(21, -0.5), strength: steps(500, 30), dps: [20, 33.33, 46.67, 60, 73.33, 86.67, 100], speed: 450, life: 2, cast: CAST_POINT, buy: 12, up: [7, 8, 9, 10, 11, 12] },
+    // Added from Warlock Brawl's npc_abilities_custom.txt and spell scripts.
+    twin: { name: 'Twin', col: 1, cd: [16, 13.9, 12.5, 11.7, 11, 10.3, 9.6], dmg: [44, 48, 52, 56, 62, 66, 72], range: 800, speed: 1000, radius: 35, area: 450 * 450, cast: CAST_POINT, buy: 12, up: [7, 8, 9, 10, 11, 12] },
+    drain: { name: 'Drain', col: 3, cd: [22, 21, 20, 19, 18, 17, 16], dmg: steps(60, 10), duration: [4, 5, 6, 7, 8, 9, 10], speed: 700, turnSpeed: 600, radius: 24.5, range: 850, extra: 1.2, cast: CAST_POINT, buy: 14, up: [6, 7, 8, 9, 10, 11] },
+    recharge: { name: 'Recharge', col: 3, cd: [23.5, 22, 21, 20.5, 20, 19.5, 19], dmg: steps(60, 7), perHit: 10, radius: 35, speed: 900, life: 1, cast: CAST_POINT, buy: 13, up: [6, 7, 8, 9, 10, 11] },
+    splitter: { name: 'Splitter', col: 4, cd: [24, 23, 22, 21, 20, 19, 18], dmg: steps(30, 5), radius: 50, speed: 700, life: 1, cast: 0, buy: 15, up: [7, 8, 9, 10, 11, 12] },
+    snowball: { name: 'Snowball', col: 4, cd: [19, 18, 17, 16, 15, 14, 13], dmg: steps(30, 5), dmgMax: steps(45, 15), range: 575, blast: 200, radius: [75, 77, 79, 81, 83, 85, 87], speed: 400, cast: CAST_POINT, buy: 14, up: [6, 7, 8, 9, 10, 11] },
+    alteration: { name: 'Alteration', col: 5, cd: [19, 17.5, 16, 14.5, 13, 11.5, 10], duration: 2, radius: 120, cast: 0, buy: 11, up: [5, 6, 7, 8, 9, 10] },
+    grip: { name: 'Grip', col: 6, cd: [24, 20, 17, 15, 13, 12, 10.5], duration: [4.5, 4.75, 5, 5.25, 5.5, 5.75, 6], dpGain: 5, radius: 39, speed: 1000, life: 1.1, cast: CAST_POINT, buy: 12, up: [6, 7, 8, 9, 10, 11] },
+    warpzone: { name: 'Warpzone', col: 6, cd: [23, 21, 20, 19, 18, 17, 16], duration: 4.5, scale: [0.4, 0.36, 0.32, 0.28, 0.24, 0.2, 0.16], radius: steps(200, 10), range: 700, cast: CAST_POINT, buy: 12, up: [6, 7, 8, 9, 10, 11] },
+    magnetize: { name: 'Magnetize', col: 6, cd: [22, 21, 20, 19, 18, 17, 16], duration: steps(3.5, 0.5), radius: 36, speed: 800, life: 1.2, cast: CAST_POINT, buy: 14, up: [5, 6, 7, 8, 9, 10] },
+    rockpillar: { name: 'Rockpillar', col: 6, cd: [26, 24, 22, 20, 18, 16, 14], duration: 4, range: steps(650, 75), pillar: 90, cast: CAST_POINT, buy: 13, up: [5, 6, 7, 8, 9, 10] },
     link: { name: 'Link', icon: '⛓️', col: 6, cd: [17, 15, 13, 11, 9, 7, 7], dmg: steps(12, 8), range: 860, speed: 950, radius: 35, pull: 1550, hold: 2.5, cast: CAST_POINT, buy: 12, up: [6, 7, 8, 9, 10, 11] },
   };
-  const COLUMN_SPELLS = [[], ['lightning', 'homing', 'boomerang'], ['teleport', 'thrust', 'swap'], ['cluster', 'bouncer'], ['meteor', 'windwalk'], ['shield', 'rush'], ['gravity', 'link']];
+  const COLUMN_SPELLS = [[], ['boomerang', 'lightning', 'homing', 'twin'], ['teleport', 'thrust', 'swap'], ['cluster', 'drain', 'bouncer', 'recharge'], ['windwalk', 'meteor', 'splitter', 'snowball'], ['shield', 'rush', 'alteration'], ['gravity', 'grip', 'warpzone', 'magnetize', 'rockpillar', 'link']];
+  // Obstacles (base/obstacles.lua): 2 – 8 per round within ±1000 of the
+  // centre, one of three styles per round, 400 HP, bounce with elasticity 0.5,
+  // explode for 5 – 10 damage within 300 when destroyed.
+  const OBSTACLE_STYLES = [[60, 60, 60, 60, 60], [70, 45, 60, 40], [50, 50, 35, 35, 50]]; // radius per variant
+  const OBSTACLE_HP = 400;
+  const ELASTIC = 0.5;
   const ITEMS = {
     ring: { name: 'Ring of Health', icon: '💍', buy: 4, max: 5, hp: [100, 190, 270, 340, 400] },
     cape: { name: 'Cape', icon: '🧥', buy: 3, max: 3, regen: [1.5, 2.5, 3.5] },
@@ -98,6 +115,9 @@
         x: 0, y: 0, vx: 0, vy: 0, face: 0, hp: MAX_HP, dp: 0, dead: true, left: false,
         move: null, cd: {}, casting: null, mods: {}, lastHit: null,
       }));
+      this.obstacles = [];
+      this.zones = []; // warp zones
+      this.obstacleStyle = 0;
       this.layer = 0;
       this.lavaAcc = 0;
       this.shrinkAcc = 0;
@@ -120,6 +140,8 @@
       this.phaseLeft = SHOP_TIME;
       this.layer = 13 + this.pawns.length + 1;
       this.projectiles = [];
+      this.zones = [];
+      this.placeObstacles();
       for (const p of this.pawns) {
         p.ready = false;
         if (!p.left) this.respawn(p, true);
@@ -133,6 +155,8 @@
       this.layer = 13 + this.pawns.length;
       this.shrinkAcc = 0;
       this.projectiles = [];
+      this.zones = [];
+      this.obstacles = this.obstacles.filter((o) => !o.temp);
       const active = this.pawns.filter((p) => !p.left);
       active.forEach((p, i) => {
         const a = (2 * Math.PI * i) / active.length;
@@ -144,6 +168,40 @@
         p.mods.spawnShield = ROUND_START_SHIELD;
       });
       this.fx({ e: 'fight', round: this.round });
+    }
+
+    // A new random set of obstacles in one style for the coming round.
+    placeObstacles() {
+      this.obstacleStyle = Math.floor(this.rand() * OBSTACLE_STYLES.length);
+      const sizes = OBSTACLE_STYLES[this.obstacleStyle];
+      const n = 2 + Math.floor(this.rand() * 7);
+      this.obstacles = [];
+      for (let i = 0; i < n; i++) {
+        const v = Math.floor(this.rand() * sizes.length);
+        this.addObstacle((this.rand() * 2 - 1) * 1000, (this.rand() * 2 - 1) * 1000, sizes[v], v);
+      }
+    }
+
+    addObstacle(x, y, r, variant, temp = 0) {
+      const o = { id: this.nextId++, x, y, r, hp: OBSTACLE_HP, variant, temp };
+      this.obstacles.push(o);
+      return o;
+    }
+
+    damageObstacle(o, amount, src) {
+      if (o.dead || this.phase !== 'fight') return;
+      o.hp -= amount;
+      if (o.hp > 0) return;
+      o.dead = true;
+      this.obstacles = this.obstacles.filter((q) => q !== o);
+      // Explodes: 5 – 10 damage within 300, pushing everyone away.
+      for (const p of this.alive()) {
+        const d = len(p.x - o.x, p.y - o.y);
+        if (d >= 300) continue;
+        const [nx, ny] = norm(p.x - o.x, p.y - o.y);
+        this.damage(p, src || null, 5 + 5 * (1 - d / 300), nx, ny, 1);
+      }
+      this.fx({ e: 'obstacleBoom', x: o.x, y: o.y, id: o.id });
     }
 
     respawn(p, inShop) {
@@ -165,7 +223,10 @@
       let s = MOVE_SPEED + (p.items.boots ? lv(ITEMS.boots.speed, p.items.boots) : 0);
       if (p.mods.windwalk) s += SPELLS.windwalk.bonus;
       if (p.mods.rush) s += 35 + p.mods.rush.bonus;
-      return s;
+      if (p.mods.drained) s -= 50;
+      if (p.mods.snowed) s -= 100;
+      if (p.mods.gripped) return 0;
+      return Math.max(0, s);
     }
 
     // ---------------------------------------------------------------- shop
@@ -258,6 +319,7 @@
       const L = s.level;
       p.cd[slot] = lv(def.cd, L);
       if (p.mods.windwalk) delete p.mods.windwalk; // casting breaks invisibility
+      if (p.mods.gripped) p.dp += SPELLS.grip.dpGain; // Grip: every spell cast adds damage points
       const [dx, dy] = norm(tx - p.x, ty - p.y);
       const dist = len(tx - p.x, ty - p.y);
       const proj = (o) => this.projectiles.push({ id: this.nextId++, owner: p.id, age: 0, hits: [], ...o });
@@ -284,9 +346,18 @@
             const off = Math.abs((o.x - p.x) * dy - (o.y - p.y) * dx);
             if (off <= 25 + RADIUS && (!best || along < best.along)) best = { o, along };
           }
-          const end = best ? best.along : range;
+          // ...unless an obstacle is in the way.
+          let wall = null;
+          for (const o of this.obstacles) {
+            const along = (o.x - p.x) * dx + (o.y - p.y) * dy;
+            const off = Math.abs((o.x - p.x) * dy - (o.y - p.y) * dx);
+            if (along > 0 && along <= range + o.r && off <= 25 + o.r && (!wall || along < wall.along)) wall = { o, along: Math.max(0, along - o.r) };
+          }
+          if (wall && (!best || wall.along < best.along)) best = null; else wall = null;
+          const end = best ? best.along : wall ? wall.along : range;
           this.fx({ e: 'bolt', x1: p.x, y1: p.y, x2: p.x + dx * end, y2: p.y + dy * end });
           if (best) this.damage(best.o, p, lv(def.dmg, L), dx, dy, def.kb);
+          if (wall) this.damageObstacle(wall.o, lv(def.dmg, L), p);
           break;
         }
         case 'homing': {
@@ -355,6 +426,58 @@
         case 'gravity':
           proj({ k: 'gravity', x: p.x + dx * 40, y: p.y + dy * 40, vx: dx * def.speed, vy: dy * def.speed, r: 25, life: def.life, strength: lv(def.strength, L), dps: lv(def.dps, L), ghost: true, tick: 0 });
           break;
+        case 'twin': {
+          // Two orbs on mirrored half-ellipses that meet at the target point.
+          const range = def.range;
+          const minDist = Math.max(10, (2 * def.area) / (Math.PI * range));
+          const d = Math.min(Math.max(dist, minDist), range);
+          const ex = p.x + dx * d;
+          const ey = p.y + dy * d;
+          const a = d / 2;
+          for (const sign of [1, -1]) {
+            proj({ k: 'twin', x: p.x, y: p.y, vx: 0, vy: 0, r: def.radius, life: 9, dmg: lv(def.dmg, L), kb: 1,
+              cx: (p.x + ex) / 2, cy: (p.y + ey) / 2, ea: a, eb: def.area / (Math.PI * a), ux: -dx, uy: -dy, sign, et: 0, speed: def.speed });
+          }
+          break;
+        }
+        case 'drain': {
+          // Flies to the target point, then turns to the nearest warlock.
+          const d = Math.min(dist, def.range);
+          proj({ k: 'drain', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: d / def.speed + def.extra, turnAt: def.extra, turned: false, dmg: lv(def.dmg, L), dur: lv(def.duration, L) });
+          break;
+        }
+        case 'recharge':
+          proj({ k: 'recharge', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: def.life, dmg: lv(def.dmg, L) + def.perHit * (p.recharge || 0), caster: p.id });
+          break;
+        case 'splitter': {
+          const life = Math.min(def.life, dist / def.speed);
+          proj({ k: 'splitter', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life, dmg: lv(def.dmg, L) });
+          break;
+        }
+        case 'snowball':
+          proj({ k: 'snowball', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: lv(def.radius, L), life: def.range / def.speed, dmg: lv(def.dmg, L), dmgMax: lv(def.dmgMax, L) });
+          break;
+        case 'alteration':
+          p.mods.alteration = { t: def.duration };
+          break;
+        case 'grip':
+          proj({ k: 'grip', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: def.life, dur: lv(def.duration, L) });
+          break;
+        case 'warpzone': {
+          const d = Math.min(dist, def.range);
+          this.zones.push({ id: this.nextId++, owner: p.id, x: p.x + dx * d, y: p.y + dy * d, r: lv(def.radius, L), life: def.duration, scale: lv(def.scale, L) });
+          break;
+        }
+        case 'magnetize':
+          proj({ k: 'magnet', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: def.life, dur: lv(def.duration, L), bounced: false, any: true });
+          break;
+        case 'rockpillar': {
+          const d = Math.min(dist, lv(def.range, L));
+          const o = this.addObstacle(p.x + dx * d, p.y + dy * d, def.pillar, 0, def.duration);
+          o.pillar = 1;
+          this.fx({ e: 'pillar', x: o.x, y: o.y });
+          break;
+        }
         case 'link':
           proj({ k: 'link', x: p.x + dx * 40, y: p.y + dy * 40, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: def.range / def.speed, dmg: lv(def.dmg, L), any: true });
           break;
@@ -381,7 +504,8 @@
       if (!noKb) {
         const kbRed = target.items.armor ? lv(ITEMS.armor.kbRed, target.items.armor) : 0;
         const k = dmg > 100 ? Math.sqrt(100 * dmg) : dmg;
-        const kb = Math.max(0, 1 - kbRed) * k * KB_DMG_TO_VELOCITY * (1 + target.dp / 1000) * kbFactor;
+        const grip = target.mods.gripped ? 1 - 0.67 : 1;
+        const kb = Math.max(0, 1 - kbRed) * k * KB_DMG_TO_VELOCITY * (1 + target.dp / 1000) * kbFactor * grip;
         target.vx += nx * kb;
         target.vy += ny * kb;
       }
@@ -439,8 +563,10 @@
         this.fx({ e: 'shrink', layer: this.layer });
       }
       this.stepPawns(dt);
+      this.stepZones(dt);
       this.stepProjectiles(dt);
       this.collidePawns();
+      this.collideObstacles();
       // Lava: 100 damage per second, in quarter-second steps.
       this.lavaAcc += dt;
       if (this.lavaAcc >= LAVA_PERIOD) {
@@ -476,6 +602,8 @@
             if (m.t <= 0) {
               if (k === 'thrust') { p.vx *= 0.2; p.vy *= 0.2; }
               delete p.mods[k];
+              // Snowball: the chill deals its damage when it ends.
+              if (k === 'snowed') this.damage(p, this.pawn(m.src), m.dmg, 0, 0, 1, { noKb: true });
             }
           }
         }
@@ -521,6 +649,39 @@
         if (r > 5910) {
           p.x *= 5910 / r;
           p.y *= 5910 / r;
+        }
+      }
+    }
+
+    // Warp zones and Rockpillars run out.
+    stepZones(dt) {
+      for (const z of this.zones) z.life -= dt;
+      this.zones = this.zones.filter((z) => z.life > 0);
+      for (const o of this.obstacles) {
+        if (!o.temp) continue;
+        o.temp -= dt;
+        if (o.temp <= 0) { o.dead = true; this.fx({ e: 'pillarEnd', x: o.x, y: o.y, id: o.id }); }
+      }
+      this.obstacles = this.obstacles.filter((o) => !o.dead);
+    }
+
+    // Warlocks bounce off obstacles (elasticity 0.5).
+    collideObstacles() {
+      for (const p of this.alive()) {
+        for (const o of this.obstacles) {
+          const dx = p.x - o.x;
+          const dy = p.y - o.y;
+          const d = len(dx, dy);
+          const min = RADIUS + o.r;
+          if (d >= min) continue;
+          const [nx, ny] = d > 1e-6 ? [dx / d, dy / d] : [1, 0];
+          p.x = o.x + nx * min;
+          p.y = o.y + ny * min;
+          const vn = p.vx * nx + p.vy * ny;
+          if (vn < 0) {
+            p.vx -= (1 + ELASTIC) * vn * nx;
+            p.vy -= (1 + ELASTIC) * vn * ny;
+          }
         }
       }
     }
@@ -579,9 +740,19 @@
       }
     }
 
-    stepProjectiles(dt) {
+    stepProjectiles(dt0) {
       const keep = [];
+      const ended = [];
       for (const b of this.projectiles) {
+        if (b.dead) { ended.push(b); continue; }
+        // Warp zones slow the spells of other players that fly through them.
+        let dt = dt0;
+        if (b.k !== 'meteor') {
+          for (const z of this.zones) {
+            if (z.owner !== b.owner && len(b.x - z.x, b.y - z.y) <= z.r + (b.r || 0)) dt *= z.scale;
+          }
+        }
+        b.ts = dt / dt0;
         b.age += dt;
         const owner = this.pawn(b.owner);
         let gone = false;
@@ -623,6 +794,65 @@
           } else {
             gone = true;
           }
+        } else if (b.k === 'twin') {
+          // Constant speed along the half-ellipse (TwinProjectile:onPreTick).
+          const evx = -b.ea * Math.sin(b.et);
+          const evy = b.sign * b.eb * Math.cos(b.et);
+          b.et = Math.min(Math.PI, b.et + Math.max(0.001, (dt * b.speed) / (len(evx, evy) || 1)));
+          const lx = b.ea * Math.cos(b.et);
+          const ly = b.sign * b.eb * Math.sin(b.et);
+          const nx = b.cx + b.ux * lx - b.uy * ly;
+          const ny = b.cy + b.uy * lx + b.ux * ly;
+          b.vx = (nx - b.x) / (dt || 1);
+          b.vy = (ny - b.y) / (dt || 1);
+          if (b.et >= Math.PI) b.life = 0;
+        } else if (b.k === 'drain' && !b.turned && b.life <= b.turnAt) {
+          // Turns towards the nearest warlock (other than the caster).
+          b.turned = true;
+          let best = null;
+          let bd = Infinity;
+          for (const o of this.alive()) {
+            if (o.id === b.owner) continue;
+            const d = len(o.x - b.x, o.y - b.y);
+            if (d < bd) { bd = d; best = o; }
+          }
+          const [ux, uy] = best ? norm(best.x - b.x, best.y - b.y) : norm(b.vx, b.vy);
+          b.vx = ux * SPELLS.drain.turnSpeed;
+          b.vy = uy * SPELLS.drain.turnSpeed;
+        } else if (b.k === 'drainHeal' || b.k === 'rechargeBack') {
+          // Flies back to the caster: heals (Drain) or resets the cooldown (Recharge).
+          if (!owner || owner.dead) gone = true;
+          else if (len(owner.x - b.x, owner.y - b.y) < 64) {
+            gone = true;
+            if (b.k === 'drainHeal') {
+              owner.hp = Math.min(this.maxHp(owner), owner.hp + b.heal);
+              this.fx({ e: 'heal', id: owner.id, n: Math.round(b.heal) });
+            } else {
+              for (const [slot, sp] of Object.entries(owner.spells)) if (sp.key === 'recharge') owner.cd[slot] = 0;
+              this.fx({ e: 'recharged', id: owner.id, n: owner.recharge || 0 });
+            }
+          } else {
+            const [ux, uy] = norm(owner.x - b.x, owner.y - b.y);
+            const sp = b.k === 'drainHeal' ? 650 : 400;
+            b.vx = ux * sp;
+            b.vy = uy * sp;
+          }
+        } else if (b.k === 'spawner') {
+          // Splitter: 4 waves of 2 smaller bolts, fanning out less each time.
+          b.tick += dt;
+          const period = b.spawnLife / 4;
+          while (b.tick >= period && b.waves < 4) {
+            b.tick -= period;
+            const [ux, uy] = norm(b.vx, b.vy);
+            const alpha = b.spawnLife * (1 - b.waves / 4);
+            for (const sign of [-1, 1]) {
+              const cx = (ux - sign * uy * alpha) / (1 + alpha);
+              const cy = (uy + sign * ux * alpha) / (1 + alpha);
+              this.projectiles.push({ id: this.nextId++, k: 'splitChild', owner: b.owner, age: 0, hits: [], x: b.x, y: b.y, vx: cx * 600, vy: cy * 600, r: 21, life: 1.2, dmg: b.dmg, kb: 1 });
+            }
+            b.waves++;
+          }
+          if (b.waves >= 4) gone = true;
         } else if (b.k === 'gravity') {
           // Pulls enemies (and other spells) towards it and burns those close by.
           for (const o of this.alive()) {
@@ -636,7 +866,7 @@
             }
           }
           for (const q of this.projectiles) {
-            if (q === b || ['meteor', 'gravity', 'link'].includes(q.k)) continue;
+            if (q === b || ['meteor', 'gravity', 'link', 'spawner', 'drainHeal', 'rechargeBack'].includes(q.k)) continue;
             const d = len(q.x - b.x, q.y - b.y);
             if (d < 600) {
               const [ux, uy] = norm(b.x - q.x, b.y - q.y);
@@ -665,14 +895,47 @@
             b.y = t.y;
           }
         }
+        // Magnetized warlocks bend other players' spells towards (or away from) them.
+        if (!['meteor', 'linked', 'spawner', 'drainHeal', 'rechargeBack'].includes(b.k)) {
+          for (const o of this.alive()) {
+            const m = o.mods.magnet;
+            if (!m || o.id === b.owner) continue;
+            const d = len(o.x - b.x, o.y - b.y);
+            if (d > 300) continue;
+            const [ux, uy] = norm(o.x - b.x, o.y - b.y);
+            const f = 0.2 * (1 - (d * d) / 90000);
+            const sp = len(b.vx, b.vy);
+            b.vx = (1 - f) * b.vx + f * sp * m.sign * ux;
+            b.vy = (1 - f) * b.vy + f * sp * m.sign * uy;
+          }
+        }
         if (b.k !== 'linked') {
           b.x += b.vx * dt;
           b.y += b.vy * dt;
         }
         b.life -= dt;
+        const ghost = b.ghost || ['spawner', 'drainHeal', 'rechargeBack', 'linked'].includes(b.k);
+
+        // Alteration: a warlock trades places with an enemy spell coming at it.
+        if (!ghost && !gone && b.k !== 'gravity') {
+          for (const o of this.alive()) {
+            if (!o.mods.alteration || o.id === b.owner) continue;
+            const dx = b.x - o.x;
+            const dy = b.y - o.y;
+            if (len(dx, dy) > SPELLS.alteration.radius + b.r || b.vx * dx + b.vy * dy >= 0) continue;
+            this.fx({ e: 'alter', x1: o.x, y1: o.y, x2: b.x, y2: b.y });
+            const ox = o.x;
+            const oy = o.y;
+            o.x = b.x;
+            o.y = b.y;
+            b.x = ox;
+            b.y = oy;
+            delete o.mods.alteration;
+          }
+        }
 
         // Shields turn enemy spells around and make them the shield owner's.
-        if (!b.ghost && b.k !== 'swap' && b.k !== 'linked') {
+        if (!ghost && b.k !== 'swap') {
           for (const o of this.alive()) {
             if (!o.mods.shield || o.id === b.owner || b.shielded === o.id) continue;
             const d = len(b.x - o.x, b.y - o.y);
@@ -686,6 +949,8 @@
               if (b.k !== 'boomerang' && b.k !== 'link') b.owner = o.id;
               if (b.k === 'homing') b.target = null;
               if (b.k === 'boomerang') b.phase = 'back';
+              if (b.k === 'twin') b.life = 0.6; // leaves its ellipse
+              if (b.k === 'twin') b.k = 'twinLoose';
               b.shielded = o.id;
               b.life = Math.max(b.life, 0.5);
               this.fx({ e: 'reflect', x: b.x, y: b.y });
@@ -693,11 +958,48 @@
           }
         }
 
+        // Obstacles: most spells damage them and burst; some bounce off.
+        if (!gone && !ghost) {
+          for (const o of this.obstacles) {
+            const dx = b.x - o.x;
+            const dy = b.y - o.y;
+            const d = len(dx, dy);
+            if (d > b.r + o.r) continue;
+            const [nx, ny] = d > 1e-6 ? [dx / d, dy / d] : [1, 0];
+            const vn = b.vx * nx + b.vy * ny;
+            if (['drain', 'recharge', 'magnet', 'boomerang'].includes(b.k)) {
+              if (vn < 0) { b.vx -= 2 * vn * nx; b.vy -= 2 * vn * ny; }
+              b.x = o.x + nx * (b.r + o.r + 1);
+              b.y = o.y + ny * (b.r + o.r + 1);
+              if (b.k === 'magnet') b.bounced = true;
+              if (b.k === 'boomerang') b.phase = 'back';
+            } else if (b.k === 'splitter') {
+              // Splits backwards, out of the obstacle.
+              b.vx = -b.vx;
+              b.vy = -b.vy;
+              b.x = o.x + nx * (b.r + o.r + 10);
+              b.y = o.y + ny * (b.r + o.r + 10);
+              gone = true;
+            } else if (b.k === 'snowball') {
+              this.damageObstacle(o, b.dmgMax, owner);
+              gone = true;
+            } else if (b.k === 'grip' || b.k === 'link' || b.k === 'swap') {
+              gone = true;
+            } else if (b.k !== 'gravity') {
+              this.damageObstacle(o, b.dmg || 0, owner);
+              this.fx({ e: 'boom', k: b.k, x: b.x, y: b.y });
+              gone = true;
+            }
+            break;
+          }
+        }
+
         // Hits on warlocks.
-        if (!gone && !b.ghost && b.k !== 'linked') {
+        if (!gone && !ghost && b.k !== 'gravity') {
           for (const o of this.alive()) {
-            if (o.id === b.owner && !(b.k === 'bouncer' && b.prev)) continue;
-            if (b.hits.includes(o.id) && b.k !== 'bouncer') continue;
+            const self = o.id === b.owner;
+            if (self && !(b.k === 'bouncer' && b.prev) && !(b.k === 'magnet' && b.bounced)) continue;
+            if (b.hits.includes(o.id) && b.k !== 'bouncer' && b.k !== 'snowball') continue;
             if (b.k === 'bouncer' && b.prev === o.id) continue;
             if (len(o.x - b.x, o.y - b.y) > b.r + RADIUS) continue;
             const [nx, ny] = norm(b.vx, b.vy);
@@ -722,10 +1024,46 @@
               gone = true;
               break;
             }
+            if (b.k === 'splitter') { gone = true; break; } // splits on contact, the bolts do the damage
+            if (b.k === 'snowball') {
+              // Carries warlocks along and chills them: damage every half second.
+              const c = 425 - (nx * o.vx + ny * o.vy);
+              if (c > 0) { o.vx += c * nx; o.vy += c * ny; }
+              if (!o.mods.snowed && !o.mods.spawnShield) o.mods.snowed = { t: 0.5, dmg: b.dmg * 0.5, src: b.owner };
+              continue;
+            }
+            if (b.k === 'grip') {
+              if (!o.mods.spawnShield) {
+                o.move = null;
+                o.casting = null;
+                o.mods.gripped = { t: b.dur };
+                this.fx({ e: 'grip', id: o.id });
+              }
+              gone = true;
+              break;
+            }
+            if (b.k === 'magnet') {
+              o.mods.magnet = { t: b.dur, sign: self ? -1 : 1 };
+              this.fx({ e: 'magnet', id: o.id, sign: self ? -1 : 1 });
+              gone = true;
+              break;
+            }
+            if (b.k === 'drain') {
+              this.damage(o, owner, b.dmg, nx, ny, 0.2);
+              if (!o.dead && !o.mods.spawnShield) o.mods.drained = { t: b.dur };
+              if (owner) this.projectiles.push({ id: this.nextId++, k: 'drainHeal', owner: b.owner, age: 0, hits: [], x: b.x, y: b.y, vx: 0, vy: 0, r: 0, life: 30, heal: b.dmg });
+              this.fx({ e: 'boom', k: 'drain', x: b.x, y: b.y });
+              gone = true;
+              break;
+            }
             this.damage(o, owner, b.dmg, nx, ny, b.kb);
             this.fx({ e: 'boom', k: b.k, x: b.x, y: b.y });
             b.hits.push(o.id);
-            if (b.k === 'bouncer') {
+            if (b.k === 'recharge') {
+              b.hitPawn = true;
+              if (owner) this.projectiles.push({ id: this.nextId++, k: 'rechargeBack', owner: b.owner, age: 0, hits: [], x: b.x, y: b.y, vx: 0, vy: 0, r: 0, life: 30 });
+              gone = true;
+            } else if (b.k === 'bouncer') {
               b.dmg *= 0.7;
               b.prev = o.id;
               if (b.dmg < 10) { gone = true; break; }
@@ -754,35 +1092,52 @@
           }
         }
 
-        // Spells hitting spells: both explode (not meteors, gravity or links).
-        if (!gone && !b.ghost && b.k !== 'linked' && b.k !== 'swap') {
+        // Spells hitting spells: both burst. A snowball swallows what hits it.
+        if (!gone && !ghost && b.k !== 'swap') {
           for (const q of this.projectiles) {
-            if (q === b || q.ghost || q.dead || q.k === 'linked' || q.k === 'swap' || q.owner === b.owner) continue;
+            if (q === b || q.ghost || q.dead || ['linked', 'swap', 'spawner', 'drainHeal', 'rechargeBack'].includes(q.k) || q.owner === b.owner) continue;
             if (len(q.x - b.x, q.y - b.y) <= b.r + q.r) {
-              q.dead = true;
-              gone = true;
+              if (b.k !== 'snowball') gone = true;
+              if (q.k !== 'snowball') q.dead = true;
               this.fx({ e: 'boom', k: 'clash', x: (b.x + q.x) / 2, y: (b.y + q.y) / 2 });
-              break;
+              if (gone) break;
             }
           }
         }
 
-        if (b.life <= 0 && !gone) {
-          gone = true;
-          if (b.k === 'meteor') {
-            this.damageArea(owner, b.x, b.y, b.r, { amount: b.dmg, amountMin: b.dmgMin });
-            this.fx({ e: 'meteor', x: b.x, y: b.y, r: b.r });
-          } else if (b.k === 'swap' && owner && !b.swapped) {
-            // A miss still moves the caster to the end of the swap path.
-            this.fx({ e: 'swap', x1: owner.x, y1: owner.y, x2: b.x, y2: b.y });
-            owner.x = b.x;
-            owner.y = b.y;
-            owner.move = null;
-          }
-        }
-        if (!gone && !b.dead) keep.push(b);
+        if (b.life <= 0) gone = true;
+        if (gone || b.dead) ended.push(b);
+        else keep.push(b);
       }
-      this.projectiles = keep;
+      this.projectiles = keep.filter((b) => !b.dead);
+      for (const b of keep) if (b.dead) ended.push(b);
+      for (const b of ended) this.projectileEnd(b);
+    }
+
+    // What happens when a spell ends (hit, timed out or destroyed).
+    projectileEnd(b) {
+      const owner = this.pawn(b.owner);
+      if (b.k === 'meteor' && b.life <= 0) {
+        this.damageArea(owner, b.x, b.y, b.r, { amount: b.dmg, amountMin: b.dmgMin });
+        this.fx({ e: 'meteor', x: b.x, y: b.y, r: b.r });
+      } else if (b.k === 'swap' && owner && !b.swapped && !owner.dead) {
+        // A miss still moves the caster to the end of the swap path.
+        this.fx({ e: 'swap', x1: owner.x, y1: owner.y, x2: b.x, y2: b.y });
+        owner.x = b.x;
+        owner.y = b.y;
+        owner.move = null;
+      } else if (b.k === 'splitter') {
+        this.projectiles.push({ id: this.nextId++, k: 'spawner', owner: b.owner, age: 0, hits: [], x: b.x, y: b.y, ...((() => { const [ux, uy] = norm(b.vx, b.vy); return { vx: ux * 250, vy: uy * 250 }; })()), r: 0, life: 5, spawnLife: 0.48, waves: 0, tick: 0, dmg: b.dmg });
+        this.fx({ e: 'split', x: b.x, y: b.y });
+      } else if (b.k === 'snowball') {
+        // Bursts: up to its full damage at the centre, pushing with 0.8 force.
+        this.damageArea(owner, b.x, b.y, SPELLS.snowball.blast, { amount: b.dmgMax, amountMin: 0, kbMin: 0.8, kbMax: 0.8 });
+        this.fx({ e: 'snowboom', x: b.x, y: b.y, r: SPELLS.snowball.blast });
+      } else if (b.k === 'recharge') {
+        // Hits in a row make the next Recharge stronger (+10 each); a miss resets.
+        const caster = this.pawn(b.caster);
+        if (caster) caster.recharge = b.hitPawn && b.owner === b.caster ? (caster.recharge || 0) + 1 : 0;
+      }
     }
 
     finish() {
@@ -816,7 +1171,10 @@
           sp: Object.fromEntries(Object.entries(p.spells).map(([k, v]) => [k, [v.key, v.level]])),
           it: p.items,
         })),
-        b: this.projectiles.map((b) => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.r, b.owner, b.k === 'linked' ? b.target : b.life > 0 ? r1(b.life) : 0, b.id]),
+        b: this.projectiles.filter((b) => b.k !== 'spawner').map((b) => [b.k, r1(b.x), r1(b.y), r1(b.vx * (b.ts ?? 1)), r1(b.vy * (b.ts ?? 1)), b.r, b.owner, b.k === 'linked' ? b.target : b.life > 0 ? r1(b.life) : 0, b.id]),
+        o: this.obstacles.map((o) => [o.id, r1(o.x), r1(o.y), o.r, Math.round(o.hp), o.variant, o.pillar ? 1 : 0]),
+        os: this.obstacleStyle,
+        z: this.zones.map((z) => [z.id, r1(z.x), r1(z.y), z.r, r1(z.life), z.owner]),
         fx: this.effects,
       };
       this.effects = [];
@@ -836,7 +1194,7 @@
   }
 
   const Warlock = {
-    Sim, SPELLS, ITEMS, COLUMN_SPELLS, COLORS, TICK, TILE, LAYER_RADIUS, RADIUS, MAX_HP, SHOP_TIME, SHRINK_PERIOD, lv,
+    Sim, SPELLS, ITEMS, COLUMN_SPELLS, COLORS, OBSTACLE_HP, TICK, TILE, LAYER_RADIUS, RADIUS, MAX_HP, SHOP_TIME, SHRINK_PERIOD, lv,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Warlock;
   else root.Warlock = Warlock;

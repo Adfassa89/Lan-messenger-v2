@@ -297,7 +297,7 @@ function effect(e, s) {
   if (view) view.fx(e, s);
   switch (e.e) {
     case 'cast':
-      Sfx.play({ fireball: 'wlFire', cluster: 'wlFire', homing: 'wlWhoosh', bouncer: 'wlWhoosh', boomerang: 'wlWhoosh', link: 'wlChain', gravity: 'wlGravity', windwalk: 'wlWind', rush: 'wlRush', shield: 'wlShield', thrust: 'wlWind' }[e.k] || 'wlWhoosh');
+      Sfx.play({ fireball: 'wlFire', cluster: 'wlFire', homing: 'wlWhoosh', bouncer: 'wlWhoosh', boomerang: 'wlWhoosh', link: 'wlChain', gravity: 'wlGravity', windwalk: 'wlWind', rush: 'wlRush', shield: 'wlShield', thrust: 'wlWind', grip: 'wlChain', warpzone: 'wlGravity', alteration: 'wlShield', rockpillar: 'wlShrink', snowball: 'wlWind', magnetize: 'wlBlink' }[e.k] || 'wlWhoosh');
       break;
     case 'boom':
       Sfx.play(e.k === 'clash' ? 'wlClash' : 'wlBoom');
@@ -316,7 +316,24 @@ function effect(e, s) {
       Sfx.play('wlMeteor');
       break;
     case 'reflect':
+    case 'magnet':
+    case 'heal':
+    case 'recharged':
       Sfx.play('wlShield');
+      break;
+    case 'split':
+    case 'alter':
+      Sfx.play('wlBlink');
+      break;
+    case 'snowboom':
+    case 'obstacleBoom':
+      Sfx.play('wlBoom');
+      break;
+    case 'grip':
+      Sfx.play('wlChain');
+      break;
+    case 'pillar':
+      Sfx.play('wlShrink');
       break;
     case 'link':
       Sfx.play('wlChain');
@@ -512,6 +529,16 @@ function spellTip(k) {
     rush: t('Faster; absorbs half the damage you take.'),
     gravity: t('A black hole that pulls warlocks and spells in.'),
     link: t('Chains a warlock and pulls them to you.'),
+    twin: t('Two orbs fly on mirrored arcs and meet at the target.'),
+    drain: t('Flies to the target, then turns to the nearest warlock: damages and slows it, and the stolen life flies back to heal you.'),
+    recharge: t('A hit sends a spark back that resets its cooldown; every hit in a row adds 10 damage.'),
+    splitter: t('Cast without turning: a bolt that bursts into eight smaller bolts.'),
+    snowball: t('A big rolling snowball that carries warlocks along, chills them and bursts at the end.'),
+    alteration: t('For 2 s you trade places with the first enemy spell that comes at you.'),
+    grip: t('The warlock hit cannot walk, takes a third of the knockback, and every spell it casts adds damage points.'),
+    warpzone: t('A zone that slows enemy spells inside it.'),
+    magnetize: t('Magnetizes a warlock: other spells bend towards it. Bounce it off an obstacle onto yourself to push spells away.'),
+    rockpillar: t('Raises a rock pillar for 4 s that blocks warlocks and spells.'),
   }[k] || '';
   return `${d.name}: ${about} ${bits.join(' · ')}`;
 }

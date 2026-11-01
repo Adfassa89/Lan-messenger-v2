@@ -16,6 +16,7 @@ import {
 } from './warlock3d-lib.js';
 
 const { TILE, RADIUS, COLORS, SPELLS } = window.Warlock;
+const Warlock_OBSTACLE_HP = window.Warlock.OBSTACLE_HP || 400;
 const MODEL_SCALE = 1.6;
 const MODEL_HEIGHT = 210; // the animated model with its staff, in arena units
 const MODEL_CLIPS = { Idle: 'wizard_fight_idle', Run: 'wizard_run', Cast: 'wizard_attack1', Death: 'wizard_dead' };
@@ -39,6 +40,16 @@ const SPELL_COLOR = {
 };
 const NO_AIM = ['shield', 'windwalk', 'rush', 'scourge'];
 const BALL_STYLE = {
+  twin: ['#ffe6ff', '#d070ff', '#5a1a9a'],
+  twinLoose: ['#ffe6ff', '#d070ff', '#5a1a9a'],
+  drain: ['#eaffd0', '#7aff3a', '#1a6a0a'],
+  drainHeal: ['#f0fff0', '#5aff7a', '#0a6a2a'],
+  recharge: ['#f6e6ff', '#b86aff', '#4a1aa8'],
+  rechargeBack: ['#e8f6ff', '#6ac8ff', '#1a4aa8'],
+  splitter: ['#e8fbff', '#5ae0ff', '#0a5aa8'],
+  splitChild: ['#e8fbff', '#5ae0ff', '#0a5aa8'],
+  grip: ['#ffd0d0', '#ff2a2a', '#3a0000'],
+  magnet: ['#e0fff8', '#3affd8', '#0a6a5a'],
   fireball: ['#fff2c0', '#ff8a1c', '#c42a06'],
   cluster: ['#fff6c8', '#ffb83a', '#d0600a'],
   homing: ['#f6e6ff', '#b56cff', '#4a0ea8'],
@@ -147,6 +158,9 @@ export class View {
     this.balls = new Map();
     this.debris = this.makeDebris();
     this.selected = null;
+    this.obsMeshes = new Map();
+    this.zoneMeshes = new Map();
+    this.styleShown = -1;
     // The animated hero model (Quaternius, CC0). Until it loads, or if it
     // cannot, the built-in procedural warlock is used.
     new GLTFLoader().load('models/warlock.glb', (g) => { this.gltf = g; }, undefined, (err) => console.warn('warlock model', err));
@@ -781,6 +795,7 @@ export class View {
       w.root.rotation.set(0, -w.f, 0);
       if (w.model) this.animateModel(w, p, dt, w.speed, onLava);
       else this.animate(w, p, dt, w.speed, onLava);
+      this.modEffects(w, p, tx, ty, dt);
       w.circle.material.opacity = p.id === me ? 0.95 : 0.55;
       w.sel.visible = this.selected === p.id;
       if (w.sel.visible) {
@@ -892,6 +907,14 @@ export class View {
       g.add(m);
       o.spin = m;
       halo('#c8dcff', 50);
+    } else if (kind === 'snowball') {
+      const geo = new THREE.IcosahedronGeometry(1, 3);
+      const p = geo.attributes.position;
+      for (let i = 0; i < p.count; i++) { const k = 1 + rand(-0.06, 0.06); p.setXYZ(i, p.getX(i) * k, p.getY(i) * k, p.getZ(i) * k); }
+      geo.computeVertexNormals();
+      o.snow = new THREE.Mesh(geo, addRim(new THREE.MeshStandardMaterial({ color: 0xf2f8ff, roughness: 0.85, emissive: 0x2a4a6a, emissiveIntensity: 0.4 }), '#a8d8ff', 1.1));
+      o.snow.castShadow = true;
+      g.add(o.snow);
     } else if (kind === 'meteor') {
       const geo = new THREE.IcosahedronGeometry(62, 2);
       const p = geo.attributes.position;
@@ -1025,6 +1048,20 @@ export class View {
         this.light(x, 120, y, '#9a50ff', 3.5);
         continue;
       }
+      if (kind === 'snowball') {
+        const rr = r * 0.85;
+        o.snow.scale.setScalar(rr);
+        o.g.position.set(x, rr, y);
+        // Rolls along its direction.
+        const sp = Math.hypot(vx, vy);
+        if (sp > 1) o.snow.rotateOnWorldAxis(new THREE.Vector3(vy / sp, 0, -vx / sp), (-sp * dt) / rr);
+        for (let i = this.emit(o, 40, dt); i > 0; i--) {
+          const a = rand(0, TAU);
+          this.smoke.add({ p: [x + Math.cos(a) * rr, rand(5, 30), y + Math.sin(a) * rr], v: [rand(-30, 30), rand(10, 40), rand(-30, 30)], c0: col('#e8f4ff'), size: 30, size1: 90, life: 0.8, a: 0.35, tile: TILE_SMOKE });
+          this.fire.add({ p: [x + rand(-rr, rr), rand(10, rr * 2), y + rand(-rr, rr)], v: [rand(-60, 60), rand(20, 80), rand(-60, 60)], c0: col('#ffffff'), c1: col('#8ac8ff'), size: 5, life: 0.6, grav: 120 });
+        }
+        continue;
+      }
       if (kind === 'boomerang') {
         o.spin.rotation.y += dt * 24;
         for (let i = this.emit(o, 60, dt); i > 0; i--) this.fire.add({ p: [x, BALL_Y, y], v: [rand(-20, 20), rand(-10, 10), rand(-20, 20)], c0: col('#e8f0ff'), c1: col('#5a7ab0'), size: 18, size1: 4, life: 0.3 });
@@ -1036,7 +1073,7 @@ export class View {
         if (a) this.chain(o, a.x, a.y, x, y);
         o.hook.rotation.set(Math.PI / 2, 0, Math.atan2(vy, vx));
       }
-      const rr = Math.max(14, r * 0.95);
+      const rr = kind === 'drainHeal' || kind === 'rechargeBack' ? 12 : Math.max(14, r * 0.95);
       o.core.scale.setScalar(rr * 0.62);
       o.core.material.uniforms.uTime.value = this.time;
       o.glow.scale.setScalar(rr * 6 * (1 + 0.08 * Math.sin(this.time * 30)));
@@ -1389,6 +1426,41 @@ export class View {
         this.shake(24, 0.3);
         break;
       }
+      case 'split':
+        this.burst(e.x, e.y, BALL_Y, { n: 30, c0: col('#e0fbff').multiplyScalar(2), c1: col('#0a5aa8'), size: 4, life: 0.4, speed: 420, tile: TILE_SPARK, stretch: 0.05 });
+        this.wave(e.x, e.y, 90, '#5ae0ff', 0.3);
+        this.flashes.push({ x: e.x, y: e.y, z: 100, color: '#5ae0ff', power: 4, t0: this.time, life: 0.25 });
+        break;
+      case 'snowboom':
+        this.burst(e.x, e.y, 40, { n: 60, c0: col('#ffffff').multiplyScalar(1.5), c1: col('#6aa8ff'), size: 9, life: 0.9, speed: 420, up: 0.3, grav: 500 });
+        this.smokeCloud(e.x, e.y, 14, 110, '#e8f2ff', 30);
+        this.wave(e.x, e.y, e.r, '#bfe4ff', 0.5, 0.08);
+        this.flashes.push({ x: e.x, y: e.y, z: 100, color: '#bfe4ff', power: 5, t0: this.time, life: 0.3 });
+        this.shake(10, 0.2);
+        break;
+      case 'grip':
+        if (w) this.wave(w.x, w.y, 90, '#ff3030', 0.4, 0.1);
+        break;
+      case 'magnet':
+        if (w) this.wave(w.x, w.y, 300, e.sign > 0 ? '#3affd8' : '#ff5ae0', 0.5, 0.05);
+        break;
+      case 'heal':
+        if (w) { this.floater(w.x, w.y, `+${e.n}`, '#7aff8a'); this.burst(w.x, w.y, 80, { n: 16, c0: col('#c0ffc0'), c1: col('#0a6a2a'), size: 10, life: 0.6, speed: 120, up: 0.6 }); }
+        break;
+      case 'recharged':
+        if (w) { this.floater(w.x, w.y, `×${e.n}`, '#c08aff'); this.burst(w.x, w.y, 80, { n: 16, c0: col('#e0c0ff'), c1: col('#4a1aa8'), size: 10, life: 0.5, speed: 140, up: 0.4 }); }
+        break;
+      case 'alter':
+        this.beam(e.x1, e.y1, '#7affc8', 260, 40);
+        this.beam(e.x2, e.y2, '#7affc8', 260, 40);
+        this.wave(e.x1, e.y1, 120, '#7affc8', 0.35);
+        this.wave(e.x2, e.y2, 120, '#7affc8', 0.35);
+        break;
+      case 'obstacleBoom':
+        this.explode(e.x, e.y, 60, 2, ['#fff0b0', '#ff7a1a', '#801000'], { rocks: 20 });
+        this.wave(e.x, e.y, 300, '#ff8a3a', 0.5, 0.06);
+        this.shake(20, 0.3);
+        break;
       case 'shrink':
         this.sink(this.builtLayer, e.layer);
         this.buildTiles(e.layer);
@@ -1515,6 +1587,217 @@ export class View {
     this.smoke.update(dt);
   }
 
+  // ------------------------------------------------------------ obstacles
+  // Three styles like Warlock Brawl's: stone ruins, rocks, or barrels, poles
+  // and a chest. Rockpillar is a tall rock spire.
+  makeObstacle(style, variant, r, pillar) {
+    const g = new THREE.Group();
+    const add = (geo, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+    const lumpy = (geo, k) => {
+      const p = geo.attributes.position;
+      for (let i = 0; i < p.count; i++) { const f = 1 + rand(-k, k); p.setXYZ(i, p.getX(i) * f, p.getY(i) * (1 + rand(-k, k) * 0.5), p.getZ(i) * f); }
+      geo.computeVertexNormals();
+      return geo;
+    };
+    const stone = addRim(new THREE.MeshStandardMaterial({ map: this.tileTex[variant % 4], bumpMap: this.tileTex[variant % 4], bumpScale: 2, color: 0xb0a898, roughness: 0.92 }), '#ff7a30', 0.35);
+    const rock = addRim(new THREE.MeshStandardMaterial({ color: 0x4a3a30, roughness: 0.95, flatShading: true }), '#ff6a20', 0.45);
+    const wood = addRim(new THREE.MeshStandardMaterial({ color: 0x6a4424, roughness: 0.85 }), '#ff7a30', 0.35);
+    const iron = new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 0.5, metalness: 0.8 });
+    if (pillar) {
+      const spire = add(lumpy(new THREE.CylinderGeometry(r * 0.35, r * 1.05, 300, 9, 6), 0.12), rock, 0, 150, 0);
+      spire.rotation.y = rand(0, TAU);
+      for (let k = 0; k < 4; k++) add(lumpy(new THREE.DodecahedronGeometry(r * rand(0.3, 0.45), 0), 0.15), rock, Math.cos(k * 1.6) * r * 0.9, 15, Math.sin(k * 1.6) * r * 0.9);
+      return g;
+    }
+    if (style === 0) {
+      // Stone ruins: broken fluted columns on square bases, or a fallen block pile.
+      if (variant < 3) {
+        const h = [210, 150, 110][variant];
+        add(new THREE.BoxGeometry(r * 1.9, 26, r * 1.9), stone, 0, 13, 0);
+        const shaft = new THREE.CylinderGeometry(r * 0.62, r * 0.7, h, 14, 4);
+        const p = shaft.attributes.position;
+        for (let i = 0; i < p.count; i++) {
+          const a = Math.atan2(p.getZ(i), p.getX(i));
+          const f = 1 - 0.06 * Math.max(0, Math.cos(a * 14));
+          const top = p.getY(i) > h / 2 - 1;
+          p.setXYZ(i, p.getX(i) * f, p.getY(i) + (top ? rand(-28, 6) : 0), p.getZ(i) * f);
+        }
+        shaft.computeVertexNormals();
+        add(shaft, stone, 0, 26 + h / 2, 0);
+        add(new THREE.BoxGeometry(r * 1.5, 18, r * 1.5), stone, rand(-20, 20), 8, r * 1.1).rotation.set(0.3, rand(0, 3), 0.2);
+      } else {
+        for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(r * rand(0.8, 1.2), r * rand(0.5, 0.8), r * rand(0.8, 1.2)), stone, rand(-r, r) * 0.6, r * 0.3 + k * 18, rand(-r, r) * 0.6).rotation.set(rand(-0.3, 0.3), rand(0, 3), rand(-0.3, 0.3));
+      }
+    } else if (style === 1) {
+      // Rocks: two or three lumpy boulders.
+      const n = 2 + (variant % 2);
+      for (let k = 0; k < n; k++) {
+        const s2 = r * (k ? rand(0.45, 0.65) : 0.95);
+        const m = add(lumpy(new THREE.DodecahedronGeometry(s2, 1), 0.18), rock, k ? rand(-r, r) * 0.7 : 0, s2 * 0.7, k ? rand(-r, r) * 0.7 : 0);
+        m.scale.y = rand(0.8, 1.3);
+        m.rotation.set(rand(0, 3), rand(0, 3), rand(0, 3));
+      }
+    } else if (variant <= 1) {
+      // Barrel with iron hoops.
+      const pts = [[0, 0], [r * 0.8, 0], [r * 0.95, 30], [r, 55], [r * 0.95, 80], [r * 0.8, 110], [0, 110]].map(([x, y]) => new THREE.Vector2(x, y));
+      add(new THREE.LatheGeometry(pts, 18), wood);
+      for (const y of [18, 55, 92]) add(new THREE.TorusGeometry(y === 55 ? r * 1.0 : r * 0.9, 2.5, 5, 22), iron, 0, y, 0).rotation.x = Math.PI / 2;
+      if (variant === 1) g.rotation.z = 0.08;
+    } else if (variant <= 3) {
+      // Wooden pole with a rope band.
+      add(new THREE.CylinderGeometry(r * 0.45, r * 0.55, 230, 10), wood, 0, 115, 0);
+      add(new THREE.TorusGeometry(r * 0.5, 3, 5, 14), new THREE.MeshStandardMaterial({ color: 0xb8a070, roughness: 1 }), 0, 150, 0).rotation.x = Math.PI / 2;
+      add(new THREE.ConeGeometry(r * 0.48, 22, 10), wood, 0, 241, 0);
+      if (variant === 3) g.rotation.x = 0.1;
+    } else {
+      // Treasure chest.
+      add(new THREE.BoxGeometry(r * 1.8, 50, r * 1.2), wood, 0, 25, 0);
+      const lid = add(new THREE.CylinderGeometry(r * 0.6, r * 0.6, r * 1.8, 14, 1, false, 0, Math.PI), wood, 0, 50, 0);
+      lid.rotation.set(0, 0, Math.PI / 2);
+      for (const x of [-r * 0.6, r * 0.6]) add(new THREE.BoxGeometry(6, 52, r * 1.25), new THREE.MeshStandardMaterial({ color: 0xc9a14a, metalness: 0.85, roughness: 0.35 }), x, 26, 0);
+    }
+    g.rotation.y = rand(0, TAU);
+    return g;
+  }
+
+  updateObstacles(s, dt) {
+    const list = s.o || [];
+    if (s.os !== undefined && s.os !== this.styleShown) {
+      // The stone of the platform matches the obstacle style of the round.
+      this.styleShown = s.os;
+      const tint = [[1, 1, 1], [0.86, 0.74, 0.68], [1.04, 0.94, 0.8]][s.os] || [1, 1, 1];
+      for (const m of [...this.tileMats, ...this.edgeMats]) m.color.setRGB(...tint);
+    }
+    const live = new Set();
+    for (const [id, x, y, r, hp, variant, pillar] of list) {
+      live.add(id);
+      let o = this.obsMeshes.get(id);
+      if (!o) {
+        const g = this.makeObstacle(s.os || 0, variant, r, pillar);
+        g.position.set(x, 0, y);
+        this.scene.add(g);
+        const bar = document.createElement('div');
+        bar.className = 'obar';
+        bar.innerHTML = '<i></i>';
+        this.labels.append(bar);
+        o = { g, bar, born: this.time, pillar, x, y, hp };
+        this.obsMeshes.set(id, o);
+        if (pillar) {
+          this.smokeCloud(x, y, 10, 70, '#5a4a40', 10);
+          this.rocks(x, y, 10, 260);
+          this.shake(10, 0.2);
+        }
+      }
+      // A pillar bursts out of the ground.
+      const k = Math.min(1, (this.time - o.born) / 0.25);
+      o.g.position.y = o.pillar ? -300 * (1 - k) * (1 - k) : 0;
+      if (hp < o.hp) { o.hitT = this.time; this.fire.add({ p: [x, 60, y], v: [0, 80, 0], c0: col('#ffd0a0'), c1: col('#a06030'), size: 30, size1: 60, life: 0.3 }); }
+      o.hp = hp;
+      const shakeK = Math.max(0, 1 - (this.time - (o.hitT || -9)) / 0.2);
+      o.g.position.x = x + Math.sin(this.time * 80) * 4 * shakeK;
+      // Health bar like Dota's, once it has been damaged.
+      const show = hp < Warlock_OBSTACLE_HP;
+      o.bar.style.display = show ? '' : 'none';
+      if (show) {
+        const [sx, sy] = this.toScreen(x, y, o.pillar ? 320 : 170);
+        o.bar.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px) translate(-50%, -50%)`;
+        o.bar.firstChild.style.width = `${Math.max(0, (hp / Warlock_OBSTACLE_HP) * 100)}%`;
+      }
+    }
+    for (const [id, o] of this.obsMeshes) {
+      if (live.has(id)) continue;
+      if (o.pillar && !o.sinkT) { o.sinkT = this.time; o.bar.remove(); }
+      if (o.sinkT && this.time - o.sinkT < 0.5) { o.g.position.y = -300 * ((this.time - o.sinkT) / 0.5) ** 2; continue; }
+      this.scene.remove(o.g);
+      o.g.traverse((m) => { if (m.geometry) m.geometry.dispose(); });
+      o.bar.remove();
+      this.obsMeshes.delete(id);
+    }
+  }
+
+  // Warp zones: a slow, swirling blue field.
+  updateZones(s) {
+    const live = new Set();
+    for (const [id, x, y, r, life] of s.z || []) {
+      live.add(id);
+      let z = this.zoneMeshes.get(id);
+      if (!z) {
+        const disk = new THREE.Mesh(new THREE.CircleGeometry(1, 64), swirlMaterial('#3aa8ff'));
+        disk.rotation.x = -Math.PI / 2;
+        disk.renderOrder = 5;
+        const dome = new THREE.Mesh(this.sphereGeo, bubbleMaterial('#4ab8ff', true));
+        const ring = new THREE.Mesh(this.discGeo, shockMaterial('#7fd8ff'));
+        ring.renderOrder = 5;
+        this.scene.add(disk, dome, ring);
+        z = { disk, dome, ring, born: this.time };
+        this.zoneMeshes.set(id, z);
+        this.wave(x, y, r * 1.2, '#7fd8ff', 0.5);
+      }
+      const k = Math.min(1, (this.time - z.born) / 0.3) * Math.min(1, life / 0.4);
+      z.disk.position.set(x, 3, y);
+      z.disk.scale.setScalar(r * 2.2);
+      z.disk.material.uniforms.uTime.value = this.time * 0.25; // slowed swirl
+      z.disk.material.uniforms.uAlpha.value = 0.7 * k;
+      z.dome.position.set(x, 0, y);
+      z.dome.scale.set(r, r * 0.55, r);
+      z.dome.material.uniforms.uTime.value = this.time * 0.3;
+      z.dome.material.uniforms.uAlpha.value = 0.45 * k;
+      z.ring.position.set(x, 4, y);
+      z.ring.scale.setScalar(r);
+      z.ring.material.uniforms.uProg.value = 0.97;
+      z.ring.material.uniforms.uWidth.value = 0.03;
+      z.ring.material.uniforms.uAlpha.value = k;
+      if (Math.random() < 0.3) {
+        const a = rand(0, TAU);
+        const d = rand(0, r);
+        this.fire.add({ p: [x + Math.cos(a) * d, rand(10, r * 0.5), y + Math.sin(a) * d], v: [0, 8, 0], c0: col('#bfe8ff'), c1: col('#1a5aa8'), size: 5, life: 1.2, drag: 1 });
+      }
+    }
+    for (const [id, z] of this.zoneMeshes) {
+      if (live.has(id)) continue;
+      for (const m of [z.disk, z.dome, z.ring]) { this.scene.remove(m); m.material.dispose(); }
+      z.disk.geometry.dispose();
+      this.zoneMeshes.delete(id);
+    }
+  }
+
+  // Lingering effects on warlocks (Grip, Drain, Snowball chill, Magnetize, Alteration).
+  modEffects(w, p, tx, ty, dt) {
+    const m = p.m;
+    const tint = [0, 0, 0];
+    const t = this.time;
+    if (m.includes('gripped')) {
+      tint[0] += 0.4;
+      if (Math.random() < dt * 30) {
+        const a = rand(0, TAU);
+        this.fire.add({ p: [tx + Math.cos(a) * 45, 5, ty + Math.sin(a) * 45], v: [0, rand(30, 80), 0], c0: col('#ff4040'), c1: col('#300000'), size: 7, life: 0.6, tile: TILE_SPARK, stretch: 0.05 });
+      }
+    }
+    if (m.includes('drained')) {
+      tint[1] += 0.18;
+      if (Math.random() < dt * 14) this.fire.add({ p: [tx + rand(-25, 25), rand(30, 140), ty + rand(-25, 25)], v: [0, rand(20, 50), 0], c0: col('#a0ff60'), c1: col('#105a00'), size: 9, life: 0.8 });
+    }
+    if (m.includes('snowed')) {
+      tint[1] += 0.15; tint[2] += 0.4;
+      if (Math.random() < dt * 30) this.fire.add({ p: [tx + rand(-35, 35), rand(10, 160), ty + rand(-35, 35)], v: [rand(-20, 20), -40, rand(-20, 20)], c0: col('#ffffff'), c1: col('#8ac8ff'), size: 5, life: 0.7 });
+    }
+    if (m.includes('magnet')) {
+      for (let k = 0; k < 2; k++) {
+        const a = t * 6 + k * Math.PI;
+        this.fire.add({ p: [tx + Math.cos(a) * 90, 80 + Math.sin(t * 3) * 30, ty + Math.sin(a) * 90], c0: col('#5affe0').multiplyScalar(2), c1: col('#0a5a5a'), size: 12, size1: 3, life: 0.35 });
+      }
+      if (!w.magWave || t - w.magWave > 0.6) { w.magWave = t; this.wave(tx, ty, 300, '#3affd8', 0.6, 0.04); }
+    }
+    if (m.includes('alteration')) {
+      tint[1] += 0.12; tint[2] += 0.1;
+      if (Math.random() < dt * 40) {
+        const a = rand(0, TAU);
+        this.fire.add({ p: [tx + Math.cos(a) * 60, rand(10, 160), ty + Math.sin(a) * 60], v: [-Math.sin(a) * 120, 20, Math.cos(a) * 120], c0: col('#a0ffe0').multiplyScalar(1.6), c1: col('#0a6a4a'), size: 6, life: 0.4, drag: 1 });
+      }
+    }
+    if (tint[0] || tint[1] || tint[2]) for (const mat of w.mats) { mat.emissive.r += tint[0]; mat.emissive.g += tint[1]; mat.emissive.b += tint[2]; }
+  }
+
   // ------------------------------------------------------------ frame
   frame({ s, prev, k, since, dt, me, names, follow }) {
     this.time += dt;
@@ -1526,6 +1809,8 @@ export class View {
     this.lavaMat.uniforms.uTime.value = this.time;
     this.haze.uniforms.uTime.value = this.time;
 
+    this.updateObstacles(s, dt);
+    this.updateZones(s);
     this.updatePawns(s, prev, k, me, names, dt);
     this.updateBalls(s, since, dt);
 

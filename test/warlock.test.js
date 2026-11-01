@@ -9,6 +9,7 @@ function arena(n = 2) {
   sim.start();
   sim.toFight();
   for (const p of sim.pawns) p.mods = {}; // skip the 2 s spawn protection
+  sim.obstacles = []; // tests place their own
   return sim;
 }
 const run = (sim, seconds) => { for (let i = 0; i < seconds / W.TICK; i++) sim.step(); };
@@ -139,4 +140,166 @@ test('a whole match: shop, rounds, scores and the final winner', () => {
   assert.strictEqual(sim.pawn('a').score, 2);
   assert.strictEqual(sim.pawn('a').cash, 30 + 10 * 2);
   assert.ok(events.includes('fight') && events.includes('death') && events.includes('roundEnd') && events.includes('over'));
+});
+
+// ---------------------------------------------------------------- Warlock Brawl spells added later
+const give = (p, slot, key, level = 1) => { p.spells[slot] = { key, level }; p.cd = {}; p.face = 0; };
+const castAt = (sim, id, slot, x, y) => sim.input(id, { cast: slot, x, y });
+
+test('Twin: two orbs on mirrored arcs meet at the target and hit there', () => {
+  const sim = arena();
+  const [a, b] = sim.pawns;
+  a.x = 0; a.y = 0; b.x = 600; b.y = 0;
+  give(a, 1, 'twin');
+  castAt(sim, 'p0', 1, 600, 0);
+  run(sim, 0.25);
+  const orbs = sim.projectiles.filter((q) => q.k === 'twin');
+  assert.strictEqual(orbs.length, 2);
+  assert.ok(orbs[0].y * orbs[1].y < 0, 'one above, one below the line');
+  run(sim, 1.2);
+  assert.ok(b.hp <= 1000 - 44 * 2 + 5, `both orbs hit (hp ${b.hp})`);
+});
+
+test('Drain: damages, slows, and its life flies back to heal the caster', () => {
+  const sim = arena();
+  const [a, b] = sim.pawns;
+  a.x = 0; a.y = 0; b.x = 400; b.y = 0;
+  a.hp = 500;
+  give(a, 3, 'drain');
+  castAt(sim, 'p0', 3, 400, 0);
+  run(sim, 0.9);
+  assert.ok(b.hp < 1000 - 50, 'target took damage');
+  assert.ok(b.mods.drained, 'target slowed');
+  assert.ok(sim.speed(b) < 210, 'slower');
+  run(sim, 1.5);
+  assert.ok(a.hp > 560, `caster healed (${a.hp})`);
+});
+
+test('Recharge: a hit comes back to reset its cooldown and grows the next one', () => {
+  const sim = arena();
+  const [a, b] = sim.pawns;
+  a.x = 0; a.y = 0; b.x = 300; b.y = 0;
+  give(a, 3, 'recharge');
+  castAt(sim, 'p0', 3, 300, 0);
+  run(sim, 0.6);
+  assert.strictEqual(a.recharge, 1, 'one hit in a row');
+  run(sim, 1.5);
+  assert.strictEqual(a.cd[3] || 0, 0, 'cooldown reset by the returning spark');
+});
+
+test('Splitter: casts without turning and bursts into 8 bolts', () => {
+  const sim = arena();
+  const [a, b] = sim.pawns;
+  a.x = 0; a.y = 0; a.face = Math.PI; b.x = 2000; b.y = 2000;
+  give(a, 4, 'splitter');
+  a.face = Math.PI;
+  castAt(sim, 'p0', 4, 600, 0);
+  sim.step();
+  assert.ok(sim.projectiles.some((q) => q.k === 'splitter'), 'fired at once, facing away');
+  run(sim, 1.6);
+  const kids = sim.projectiles.filter((q) => q.k === 'splitChild').length;
+  assert.ok(kids >= 6, `children spawned (${kids})`);
+});
+
+test('Snowball: carries warlocks along, chills them and bursts at the end', () => {
+  const sim = arena();
+  const [a, b] = sim.pawns;
+  a.x = 0; a.y = 0; b.x = 150; b.y = 0;
+  give(a, 4, 'snowball');
+  castAt(sim, 'p0', 4, 600, 0);
+  run(sim, 1.0);
+  assert.ok(b.x > 300, `pushed along (${Math.round(b.x)})`);
+  run(sim, 1.5);
+  assert.ok(b.hp < 1000 - 30, 'chill and burst damage');
+});
+
+test('Grip: the target cannot walk and takes a third of the knockback', () => {
+  const sim = arena();
+  const [a, b] = sim.pawns;
+  a.x = 0; a.y = 0; b.x = 400; b.y = 0;
+  give(a, 6, 'grip');
+  castAt(sim, 'p0', 6, 400, 0);
+  run(sim, 0.7);
+  assert.ok(b.mods.gripped, 'gripped');
+  sim.input('p1', { move: [1000, 0] });
+  const x0 = b.x;
+  run(sim, 0.5);
+  assert.ok(Math.abs(b.x - x0) < 2, 'cannot walk');
+  b.vx = 0;
+  sim.damage(b, a, 70, 1, 0, 1);
+  assert.ok(Math.abs(b.vx - 700 * 0.33) < 1, 'knockback cut to a third');
+});
+
+test('Warpzone slows enemy spells inside it, not the caster\'s own', () => {
+  const sim = arena();
+  const [a, b] = sim.pawns;
+  a.x = -800; a.y = 0; b.x = 800; b.y = 0;
+  give(b, 6, 'warpzone');
+  castAt(sim, 'p1', 6, 300, 0);
+  run(sim, 0.3);
+  assert.strictEqual(sim.zones.length, 1);
+  sim.projectiles.push({ id: 999, k: 'fireball', owner: 'p0', x: 200, y: 0, vx: 1000, vy: 0, r: 25, life: 1, dmg: 70, kb: 1, hits: [], age: 0 });
+  sim.step();
+  const fb = sim.projectiles.find((q) => q.id === 999);
+  assert.ok(fb.x < 200 + 1000 * W.TICK * 0.5, 'slowed to 40%');
+});
+
+test('Magnetize pulls other players\' spells towards the magnetized warlock', () => {
+  const sim = arena(3);
+  const [a, b] = sim.pawns;
+  b.x = 0; b.y = 0; a.x = -2000; a.y = -2000;
+  b.mods.magnet = { t: 3, sign: 1 };
+  sim.projectiles.push({ id: 998, k: 'fireball', owner: 'p2', x: -200, y: 150, vx: 1000, vy: 0, r: 25, life: 1, dmg: 70, kb: 1, hits: [], age: 0 });
+  run(sim, 0.12);
+  const fb = sim.projectiles.find((q) => q.id === 998);
+  assert.ok(!fb || fb.vy < -50, 'bent towards the magnetized warlock');
+});
+
+test('Rockpillar and obstacles: block spells, bounce warlocks, explode at 0 HP', () => {
+  const sim = arena();
+  const [a, b] = sim.pawns;
+  a.x = 0; a.y = 0; b.x = 900; b.y = 0;
+  give(a, 6, 'rockpillar');
+  castAt(sim, 'p0', 6, 450, 0);
+  run(sim, 0.3);
+  assert.strictEqual(sim.obstacles.length, 1, 'pillar raised');
+  give(a, 0, 'fireball');
+  castAt(sim, 'p0', 0, 900, 0);
+  run(sim, 1.2);
+  assert.strictEqual(b.hp, 1000, 'fireball stopped by the pillar');
+  assert.ok(sim.obstacles[0].hp < 400, 'pillar damaged');
+  run(sim, 4);
+  assert.strictEqual(sim.obstacles.length, 0, 'pillar gone after 4 s');
+  // A warlock flying into an obstacle bounces off at half speed.
+  const o = sim.addObstacle(300, 0, 60, 0);
+  a.x = 0; a.y = 0; a.vx = 1000; a.vy = 0;
+  run(sim, 0.3);
+  assert.ok(a.vx < 0, 'bounced back');
+  // Breaking it explodes.
+  b.x = 400; b.y = 0; b.vx = 0;
+  sim.damageObstacle(o, 400, a);
+  assert.strictEqual(sim.obstacles.length, 0);
+  assert.ok(b.hp < 1000 && b.vx > 0, 'explosion pushes nearby warlocks');
+});
+
+test('Alteration swaps the warlock with an incoming enemy spell', () => {
+  const sim = arena();
+  const [a, b] = sim.pawns;
+  a.x = 0; a.y = 0; b.x = 600; b.y = 0;
+  give(a, 5, 'alteration');
+  castAt(sim, 'p0', 5, 0, 0);
+  assert.ok(a.mods.alteration, 'active at once');
+  sim.projectiles.push({ id: 997, k: 'fireball', owner: 'p1', x: 250, y: 0, vx: -1000, vy: 0, r: 25, life: 1, dmg: 70, kb: 1, hits: [], age: 0 });
+  run(sim, 0.2);
+  assert.ok(a.x > 100, `warlock moved to the spell (${Math.round(a.x)})`);
+  assert.strictEqual(a.hp, 1000, 'not hit');
+});
+
+test('Every round places 2 – 8 obstacles within ±1000 in one style', () => {
+  const sim = new W.Sim([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], { rounds: 3, seed: 7 });
+  sim.start();
+  assert.ok(sim.obstacles.length >= 2 && sim.obstacles.length <= 8);
+  assert.ok(sim.obstacles.every((o) => Math.abs(o.x) <= 1000 && Math.abs(o.y) <= 1000 && o.hp === 400));
+  const snap = sim.snapshot();
+  assert.strictEqual(snap.o.length, sim.obstacles.length);
 });

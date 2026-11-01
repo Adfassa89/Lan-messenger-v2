@@ -11,6 +11,8 @@ button { font: inherit; cursor: pointer; }
 .lbl .bar { width: 64px; height: 7px; border-radius: 4px; background: rgba(0, 0, 0, .7); border: 1px solid rgba(0, 0, 0, .8); overflow: hidden; box-shadow: 0 1px 4px rgba(0, 0, 0, .6); }
 .lbl .bar i { display: block; height: 100%; transition: width .15s; }
 .lbl small { min-height: 12px; font: 700 10.5px "Segoe UI", sans-serif; color: #ff9a5c; text-shadow: 0 1px 2px #000; }
+.obar { position: absolute; left: 0; top: 0; width: 46px; height: 5px; border-radius: 3px; background: rgba(0, 0, 0, .7); border: 1px solid #000; overflow: hidden; }
+.obar i { display: block; height: 100%; background: linear-gradient(#e8c07a, #a8742a); }
 .floater { position: absolute; left: 0; top: 0; font: 900 18px "Segoe UI", sans-serif; text-shadow: 0 2px 4px #000, 0 0 2px #000; will-change: transform, opacity; }
 
 /* ---------------------------------------------------------------- lobby */
@@ -113,3 +115,12 @@ button { font: inherit; cursor: pointer; }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 @keyframes bannerIn { from { opacity: 0; transform: scale(1.8); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+
+/* Compact spell buttons: icon on the left, name / price / level on the right,
+   so all six rows of the last column fit without scrolling. */
+.shop-cols .buy { display: grid; grid-template-columns: 34px 1fr; grid-template-areas: "ic nm" "ic pr" "ic lv"; column-gap: 7px; row-gap: 0; align-items: center; justify-items: start; padding: 5px 7px; text-align: left; }
+.shop-cols .buy .ic { grid-area: ic; width: 34px; height: 34px; }
+.shop-cols .buy .nm { grid-area: nm; font-size: 12px; line-height: 1.2; }
+.shop-cols .buy .pr { grid-area: pr; font-size: 11px; line-height: 1.2; }
+.shop-cols .buy .lv { grid-area: lv; font-size: 8px; letter-spacing: 1px; line-height: 1.1; }
+.shop-cols .shop-col { gap: 5px; }
