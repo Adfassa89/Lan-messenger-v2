@@ -147,6 +147,12 @@ function targetDisplay() {
   return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
 }
 
+// Settings → Text size: zooms the main window (text, icons and spacing together).
+function applyTextSize() {
+  const pct = Math.max(80, Math.min(175, Number(messenger.settings.textSize) || 100));
+  if (win && !win.isDestroyed()) win.webContents.setZoomFactor(pct / 100);
+}
+
 function fitted({ width, height, minWidth = 0, minHeight = 0 }, display = targetDisplay()) {
   const wa = display.workArea;
   // A few pixels of margin: uneven scaling (e.g. 175%) rounds sizes up.
@@ -192,6 +198,7 @@ function createWindow() {
   });
   win.removeMenu();
   win.loadFile(path.join(RENDERER, 'index.html'));
+  win.webContents.on('did-finish-load', applyTextSize);
   win.once('ready-to-show', () => {
     if (!startHidden) win.show();
   });
@@ -774,6 +781,16 @@ function registerIpc() {
     return err || null;
   });
   h('show-in-folder', (p) => { if (p) shell.showItemInFolder(p); });
+  // The Files tab of a chat and the Downloads list; files deleted from disk are marked.
+  const withExists = (list) => list.map((x) => ({ ...x, exists: !!(x.file.path && fs.existsSync(x.file.path)) }));
+  h('chat-files', (conv) => withExists(messenger.chatFiles(conv)));
+  h('downloads', () => withExists(messenger.downloads()));
+  h('open-download-dir', async () => {
+    const dir = messenger.settings.downloadDir;
+    fs.mkdirSync(dir, { recursive: true });
+    const err = await shell.openPath(dir);
+    if (err) throw new Error(err);
+  });
   h('open-external', (url) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); });
   h('copy-text', (text) => clipboard.writeText(String(text || '')));
   h('thumb', (p) => {
@@ -819,6 +836,7 @@ function registerIpc() {
     // The page re-sends its title bar colors after a theme or style change.
     if ('theme' in patch) nativeTheme.themeSource = s.theme;
     if ('language' in patch) updateTray();
+    if ('textSize' in patch) applyTextSize();
     return s;
   });
   h('pick-folder', async () => {

@@ -57,6 +57,23 @@
   };
   const RUNES = ['haste', 'gold', 'shield', 'fire', 'dynamite', 'lightning'];
 
+  // Traps, as in the original map's traps/*.lua (values from npc_abilities_custom.txt).
+  // Their places are not in the shared code, so they are placed here, mirrored
+  // for both sides. Stepping on a trap's plate sets it off, for anyone.
+  //  spike:    spikes shoot up 0.65 s later: 600 damage, 1.6 s stun within 192.
+  //  fire:     a statue on the wall breathes a fire wave (150 -> 250 wide, 650 long, 1050 fast): 400 damage.
+  //  venom:    a statue breathes poison (1200 fast): 100, then 100 every 3 s for 15 s, 50 % slower.
+  //  pendulum: a giant blade swings across the river for 8 s; whoever it touches dies.
+  const PLATE = 55;
+  const TRAPS = [];
+  for (const s of [-1, 1]) {
+    TRAPS.push({ kind: 'spike', x: s * 345, y: 600, reset: 4 }, { kind: 'spike', x: s * 345, y: -560, reset: 4 });
+    TRAPS.push({ kind: 'fire', x: s * 1150, y: -s * 1100, sx: s * 1500, sy: -s * 1100, dx: -s, dy: 0, reset: 2 });
+    TRAPS.push({ kind: 'venom', x: s * 1150, y: s * 1100, sx: s * 1500, sy: s * 1100, dx: -s, dy: 0, reset: 4 });
+  }
+  for (const y of [1250, -1250]) TRAPS.push({ kind: 'pendulum', x: -270, y, px: 0, py: y, x2: 270, reset: 17, swing: 8 });
+  TRAPS.forEach((tr, i) => { tr.id = i; });
+
   const len = (x, y) => Math.hypot(x, y);
   function norm(x, y) {
     const l = Math.hypot(x, y);
@@ -86,6 +103,8 @@
       this.mines = [];
       this.barriers = [];
       this.runes = [];
+      this.traps = TRAPS.map((tr) => ({ id: tr.id, cd: 0, arm: 0, swing: 0, by: null, on: [] }));
+      this.waves = [];
       this.pawns = players.map((p, i) => ({
         id: p.id, name: p.name, team: p.team === 1 ? 1 : p.team === 0 ? 0 : i % 2, color: COLORS[i % COLORS.length],
         x: 0, y: 0, face: 0, z: 0, hp: 1, level: 1, xp: 0, gold: 0, kills: 0, deaths: 0, dmgTomes: 0, hpTomes: 0,
@@ -112,6 +131,7 @@
       let s = MOVE_SPEED + (paw ? lv(ITEMS.lycan_paw.speed, paw.level) : 0);
       if (paw && paw.level >= 5) s *= 1 + ITEMS.lycan_paw.pct;
       if (p.mods.cleaved) s *= 1 - CLEAVER.slow;
+      if (p.mods.venom) s *= 0.5;
       return s;
     }
     hookStats(p) {
@@ -175,6 +195,7 @@
       this.stepCleavers(dt);
       this.stepGrapples(dt);
       this.stepMines(dt);
+      this.stepTraps(dt);
       this.collide();
     }
 
@@ -837,6 +858,91 @@
       }
     }
 
+    // ---------------------------------------------------------------- traps
+    stepTraps(dt) {
+      for (const st of this.traps) {
+        const tr = TRAPS[st.id];
+        st.cd = Math.max(0, st.cd - dt);
+        // Who stands on its plate(s) now; a trap goes off when someone steps on.
+        const plates = tr.kind === 'pendulum' ? [[tr.x, tr.y], [tr.x2, tr.y]] : [[tr.x, tr.y]];
+        const on = this.alive().filter((q) => !q.z && plates.some(([x, y]) => len(q.x - x, q.y - y) <= PLATE + RADIUS / 2));
+        const fresh = on.find((q) => !st.on.includes(q.id));
+        st.on = on.map((q) => q.id);
+        if (fresh && st.cd <= 0) this.springTrap(st, tr, fresh);
+        if (tr.kind === 'spike' && st.arm > 0) {
+          st.arm -= dt;
+          if (st.arm <= 0) {
+            this.fx({ e: 'trapSpike', i: st.id, x: tr.x, y: tr.y });
+            for (const q of this.alive()) {
+              if (len(q.x - tr.x, q.y - tr.y) > 192 || q.z) continue;
+              this.damage(q, this.trapCredit(st, q), 600, { pure: false });
+              if (!q.dead) q.mods.stun = { t: 1.6 };
+            }
+          }
+        }
+        if (tr.kind === 'pendulum' && st.swing > 0) {
+          st.swing -= dt;
+          const bx = this.bladeX(st);
+          for (const q of this.alive()) {
+            if (Math.abs(q.y - tr.py) < 55 && Math.abs(q.x - bx) < 75) {
+              this.fx({ e: 'trapSlice', id: q.id, x: q.x, y: q.y });
+              this.damage(q, this.trapCredit(st, q), 10000);
+            }
+          }
+        }
+      }
+      // Fire and poison waves.
+      for (const w of this.waves) {
+        const step = w.speed * dt;
+        w.x += w.dx * step;
+        w.y += w.dy * step;
+        w.d += step;
+        const r = 150 + 100 * Math.min(1, w.d / 650);
+        for (const q of this.alive()) {
+          if (w.hit.includes(q.id) || len(q.x - w.x, q.y - w.y) > r) continue;
+          w.hit.push(q.id);
+          const by = this.trapCredit(this.traps[w.trap], q);
+          if (w.kind === 'fire') this.damage(q, by, 400);
+          else {
+            this.damage(q, by, 100);
+            if (!q.dead) q.mods.venom = { t: 15, tick: 0, by: by ? by.id : null };
+          }
+        }
+        if (w.d >= 650) w.done = true;
+      }
+      this.waves = this.waves.filter((w) => !w.done);
+      // Poison ticks.
+      for (const q of this.alive()) {
+        const v = q.mods.venom;
+        if (!v) continue;
+        v.tick += dt;
+        if (v.tick >= 3) { v.tick -= 3; this.damage(q, v.by ? this.pawn(v.by) : null, 100); }
+      }
+    }
+
+    springTrap(st, tr, by) {
+      st.cd = tr.reset;
+      st.by = by.id;
+      this.fx({ e: 'trap', k: tr.kind, i: st.id, x: tr.x, y: tr.y });
+      if (tr.kind === 'spike') st.arm = 0.65;
+      else if (tr.kind === 'pendulum') { st.swing = tr.swing; st.t0 = this.time; }
+      else this.waves.push({ kind: tr.kind, trap: st.id, x: tr.sx, y: tr.sy, dx: tr.dx, dy: tr.dy, d: 0, speed: tr.kind === 'fire' ? 1050 : 1200, hit: [] });
+    }
+
+    // Kill credit: the Pudge who set the trap off, if the victim is an enemy;
+    // otherwise whoever hit the victim last (see kill()).
+    trapCredit(st, q) {
+      const by = st && st.by ? this.pawn(st.by) : null;
+      return by && by.team !== q.team ? by : null;
+    }
+
+    // The pendulum's blade swings from bank to bank, 2 s per swing.
+    bladeX(st) {
+      const tr = TRAPS[st.id];
+      if (!(st.swing > 0)) return tr.px;
+      return tr.px + Math.sin((this.time - st.t0) * Math.PI) * 240;
+    }
+
     // Pudges push each other apart (not while flying).
     collide() {
       const a = this.alive().filter((p) => !p.mods.hooked && !p.mods.tossed && !p.mods.grappling);
@@ -888,6 +994,8 @@
         mi: this.mines.map((m) => [m.id, m.team, r1(m.x), r1(m.y), m.armed > 0 ? 1 : 0]),
         b: this.barriers.map((b) => [b.id, b.team, r1(b.x), r1(b.y), b.r, r0(b.hp), b.mx]),
         r: this.runes.map((r) => [r.id, r.type, r1(r.x), r1(r.y)]),
+        tr: this.traps.map((st) => [r1(st.cd), st.arm > 0 ? 1 : 0, st.swing > 0 ? r0(this.bladeX(st)) : null]),
+        tw: this.waves.map((w) => [w.kind, r1(w.x), r1(w.y), r0(150 + 100 * Math.min(1, w.d / 650))]),
         fx: this.effects,
       };
       this.effects = [];
@@ -906,7 +1014,7 @@
   }
 
   const PudgeWars = {
-    Sim, TICK, HOOK, UPGRADES, UPGRADE_MAX, CLEAVER, ITEMS, RUNES, TEAM_NAMES, COLORS, XP_TABLE,
+    Sim, TICK, HOOK, UPGRADES, TRAPS, PLATE, UPGRADE_MAX, CLEAVER, ITEMS, RUNES, TEAM_NAMES, COLORS, XP_TABLE,
     WALL_X, WALL_Y, WALK_X, WALK_Y, RIVER, CENTER, RADIUS, RESPAWN, lv,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = PudgeWars;

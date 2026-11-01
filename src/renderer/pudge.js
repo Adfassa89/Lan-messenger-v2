@@ -73,7 +73,8 @@ function renderLobby() {
   $('lobbyHelp').innerHTML = `${t('Right-click to move, right-click an enemy to attack.')} ${t('Mouse wheel zooms.')}<br>
     <kbd>Q</kbd> ${t('Meat Hook')} · <kbd>W</kbd> ${t('Cleaver')} · <kbd>E</kbd><kbd>R</kbd><kbd>D</kbd><kbd>F</kbd> ${t('upgrade the hook')}<br>
     <kbd>T</kbd><kbd>G</kbd><kbd>Space</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd> ${t('items')} · <kbd>B</kbd> ${t('Shop')} · <kbd>S</kbd> ${t('stop')} · <kbd>1</kbd> ${t('select your hero')} · <kbd>Esc</kbd> ${t('Menu')}<br>
-    ${t('Hook enemies across the river and finish them off. Hook runes in the river for power-ups.')}`;
+    ${t('Hook enemies across the river and finish them off. Hook runes in the river for power-ups.')}<br>
+    ${t('Watch out for the trap plates: spikes, fire, venom and the pendulums over the river hurt everyone.')}`;
 }
 
 const lobbyMsg = () => ({ kind: 'pw-lobby', players, teams, target });
@@ -138,7 +139,7 @@ function postResults(snap) {
   posted = true;
   const win = snap.score[0] >= snap.target ? 0 : 1;
   const order = snap.p.slice().sort((a, b) => b.k - a.k);
-  const lines = order.map((p) => `${p.tm === 0 ? '🟢' : '🔴'} ${names[p.id] || '?'} – ${t('{n} kills', { n: p.k })}, ${t('{n} deaths', { n: p.dd })}`);
+  const lines = order.map((p) => `${p.tm === 0 ? '🟢' : '🔴'} ${names[p.id] || '?'} – ${t(p.k === 1 ? '{n} kill' : '{n} kills', { n: p.k })}, ${t(p.dd === 1 ? '{n} death' : '{n} deaths', { n: p.dd })}`);
   api.warlockResult(conv, gameId, `🪝 Pudge Wars – ${t('{team} wins {a} : {b}', { team: teamName(win), a: snap.score[win], b: snap.score[1 - win] })}\n${lines.join('\n')}`).catch(() => {});
 }
 
@@ -527,6 +528,15 @@ function effect(e, s) {
     case 'rune':
       Sfx.play('wlShield');
       feed(`✨ ${t('{name} took the {rune} rune', { name: names[e.id] || '?', rune: t(RUNE_NAMES[e.type] || e.type) })}`);
+      break;
+    case 'trap':
+      Sfx.play(e.k === 'fire' ? 'wlFire' : e.k === 'venom' ? 'wlWind' : e.k === 'pendulum' ? 'wlChain' : 'wlClash');
+      break;
+    case 'trapSpike':
+      Sfx.play('wlShrink');
+      break;
+    case 'trapSlice':
+      Sfx.play('wlBoom');
       break;
     case 'runeSpawn':
       Sfx.play('wlBlink');

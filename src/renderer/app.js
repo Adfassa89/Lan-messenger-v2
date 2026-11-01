@@ -471,7 +471,7 @@ function convItem(i) {
     const n = onlineCount();
     prev = esc(n ? t('Message all {n} online', { n }) : t('Message everyone on the network'));
   } else if (i.kind === 'group') {
-    prev = esc(t('{n} members', { n: i.members.length }));
+    prev = esc(t(i.members.length === 1 ? '{n} member' : '{n} members', { n: i.members.length }));
   } else {
     const p = i.peer;
     prev = p.online ? esc(`${statusText(p.status)}${p.dept ? ` · ${p.dept}` : ''}`) : esc(fmtAgo(p.lastSeen));
@@ -618,7 +618,7 @@ function renderHeader() {
     const g = S.groups.get(conv.slice(2));
     const names = g ? g.members.map(peerName) : [];
     const on = g ? g.members.filter((m) => m === S.me.id || S.peers.get(m)?.online).length : 0;
-    sub = `<div class="sub">${esc(t('{n} members, {on} online', { n: g ? g.members.length : 0, on }))} · ${esc(names.join(', '))}</div>`;
+    sub = `<div class="sub">${esc(t(g && g.members.length === 1 ? '{n} member, {on} online' : '{n} members, {on} online', { n: g ? g.members.length : 0, on }))} · ${esc(names.join(', '))}</div>`;
   } else {
     sub = `<div class="sub">${esc(t('Broadcast to everyone on the network'))} · ${esc(t('Online now: {n}', { n: onlineCount() }))}</div>`;
   }
@@ -628,6 +628,7 @@ function renderHeader() {
     ${kind !== 'broadcast' ? `<button class="icon-btn" id="hdrVoice" title="${esc(t('Voice call'))}"><svg class="ico" viewBox="0 0 24 24"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg></button>
     <button class="icon-btn" id="hdrVideo" title="${esc(t('Video call'))}"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></svg></button>` : ''}
     <button class="icon-btn" id="hdrShare" title="${esc(t('Share your screen'))}"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M12 13V8M9.5 10.5 12 8l2.5 2.5"/></svg></button>
+    <button class="icon-btn" id="hdrFiles" title="${esc(t('Files in this chat'))}"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <button class="icon-btn" id="hdrAttach" title="${esc(t('Send files'))}"><svg class="ico" viewBox="0 0 24 24"><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4M12 3v12M7 8l5-5 5 5"/></svg></button>
     ${kind === 'group' ? `<button class="icon-btn" id="hdrAdd" title="${esc(t('Add people'))}"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 19c.8-3.4 3.4-5 6.5-5s5.7 1.6 6.5 5M18 8v6M15 11h6"/></svg></button>` : ''}
     <button class="icon-btn" id="hdrMore" title="${esc(t('More'))}"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></svg></button>`;
@@ -635,6 +636,8 @@ function renderHeader() {
   if ($('#hdrVoice')) $('#hdrVoice').onclick = () => call(api.callStart(conv, false));
   if ($('#hdrVideo')) $('#hdrVideo').onclick = () => call(api.callStart(conv, true));
   $('#hdrAttach').onclick = attachFiles;
+  $('#hdrFiles').onclick = () => FilesPanel.toggle('files', conv);
+  if (FilesPanel.mode === 'files' && FilesPanel.conv !== conv) FilesPanel.open('files', conv);
   if ($('#hdrAdd')) $('#hdrAdd').onclick = () => groupMembersModal(conv.slice(2));
   $('#hdrMore').onclick = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -643,6 +646,7 @@ function renderHeader() {
       items.push({ label: t('Add people…'), action: () => groupMembersModal(conv.slice(2)) });
       items.push({ label: t('Rename group…'), action: () => renameGroupModal(conv.slice(2)) });
     }
+    items.push({ label: t('Files in this chat'), action: () => FilesPanel.open('files', conv) });
     items.push({ label: t('Pinned messages'), action: () => pinsModal(conv) });
     items.push({ label: t('Scheduled messages'), action: () => scheduledModal(conv) });
     items.push({ label: t('Find in messages…'), action: () => searchModal() });
@@ -832,6 +836,16 @@ function msgNode(list, i) {
       <button data-act="menu" title="${esc(t('More'))}">${ICONS.more}</button>`);
     wrap.append(actions);
   }
+  // Groups: who has seen your message (click for the full list).
+  if (out && !m.deleted && kind === 'group' && (m.recipients || []).length) {
+    const seen = (m.readBy || []).filter((id) => m.recipients.includes(id));
+    const total = m.recipients.length;
+    const faces = seen.slice(-5).map((id) => avatarHtml('direct', id, peerName(id), null, 'xs')).join('');
+    const label = !seen.length ? t('Not seen yet') : seen.length >= total ? t('Seen by everyone') : t('Seen by {a} of {n}', { a: seen.length, n: total });
+    wrap.append(el('button', `seen-row${seen.length >= total ? ' all' : ''}`, `<span class="seen-faces">${faces}</span><span>${esc(label)}</span>`));
+    wrap.lastChild.dataset.act = 'seen';
+    wrap.lastChild.title = t('Who has seen it');
+  }
   row.append(wrap);
 
   wrap.addEventListener('contextmenu', (e) => {
@@ -908,7 +922,7 @@ function extLabel(name) {
 function fileHtml(m, out) {
   const f = m.file;
   const prog = S.progress.get(m.id);
-  let sub = f.folder ? t('{n} files · {size}', { n: f.count, size: fmtSize(f.size) }) : fmtSize(f.size);
+  let sub = f.folder ? t(f.count === 1 ? '{n} file · {size}' : '{n} files · {size}', { n: f.count, size: fmtSize(f.size) }) : fmtSize(f.size);
   let bar = '';
   let btns = '';
   let err = '';
@@ -998,6 +1012,7 @@ async function onBubbleClick(e, m) {
   else if (act === 'ack') call(api.ackUrgent(conv, m.id));
   else if (act === 'game') Game.show(conv, m.id);
   else if (act === 'ack-info') ackInfo(m);
+  else if (act === 'seen') seenInfo(m);
   else if (act === 'play') Voice.toggle(m);
   else if (act === 'seek') Voice.seek(m, e, btn);
 }
@@ -1018,6 +1033,23 @@ function ackInfo(m) {
     <div class="kv"><div>${esc(t('Sent'))}</div><div>${esc(fmtWhen(m.ts))}</div>
     <div>${esc(t('Acknowledged'))}</div><div>${esc(acked.join(', ') || '—')}</div>
     <div>${esc(t('Not yet'))}</div><div>${esc(waiting.join(', ') || '—')}</div></div>`);
+}
+
+// Who has seen a group message, who has it but not read it, who hasn't got it yet.
+function seenInfo(m) {
+  const rec = m.recipients || [];
+  const readAt = m.readAt || {};
+  const seen = rec.filter((id) => (m.readBy || []).includes(id)).sort((a, b) => (readAt[a] || 0) - (readAt[b] || 0));
+  const delivered = rec.filter((id) => !seen.includes(id) && (m.deliveredTo || []).includes(id));
+  const waiting = rec.filter((id) => !seen.includes(id) && !delivered.includes(id));
+  const row = (id, when) => `<div class="seen-person">${avatarHtml('direct', id, peerName(id), null, 'sm')}<b>${esc(peerName(id))}</b><span>${esc(when)}</span></div>`;
+  const part = (title, ids, when) => (ids.length ? `<div class="seen-head">${esc(title)} · ${ids.length}</div>${ids.map((id) => row(id, when(id))).join('')}` : '');
+  infoModal(t('Seen by'), `<div class="seen-list">
+    <div class="seen-sent">${esc(t('Sent'))} ${esc(fmtWhen(m.ts))}</div>
+    ${part(t('Seen'), seen, (id) => (readAt[id] ? fmtWhen(readAt[id]) : ''))}
+    ${part(t('Delivered, not read yet'), delivered, () => '')}
+    ${part(t('Not delivered yet'), waiting, () => t('Gets it when their PC is on'))}
+  </div>`);
 }
 
 function quickReact(m, anchor) {
@@ -1069,15 +1101,7 @@ function msgMenu(m, x, y) {
   if (m.kind === 'file' && IMAGE_RE.test(m.file.name) && m.file.path) {
     items.push({ label: t('Draw on picture…'), action: () => editImageFromPath(m.file.path) });
   }
-  if (mine && m.recipients && m.recipients.length > 1) {
-    const names = (ids) => ids.map(peerName).join(', ') || '—';
-    items.push({
-      label: t('Message info…'), action: () => infoModal(t('Message info'), `
-        <div class="kv"><div>${esc(t('Sent'))}</div><div>${esc(fmtWhen(m.ts))}</div>
-        <div>${esc(t('Delivered to'))}</div><div>${esc(names(m.deliveredTo || []))}</div>
-        <div>${esc(t('Read by'))}</div><div>${esc(names(m.readBy || []))}</div></div>`),
-    });
-  }
+  if (mine && m.recipients && m.recipients.length > 1) items.push({ label: t('Seen by…'), action: () => seenInfo(m) });
   items.push('-');
   if (mine && !m.deleted) {
     items.push({
@@ -1828,6 +1852,8 @@ function settingsModal() {
       <div class="style-preview" data-style="${k}"><div class="spv-side"><i></i><i></i><i></i></div><div class="spv-chat"><div class="spv-in"></div><div class="spv-out"></div><div class="spv-send"></div></div></div>
       <span>${esc(t(label))}</span></button>`).join('')}</div>
     <div class="segmented" id="sTheme" style="margin-top:12px">${themes.map(([v, l]) => `<button data-v="${v}" class="${S.settings.theme === v ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
+    <div class="row-label" style="margin-top:12px">${esc(t('Text size'))} <small>${esc(t('Ctrl + plus / minus also changes it'))}</small></div>
+    <div class="segmented" id="sTextSize">${TEXT_SIZES.map(([v, l]) => `<button data-v="${v}" class="${(S.settings.textSize || 100) === v ? 'on' : ''}" style="font-size:${Math.round(11 + (v - 100) / 10)}px">${esc(t(l))}</button>`).join('')}</div>
 
     <div class="section-title">${esc(t('Notifications'))}</div>
     ${toggleRow('notifications', t('Desktop notifications'), t('Show a pop-up when a message arrives'))}
@@ -1899,6 +1925,12 @@ function settingsModal() {
         S.settings = await call(api.setSettings({ theme: b.dataset.v })) || S.settings;
         m.querySelectorAll('#sTheme button').forEach((x) => x.classList.toggle('on', x === b));
         applyTheme();
+      });
+      $('#sTextSize', m).addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-v]');
+        if (!b) return;
+        await setTextSize(Number(b.dataset.v));
+        m.querySelectorAll('#sTextSize button').forEach((x) => x.classList.toggle('on', x === b));
       });
       $('#sStyle', m).addEventListener('click', async (e) => {
         const b = e.target.closest('[data-v]');
@@ -2090,12 +2122,19 @@ function handleEvent({ type, payload }) {
       upsertMessage(conv, msg, isNew);
       if (msg.kind === 'game') Game.onMessage(conv, msg);
       if (isNew && conv === S.active && msg.from !== S.me.id) markReadIfVisible();
+      FilesPanel.onEvent('message', payload);
+      if (msg.kind === 'file') {
+        if (msg.file && msg.file.state !== 'downloading' && msg.from !== S.me.id) S.progress.delete(msg.id);
+        updateDownloadDot();
+      }
       break;
     }
     case 'file-progress':
       if (payload.stopped) S.progress.delete(payload.msgId);
       else S.progress.set(payload.msgId, payload);
       refreshMsgDom(payload.conv, payload.msgId);
+      FilesPanel.onEvent('file-progress', payload);
+      updateDownloadDot();
       break;
     case 'typing':
       onTyping(payload);
@@ -2148,6 +2187,7 @@ function handleEvent({ type, payload }) {
 function wire() {
   $('#me').addEventListener('click', statusMenu);
   $('#btnSettings').addEventListener('click', settingsModal);
+  $('#btnDownloads').addEventListener('click', () => FilesPanel.toggle('downloads'));
   $('#netInfo').addEventListener('click', () => (popoverOpen() ? hidePopover() : netMenu()));
   $('#btnNewGroup').addEventListener('click', newGroupModal);
   $('#btnSearch').addEventListener('click', searchModal);
@@ -2249,6 +2289,14 @@ function wire() {
       e.preventDefault();
       $('#filter').focus();
       $('#filter').select();
+    } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (k === '=' || k === '+' || k === '-' || k === '0')) {
+      e.preventDefault();
+      stepTextSize(k === '0' ? 0 : k === '-' ? -1 : 1);
+    } else if ((e.ctrlKey || e.metaKey) && k === 'j') {
+      e.preventDefault();
+      FilesPanel.toggle('downloads');
+    } else if (e.key === 'Escape' && FilesPanel.mode && !document.querySelector('.modal-back, .lightbox')) {
+      FilesPanel.close();
     } else if ((e.ctrlKey || e.metaKey) && k === 'f') {
       e.preventDefault();
       searchModal();
@@ -2259,6 +2307,28 @@ function wire() {
 
   window.addEventListener('focus', () => { markReadIfVisible(); });
   setInterval(() => { renderList(); if (S.active) renderHeader(); }, 60000);
+}
+
+// Text size (Settings → Appearance, or Ctrl + plus / minus / 0).
+const TEXT_SIZES = [[90, 'Small'], [100, 'Normal'], [115, 'Large'], [130, 'Larger'], [150, 'Largest']];
+async function setTextSize(v) {
+  S.settings = await call(api.setSettings({ textSize: v })) || S.settings;
+}
+function stepTextSize(dir) {
+  const list = TEXT_SIZES.map(([v]) => v);
+  const cur = S.settings.textSize || 100;
+  let i = list.findIndex((v) => v >= cur);
+  if (i < 0) i = list.length - 1;
+  const next = dir === 0 ? 100 : list[Math.max(0, Math.min(list.length - 1, list[i] === cur ? i + dir : dir > 0 ? i : i - 1))];
+  setTextSize(next);
+  toast(t('Text size: {n}%', { n: next }));
+}
+
+// A pulsing dot on the Downloads button while something is downloading.
+function updateDownloadDot() {
+  const busy = [...S.progress.values()].some((p) => !p.upload && p.size && p.done < p.size);
+  const b = $('#btnDownloads');
+  if (b) b.classList.toggle('busy', busy);
 }
 
 async function boot() {

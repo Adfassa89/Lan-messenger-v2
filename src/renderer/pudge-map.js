@@ -752,6 +752,8 @@ export function buildPudgeMap(scene, view) {
     }
   }
 
+  buildTraps(scene, view, map, { cliffMat, blockMat });
+
   // ---------------------------------------------------------------- animation
   map.update = (dt, time, target) => {
     map.waterMat.uniforms.uTime.value = time;
@@ -789,4 +791,169 @@ export function buildPudgeMap(scene, view) {
     }
   };
   return map;
+}
+
+// ------------------------------------------------------------------ traps
+// Plates that set traps off, the spike grates, the fire and venom statues on
+// the side walls, and the pendulums over the river (rules: PudgeWars.TRAPS).
+function buildTraps(scene, view, map, { cliffMat, blockMat }) {
+  const { TRAPS, PLATE } = PW;
+  const iron = new THREE.MeshStandardMaterial({ color: 0x3a3a3e, metalness: 0.8, roughness: 0.45 });
+  const steel = new THREE.MeshStandardMaterial({ color: 0xc8ccd4, metalness: 0.9, roughness: 0.22 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x5a3a1e, roughness: 0.95 });
+  const plateTop = (glow) => new THREE.MeshStandardMaterial({ color: 0x8a8478, roughness: 0.8, emissive: col(glow), emissiveIntensity: 0.8 });
+  map.traps = [];
+  for (const tr of TRAPS) {
+    const o = { tr, plates: [] };
+    const glow = { spike: '#ff4a1a', fire: '#ff7a1a', venom: '#5aff3a', pendulum: '#c060ff' }[tr.kind];
+    const plates = tr.kind === 'pendulum' ? [[tr.x, tr.y], [tr.x2, tr.y]] : [[tr.x, tr.y]];
+    for (const [x, y] of plates) {
+      const g = new THREE.Group();
+      g.position.set(x, groundH(x, y), -y);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(PLATE * 2 + 24, 8, PLATE * 2 + 24), new THREE.MeshStandardMaterial({ color: 0x4a4640, roughness: 0.95 }));
+      base.position.y = 2;
+      const mat = plateTop(glow);
+      const top = new THREE.Mesh(new THREE.BoxGeometry(PLATE * 2 - 6, 10, PLATE * 2 - 6), mat);
+      top.position.y = 9;
+      // A carved ring on the plate.
+      const ring = new THREE.Mesh(new THREE.RingGeometry(PLATE * 0.45, PLATE * 0.6, 24), new THREE.MeshBasicMaterial({ color: col(glow).multiplyScalar(1.5), transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 14.5;
+      base.receiveShadow = top.receiveShadow = true;
+      g.add(base, top, ring);
+      scene.add(g);
+      o.plates.push({ top, mat, ring });
+    }
+    if (tr.kind === 'spike') {
+      // Iron grate around the plate with spikes hidden below.
+      const grate = new THREE.Mesh(new THREE.CylinderGeometry(192, 192, 4, 40, 1), new THREE.MeshStandardMaterial({ color: 0x2a2a2c, metalness: 0.6, roughness: 0.7, transparent: true, opacity: 0.55 }));
+      grate.position.set(tr.x, groundH(tr.x, tr.y) + 1, -tr.y);
+      grate.receiveShadow = true;
+      scene.add(grate);
+      const spikes = new THREE.Group();
+      spikes.position.set(tr.x, groundH(tr.x, tr.y) - 80, -tr.y);
+      const cone = new THREE.ConeGeometry(9, 90, 6);
+      cone.translate(0, 45, 0);
+      for (let i = 0; i < 26; i++) {
+        const a = rand(0, TAU);
+        const r = Math.sqrt(Math.random()) * 175;
+        const m = new THREE.Mesh(cone, steel);
+        m.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+        m.rotation.set(rand(-0.15, 0.15), 0, rand(-0.15, 0.15));
+        m.scale.y = rand(0.8, 1.3);
+        m.castShadow = true;
+        spikes.add(m);
+      }
+      spikes.visible = false;
+      scene.add(spikes);
+      o.spikes = spikes;
+      o.spikeT = -9;
+    }
+    if (tr.kind === 'fire' || tr.kind === 'venom') {
+      // A beast's head on a pedestal by the wall, facing along its lane.
+      const g = new THREE.Group();
+      g.position.set(tr.sx, groundH(tr.sx, tr.sy), -tr.sy);
+      g.rotation.y = tr.dx > 0 ? 0 : Math.PI;
+      const fire = tr.kind === 'fire';
+      const skin = new THREE.MeshStandardMaterial({ color: fire ? 0x6a5a4a : 0x3a5a3a, roughness: 0.8, flatShading: true });
+      const ped = new THREE.Mesh(new THREE.BoxGeometry(110, 90, 130), fire ? cliffMat : blockMat);
+      ped.position.y = 45;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(90, 70, 80), skin);
+      head.position.set(20, 125, 0);
+      const snout = new THREE.Mesh(new THREE.ConeGeometry(34, 90, 6), skin);
+      snout.rotation.z = -Math.PI / 2;
+      snout.position.set(100, 115, 0);
+      const jaw = new THREE.Mesh(new THREE.BoxGeometry(80, 14, 56), skin);
+      jaw.position.set(85, 90, 0);
+      const eyeMat = new THREE.MeshBasicMaterial({ color: col(fire ? '#ffb030' : '#9aff40').multiplyScalar(2) });
+      for (const z of [-24, 24]) {
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(8, 8, 6), eyeMat);
+        eye.position.set(58, 140, z);
+        const horn = new THREE.Mesh(new THREE.ConeGeometry(10, 60, 6), skin);
+        horn.position.set(0, 175, z * 1.3);
+        horn.rotation.set(z > 0 ? -0.4 : 0.4, 0, 0.5);
+        g.add(eye, horn);
+      }
+      for (const m of [ped, head, snout, jaw]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
+      const mouth = new THREE.Sprite(new THREE.SpriteMaterial({ map: view.glow(), color: col(fire ? '#ff8a2a' : '#7aff4a'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.6 }));
+      mouth.position.set(140, 108, 0);
+      mouth.scale.setScalar(70);
+      g.add(mouth);
+      scene.add(g);
+      o.mouth = mouth;
+    }
+    if (tr.kind === 'pendulum') {
+      // Two posts on the banks, a beam across the river, an axe blade on a long arm.
+      const H = 470;
+      for (const x of [-310, 310]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(16, 20, H, 8), wood);
+        post.position.set(x, groundH(x, tr.py) + H / 2, -tr.py);
+        post.castShadow = true;
+        scene.add(post);
+      }
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(660, 26, 30), wood);
+      beam.position.set(0, H, -tr.py);
+      beam.castShadow = true;
+      scene.add(beam);
+      const pivot = new THREE.Group();
+      pivot.position.set(tr.px, H, -tr.py);
+      const L = 380;
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, L, 6), iron);
+      arm.position.y = -L / 2;
+      const blade = new THREE.Mesh(new THREE.CylinderGeometry(95, 95, 8, 24, 1, false, Math.PI * 0.15, Math.PI * 0.7), steel);
+      blade.rotation.set(Math.PI / 2, 0, 0);
+      blade.position.y = -L - 20;
+      const hub = new THREE.Mesh(new THREE.BoxGeometry(40, 50, 14), iron);
+      hub.position.y = -L + 20;
+      for (const m of [arm, blade, hub]) { m.castShadow = true; pivot.add(m); }
+      scene.add(pivot);
+      o.pivot = pivot;
+      o.L = L + 40;
+    }
+    map.traps.push(o);
+  }
+
+  // Per frame: plate glow (ready or not), spikes, pendulum swing.
+  map.updateTraps = (s, dt, time) => {
+    const st = s.tr || [];
+    for (const o of map.traps) {
+      const [cd = 0, armed = 0, bx = null] = st[o.tr.id] || [];
+      const ready = cd <= 0;
+      for (const p of o.plates) {
+        p.mat.emissiveIntensity = armed ? 1.2 + Math.sin(time * 30) : ready ? 0.35 + 0.15 * Math.sin(time * 3 + o.tr.id) : 0.02;
+        p.ring.material.opacity = ready ? 0.8 : 0.15;
+        p.top.position.y = cd > o.tr.reset - 0.5 ? 5 : 9;
+      }
+      if (o.spikes) {
+        const k = time - o.spikeT;
+        o.spikes.visible = k < 1.4;
+        if (o.spikes.visible) {
+          const up = k < 0.12 ? k / 0.12 : k < 0.9 ? 1 : Math.max(0, 1 - (k - 0.9) / 0.5);
+          o.spikes.position.y = groundH(o.tr.x, o.tr.y) - 85 + up * 85;
+        }
+      }
+      if (o.pivot) {
+        const want = bx === null ? 0 : Math.asin(Math.max(-1, Math.min(1, (bx - o.tr.px) / o.L)));
+        o.pivot.rotation.z = bx === null ? o.pivot.rotation.z * Math.max(0, 1 - dt * 2) : want;
+      }
+      if (o.mouth) o.mouth.material.opacity = 0.35 + 0.2 * Math.sin(time * 4 + o.tr.id);
+    }
+    // The fire and poison waves.
+    for (const [kind, x, y, r] of s.tw || []) {
+      const fire = kind === 'fire';
+      for (let i = 0; i < 6; i++) {
+        const a = rand(0, TAU);
+        const d = Math.sqrt(Math.random()) * r;
+        const px = x + Math.cos(a) * d;
+        const py = y + Math.sin(a) * d;
+        if (fire) view.fire.add({ p: [px, groundH(px, py) + rand(10, 60), -py], v: [rand(-60, 60), rand(80, 200), rand(-60, 60)], c0: col('#ffe090'), c1: col('#c02800'), size: rand(40, 70), size1: 10, life: rand(0.35, 0.6), tile: TILE_FLAME, drag: 0.95 });
+        else view.smoke.add({ p: [px, groundH(px, py) + rand(10, 60), -py], v: [rand(-50, 50), rand(30, 90), rand(-50, 50)], c0: col('#6aff3a'), size: rand(40, 70), size1: 120, life: rand(0.5, 0.9), a: 0.45, tile: TILE_SMOKE, spin: rand(-1, 1) });
+      }
+      view.light(x, 80, -y, fire ? '#ff7a2a' : '#7aff4a', 3);
+    }
+  };
+  map.spikeUp = (i, time) => {
+    const o = map.traps[i];
+    if (o && o.spikes) o.spikeT = time;
+  };
 }

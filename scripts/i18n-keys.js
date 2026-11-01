@@ -7,11 +7,12 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', 'src');
 const FILES = [
   'renderer/app.js', 'renderer/editor.js', 'renderer/voice.js', 'renderer/share.js',
-  'renderer/viewer.js', 'renderer/alert.js', 'renderer/call.js', 'renderer/ring.js', 'renderer/game.js', 'renderer/tetris-game.js', 'renderer/tetris-controls.js', 'renderer/warlock.js', 'renderer/warlock.html', 'renderer/pudge.js', 'renderer/pudge.html', 'renderer/index.html', 'main/main.js',
+  'renderer/viewer.js', 'renderer/alert.js', 'renderer/call.js', 'renderer/ring.js', 'renderer/game.js', 'renderer/files-panel.js', 'renderer/tetris-game.js', 'renderer/tetris-controls.js', 'renderer/warlock.js', 'renderer/warlock.html', 'renderer/pudge.js', 'renderer/pudge.html', 'renderer/index.html', 'main/main.js',
 ];
 // Texts translated through a variable, e.g. t(label).
 const EXTRA = ['Smileys', 'Gestures', 'Work', 'Things', 'Indigo', 'Office', 'Ocean', 'Minimal', 'Mine Site', 'Emerald', 'Chess', 'Tic-tac-toe', 'Connect Four',
   'Pick your side and a time control, like on chess.com', 'Bullet', 'Blitz', 'Rapid', 'Three in a row wins', 'Four in a row wins',
+  'Small', 'Normal', 'Large', 'Larger', 'Largest',
   'Checkers', 'Tetris Battle', 'HOLD', 'NEXT', 'Move left', 'Move right', 'Soft drop', 'Hard drop', 'Rotate right', 'Rotate left', 'Rotate 180°', 'Hold',
   'Delay before sliding', 'Sliding speed', 'Soft drop speed', '(DAS – how long you hold before the piece starts sliding)',
   '(ARR – time between steps, 0 = instant)', '(time per row while holding soft drop)', 'Captures are compulsory, kings move both ways; clocks optional', 'Classical', 'Real-time battle: clear lines to send garbage',

@@ -52,6 +52,8 @@ function defaultSettings(downloadDir) {
     autoUpdate: true,
     internetUpdates: true,
     updateEvery: 'day',
+    textSize: 100,
+    downloadsClearedAt: 0,
   };
 }
 
@@ -834,6 +836,10 @@ class Messenger extends EventEmitter {
       if (!msg || msg.from !== this.id) continue;
       if (!msg.readBy.includes(peerId)) msg.readBy.push(peerId);
       if (!msg.deliveredTo.includes(peerId)) msg.deliveredTo.push(peerId);
+      // When it was read ("Seen by" in groups): the reader's own time, if believable.
+      const at = Number(w.at);
+      msg.readAt = msg.readAt || {};
+      if (!msg.readAt[peerId]) msg.readAt[peerId] = at > msg.ts - 60000 && at < Date.now() + 60000 ? at : Date.now();
       this._recomputeStatus(conv, msg);
     }
   }
@@ -1103,7 +1109,7 @@ class Messenger extends EventEmitter {
     }
     const type = this._convType(conv);
     for (const [peerId, ids] of bySender) {
-      const wire = { type: 'read', ids };
+      const wire = { type: 'read', ids, at: Date.now() };
       if (type === 'group') wire.group = conv.slice(2);
       if (type === 'broadcast') wire.broadcast = true;
       this._enqueue(peerId, wire, uuid());
@@ -1493,6 +1499,34 @@ class Messenger extends EventEmitter {
     this.store.touch('config');
     this._announcePresence();
     this.emit('me', this.getState().me);
+  }
+
+  // Every file and folder shared in one chat, newest first (the chat's Files tab).
+  chatFiles(conv) {
+    return this.store.messages(conv, { limit: 1e9 })
+      .filter((m) => m.kind === 'file' && m.file && !m.file.voice && !m.deleted)
+      .reverse()
+      .slice(0, 3000)
+      .map((m) => ({ id: m.id, conv, from: m.from, fromName: m.fromName, ts: m.ts, file: { ...m.file } }));
+  }
+
+  // Files received from others that were downloaded or are downloading, like a
+  // browser's download list, newest first.
+  downloads() {
+    const out = [];
+    const since = this.settings.downloadsClearedAt || 0;
+    for (const conv of Object.keys(this.convs)) {
+      for (const m of this.store.messages(conv, { limit: 1e9 })) {
+        if (m.kind !== 'file' || !m.file || m.file.voice || m.deleted || m.from === this.id) continue;
+        const f = m.file;
+        if (!['downloading', 'done', 'failed'].includes(f.state)) continue;
+        const at = f.doneAt || m.ts;
+        if (at <= since && f.state !== 'downloading') continue;
+        out.push({ id: m.id, conv, from: m.from, fromName: m.fromName, ts: m.ts, at, file: { ...f } });
+      }
+    }
+    out.sort((a, b) => b.at - a.at);
+    return out.slice(0, 1000);
   }
 
   setSettings(patch) {

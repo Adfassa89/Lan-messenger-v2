@@ -886,6 +886,17 @@ export class View {
       case 'latch':
         for (let i = 0; i < 12; i++) this.fire.add({ p: [e.x, HAND_Y, -e.y], v: [rand(-200, 200), rand(50, 200), rand(-200, 200)], c0: col('#ffffff'), c1: col('#8090a0'), size: 4, life: 0.3, tile: TILE_SPARK, stretch: 0.05 });
         break;
+      case 'trap':
+        this.wave(e.x, e.y, 70, { spike: '#ff4a1a', fire: '#ff7a1a', venom: '#5aff3a', pendulum: '#c060ff' }[e.k] || '#ffffff', 0.4, 0.15, Math.max(groundH(e.x, e.y), WATER_Y) + 16);
+        break;
+      case 'trapSpike':
+        this.map.spikeUp(e.i, this.time);
+        this.shake(10, 0.2);
+        for (let i = 0; i < 24; i++) this.smoke.add({ p: [e.x + rand(-150, 150), 10, -e.y + rand(-150, 150)], v: [rand(-60, 60), rand(60, 160), rand(-60, 60)], c0: col('#7a6a50'), size: 40, size1: 100, life: 0.9, a: 0.4, tile: TILE_SMOKE });
+        break;
+      case 'trapSlice':
+        if (w) { this.blood(w.x, w.y, 120, 60, 500); this.shake(12, 0.25); }
+        break;
       case 'attack':
         if (w) w.attackT = this.time;
         { const t = this.pawns.get(e.t); if (t) this.blood(t.x, t.y, 110, 6, 160); }
@@ -1023,6 +1034,7 @@ export class View {
     this.updateMines(s, dt);
     this.updateBarriers(s);
     this.updateRunes(s, prev, k, dt);
+    this.map.updateTraps(s, dt, this.time);
 
     // Camera: on your Pudge like Dota, free while you are dead, or the whole map.
     const mine = this.pawns.get(me);

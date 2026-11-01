@@ -211,3 +211,55 @@ test('snapshots are plain JSON', () => {
   assert.strictEqual(s.p.length, 2);
   assert.ok(Array.isArray(s.h));
 });
+
+test('spike plate: spikes come up 0.65 s after someone steps on it', () => {
+  const sim = arena();
+  const [a, b] = sim.pawns;
+  const spike = PW.TRAPS.find((t) => t.kind === 'spike' && t.x > 0);
+  place(b, spike.x, spike.y);
+  const hp = b.hp;
+  run(sim, 0.4);
+  assert.strictEqual(b.hp >= hp - 5, true, 'not yet');
+  run(sim, 0.4);
+  assert.ok(b.hp < hp - 500, `hit: ${b.hp}`);
+  assert.ok(b.mods.stun);
+  void a;
+});
+
+test('fire statue breathes a wave along its lane; credit goes to an enemy who set it off', () => {
+  const sim = arena();
+  const [a, b] = sim.pawns;
+  const fire = PW.TRAPS.find((t) => t.kind === 'fire' && t.x > 0); // on the Dire side
+  sim.firstBlood = true;
+  b.hp = 300;
+  place(b, fire.x - 200, fire.y);
+  place(a, fire.x, fire.y); // a Radiant Pudge (thrown over) steps on the plate
+  run(sim, 1);
+  assert.ok(b.dead);
+  assert.strictEqual(a.kills, 1);
+});
+
+test('venom slows and keeps hurting', () => {
+  const sim = arena();
+  const [, b] = sim.pawns;
+  const venom = PW.TRAPS.find((t) => t.kind === 'venom' && t.x > 0);
+  place(b, venom.x, venom.y);
+  run(sim, 0.8);
+  assert.ok(b.mods.venom);
+  assert.strictEqual(sim.speed(b), 325 * 0.5);
+  const hp = b.hp;
+  run(sim, 3.1);
+  assert.ok(b.hp < hp - 80);
+});
+
+test('the pendulum kills whoever is dragged through it', () => {
+  const sim = arena();
+  const [a, b] = sim.pawns;
+  const pend = PW.TRAPS.find((t) => t.kind === 'pendulum' && t.y > 0);
+  place(a, pend.x, pend.y); // Radiant steps on the bank plate
+  run(sim, 0.1);
+  b.mods.hooked = { by: a.id };
+  let died = false;
+  for (let i = 0; i < 60 && !died; i++) { place(b, sim.bladeX(sim.traps[pend.id]), pend.py); run(sim, 0.05); died = b.dead; }
+  assert.ok(died);
+});

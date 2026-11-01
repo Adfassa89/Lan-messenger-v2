@@ -287,7 +287,7 @@ class FileTransfers {
         finalPath = uniquePath(dir, name);
         fs.renameSync(part, finalPath);
       }
-      this._update(conv, msgId, { state: 'done', path: finalPath, error: null });
+      this._update(conv, msgId, { state: 'done', path: finalPath, error: null, doneAt: Date.now() });
       this.m.emit('file-done', { conv, msgId, path: finalPath });
     } catch (err) {
       if (job.cancelled) {

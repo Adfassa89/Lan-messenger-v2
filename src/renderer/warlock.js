@@ -157,7 +157,7 @@ function postResults(snap) {
   if (posted) return;
   posted = true;
   const order = snap.p.slice().sort((a, b) => b.sc - a.sc || b.k - a.k);
-  const lines = order.map((p, i) => `${['🥇', '🥈', '🥉'][i] || `${i + 1}.`} ${names[p.id] || '?'} – ${t('{n} points', { n: p.sc })}, ${t('{n} kills', { n: p.k })}`);
+  const lines = order.map((p, i) => `${['🥇', '🥈', '🥉'][i] || `${i + 1}.`} ${names[p.id] || '?'} – ${t(p.sc === 1 ? '{n} point' : '{n} points', { n: p.sc })}, ${t(p.k === 1 ? '{n} kill' : '{n} kills', { n: p.k })}`);
   api.warlockResult(conv, gameId, `🔥 Warlock – ${t('{name} wins!', { name: names[order[0].id] || '?' })}\n${lines.join('\n')}`).catch(() => {});
 }
 
