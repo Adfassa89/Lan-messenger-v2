@@ -16,7 +16,8 @@ Available in **English** and **Монгол**.
 | ♟️ **Games in chats** | Play **Chess** (with a chess.com-style board), **Checkers**, **Tic-tac-toe**, **Connect Four** or **Tetris Battle** with a colleague in a private chat (＋ → Play a game). Turn-based moves are delivered like messages, so a game can run across shifts; each PC checks every move against the rules. |
 | ♟️ **Chess like chess.com** | Choose your side (White, Black or random) and a time control (bullet, blitz, rapid or no limit; checkers has clocks too). Premoves, right-click marks and arrows, and you can look at your pieces' moves while waiting. Every game has sound effects and the same win / lose screen. |
 | 🧱 **Tetris Battle** | A live head-to-head match in the style of TETR.IO, as one round or best of 3, 5, 7 or 9: both players get the same pieces, and clearing lines sends garbage rows to the opponent, with line-clear, attack and K.O. effects and sounds. Controls can be changed like in old Facebook Tetris Battle: rebind every key, pick the *Classic* or *Modern* preset, and adjust the sliding delay, sliding speed and soft-drop speed. |
-| 🖥️ **Screen sharing** | Show your screen (or one window) live to a colleague or a whole group. It goes directly PC-to-PC over the network. Viewers can only watch; they can't control your PC. |
+| 🖥️ **Screen sharing** | Show your screen (or one window) live to a colleague or a whole group. It goes directly PC-to-PC over the network. Viewers only watch unless you allow remote help. |
+| 🛠️ **Remote help** | Someone watching your shared screen can click **Request control**. If you click **Allow control**, their mouse and keyboard work on your PC so they can fix a problem without walking over. A red bar shows who is in control; **Take back control** or `Ctrl + Alt + End` stops it at any time. Works when the entire screen is shared, on Windows. |
 | ✏️ **Screenshot with drawing** | `Ctrl + Shift + S` (or **＋ → Screenshot with drawing**) takes a screenshot. Crop it, add arrows, boxes, highlights and text, then send. Pasted pictures can be drawn on too. |
 | 🇲🇳 **Mongolian / English** | Switch language in **Settings → Language**. Every screen is translated. |
 | 🔄 **Automatic updates** | When one PC gets a newer version, the others download it from that PC and offer a **Restart**. PCs with internet access also get new versions from GitHub. **Settings → Check for updates** shows what is happening and updates on demand. Updates are digitally signed, so nobody can push fake software. If an update ever fails to start, the PC goes back to the previous version automatically. |
@@ -33,6 +34,10 @@ Available in **English** and **Монгол**.
 | 📊 **Polls** | One-click voting, with single or multiple answers. |
 | ⏰ **Scheduled messages** | Write now, send automatically later (e.g. at 07:00 shift start). |
 | 🎤 **Voice messages** | Click the microphone, speak, click Send. |
+| 👀 **Seen by** | Under your messages in a group you see who has read them; click to see who has seen it (and when), who has it but hasn't read it yet, and who hasn't received it. |
+| 🗂️ **Files tab** | The folder button in a chat's header lists every file and photo shared in that chat, with search, **Open**, **Show in folder** and **Go to message**. |
+| ⬇️ **Downloads** | Like a browser's download list (`Ctrl + J`, or the arrow button at the bottom left): every file you received, with progress, **Open**, **Show in folder** and **Open downloads folder**. |
+| 🔠 **Text size** | Settings → Appearance → Text size, or `Ctrl` + `+` / `-` / `0`. |
 | 📁 **Files and whole folders** | Drag & drop files or folders of any size. Progress and speed are shown, interrupted downloads resume, and either side can stop a transfer while it runs. |
 | 🖼️ **Profile photos** | Settings → Change photo. |
 | 📄 **Export chat** | Save a conversation as PDF or text for records. |

@@ -44,7 +44,7 @@ const Share = (() => {
       modal({
         title: t('Share your screen'),
         wide: true,
-        body: `<p class="modal-note">${esc(t('Choose what the other people will see. They can only watch – they cannot control your PC.'))}</p>
+        body: `<p class="modal-note">${esc(t('Choose what the other people will see. They can only watch; to control your PC they must ask, and you decide.'))}</p>
           <div class="source-grid">${sources.map((s, i) => `<button class="source" data-i="${i}">
             <img src="${s.thumb}" alt=""><span>${esc(s.screen ? t('Entire screen') + (sources.filter((x) => x.screen).length > 1 ? ` (${esc(s.name)})` : '') : s.name)}</span></button>`).join('')}</div>`,
         onClose: () => resolve(picked),
@@ -85,7 +85,7 @@ const Share = (() => {
       track.contentHint = 'detail';
       track.onended = () => stop();
     }
-    session = { sid: crypto.randomUUID(), conv, stream, pcs: new Map(), invited: targets, watching: new Set() };
+    session = { sid: crypto.randomUUID(), conv, stream, pcs: new Map(), invited: targets, watching: new Set(), source, controller: null, asking: null };
     for (const peerId of targets) api.rtcSend(peerId, session.sid, { kind: 'invite', name: S.me.name, chat: convName(conv) });
     render();
     toast(t('Invitation sent. Waiting for people to start watching.'));
@@ -95,6 +95,8 @@ const Share = (() => {
     if (!session) return;
     const s = session;
     session = null;
+    if (s.controller) api.remoteStop();
+    if (s.asking) s.asking.close();
     for (const peerId of s.invited) api.rtcSend(peerId, s.sid, { kind: 'end' });
     for (const pc of s.pcs.values()) pc.close();
     s.stream.getTracks().forEach((tr) => tr.stop());
@@ -161,7 +163,12 @@ const Share = (() => {
         await pc.setRemoteDescription(data.sdp);
         await flushIce(pc);
       } else if (data.kind === 'ice' && pc) await addIce(pc, data.candidate);
-      else if (data.kind === 'end' || data.kind === 'decline') {
+      else if (data.kind === 'ctl-req') askControl(peerId);
+      else if (data.kind === 'ctl-end' && session.controller === peerId) {
+        session.controller = null;
+        render();
+      } else if (data.kind === 'end' || data.kind === 'decline') {
+        if (session.controller === peerId) session.controller = null;
         if (pc) pc.close();
         session.pcs.delete(peerId);
         session.watching.delete(peerId);
@@ -172,6 +179,55 @@ const Share = (() => {
     }
   }
 
+  // Remote help: a viewer asks to control this PC; the user decides.
+  function askControl(peerId) {
+    const s = session;
+    const no = (reason) => api.rtcSend(peerId, s.sid, { kind: 'ctl-no', reason });
+    if (!s.watching.has(peerId)) return no('not-watching');
+    if (!s.source || !s.source.screen) {
+      toast(t('{name} asked to control your PC, but you are sharing a single window. Share the entire screen to allow it.', { name: peerName(peerId) }));
+      return no('window');
+    }
+    if (s.controller && s.controller !== peerId) return no('busy');
+    if (s.asking) return undefined;
+    playSound();
+    let answered = false;
+    s.asking = modal({
+      title: t('Remote help'),
+      body: `<div class="ctl-ask">${avatarHtml('direct', peerId, peerName(peerId), null, 'lg')}
+        <div><b>${esc(t('{name} wants to control your PC', { name: peerName(peerId) }))}</b>
+        <p>${esc(t('They will be able to use your mouse and keyboard on the shared screen. You can take back control at any time with the button at the top or Ctrl + Alt + End.'))}</p></div></div>`,
+      buttons: [
+        { label: t('Deny'), action: () => { answered = true; no('denied'); } },
+        {
+          label: t('Allow control'), cls: 'primary', action: async () => {
+            answered = true;
+            if (session !== s) return;
+            try {
+              await api.remoteAllow(peerId, s.sid, s.source.display || '');
+              s.controller = peerId;
+              render();
+            } catch (err) {
+              toast(err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'error');
+              no('unsupported');
+            }
+          },
+        },
+      ],
+      onClose: () => { if (session === s) s.asking = null; if (!answered) no('denied'); },
+    });
+  }
+
+  function onRemote(p) {
+    if (!session || p.sid !== session.sid) return;
+    if (!p.active) {
+      session.controller = null;
+      if (p.by === 'remote') toast(t('{name} stopped controlling your PC', { name: peerName(p.peerId) }));
+      if (p.by === 'error') toast(t('Remote control could not start on this PC (Windows PowerShell is blocked).'), 'error');
+    }
+    render();
+  }
+
   function render() {
     const b = $('#shareBanner');
     if (!session) {
@@ -180,11 +236,18 @@ const Share = (() => {
     }
     b.classList.remove('hidden');
     const watching = [...session.watching].map(peerName);
-    b.innerHTML = `<span class="live-dot"></span><b>${esc(t('You are sharing your screen'))}</b>
+    const ctl = session.controller;
+    b.classList.toggle('controlled', !!ctl);
+    b.innerHTML = ctl
+      ? `<span class="live-dot"></span><b>${esc(t('{name} is controlling your PC', { name: peerName(ctl) }))}</b>
+      <span>${esc(t('Ctrl + Alt + End takes back control'))}</span>
+      <button class="btn" id="btnTakeBack">${esc(t('Take back control'))}</button><button class="btn danger" id="btnStopShare">${esc(t('Stop sharing'))}</button>`
+      : `<span class="live-dot"></span><b>${esc(t('You are sharing your screen'))}</b>
       <span>${esc(watching.length ? t('Watching: {names}', { names: watching.join(', ') }) : t('Waiting for people to start watching…'))}</span>
       <button class="btn danger" id="btnStopShare">${esc(t('Stop sharing'))}</button>`;
     $('#btnStopShare').onclick = stop;
+    if ($('#btnTakeBack')) $('#btnTakeBack').onclick = () => { api.remoteStop(); session.controller = null; render(); };
   }
 
-  return { start, stop, onRtc, render };
+  return { start, stop, onRtc, onRemote, render };
 })();

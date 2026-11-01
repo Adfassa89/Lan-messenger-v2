@@ -19,3 +19,11 @@ button:hover { background: rgba(255, 255, 255, .22); }
 video { animation: viewIn .35s ease-out; }
 @keyframes viewIn { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { video { animation: none; } }
+button:disabled { opacity: .6; cursor: default; }
+button.ctl { background: #2563eb; }
+button.ctl:hover { background: #3b82f6; }
+body.controlling button.ctl { background: #dc2626; }
+body.controlling .bar { opacity: 1; box-shadow: 0 0 0 2px #2563eb, 0 6px 24px rgba(0, 0, 0, .4); }
+body.controlling video { cursor: default; }
+.note { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); max-width: 80%; padding: 9px 14px; border-radius: 10px; background: rgba(20, 24, 33, .9); text-align: center; box-shadow: 0 6px 24px rgba(0, 0, 0, .4); }
+.hidden { display: none !important; }

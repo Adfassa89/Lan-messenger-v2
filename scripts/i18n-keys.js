@@ -12,6 +12,7 @@ const FILES = [
 // Texts translated through a variable, e.g. t(label).
 const EXTRA = ['Smileys', 'Gestures', 'Work', 'Things', 'Indigo', 'Office', 'Ocean', 'Minimal', 'Mine Site', 'Emerald', 'Chess', 'Tic-tac-toe', 'Connect Four',
   'Pick your side and a time control, like on chess.com', 'Bullet', 'Blitz', 'Rapid', 'Three in a row wins', 'Four in a row wins',
+  '{n} kill', '{n} death', '{n} point', '{n} member', '{n} member, {on} online', '{n} file · {size}',
   'Small', 'Normal', 'Large', 'Larger', 'Largest',
   'Checkers', 'Tetris Battle', 'HOLD', 'NEXT', 'Move left', 'Move right', 'Soft drop', 'Hard drop', 'Rotate right', 'Rotate left', 'Rotate 180°', 'Hold',
   'Delay before sliding', 'Sliding speed', 'Soft drop speed', '(DAS – how long you hold before the piece starts sliding)',

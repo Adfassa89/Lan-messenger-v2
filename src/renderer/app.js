@@ -2136,6 +2136,9 @@ function handleEvent({ type, payload }) {
       FilesPanel.onEvent('file-progress', payload);
       updateDownloadDot();
       break;
+    case 'remote':
+      Share.onRemote(payload);
+      break;
     case 'typing':
       onTyping(payload);
       break;

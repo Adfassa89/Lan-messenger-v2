@@ -8,10 +8,12 @@ const crypto = require('crypto');
 const {
   app, BrowserWindow, Tray, Menu, Notification, ipcMain, dialog, shell,
   nativeImage, nativeTheme, powerMonitor, clipboard, desktopCapturer, screen, session,
+  globalShortcut,
 } = require('electron');
 const { Messenger, preview } = require('../core/messenger');
 const { Updater } = require('./updater');
 const { Firewall } = require('./firewall');
+const { RemoteInput } = require('./remote-input');
 const I18N = require('../shared/i18n');
 const Games = require('../shared/games');
 
@@ -55,6 +57,7 @@ let autoAway = false;
 let unreadTotal = 0;
 let updateReady = null;
 let shareSourceId = null;
+let remote = null; // Remote help: { peerId, sid, display, input } while someone controls this PC
 const thumbCache = new Map();
 const alertWindows = new Map(); // msgId -> BrowserWindow
 const rtcRoutes = new Map(); // sid -> webContents of a viewer or call window
@@ -338,7 +341,62 @@ function openViewer(peerId, sid, name) {
   guardNavigation(viewer);
 }
 
+// ------------------------------------------------------------------ remote help
+// Someone watching this PC's shared screen controls it, after the user allowed it.
+function remoteAllow(peerId, sid, displayId) {
+  if (!RemoteInput.supported()) throw new Error(t('Remote control works on Windows only'));
+  remoteStop(null);
+  const displays = screen.getAllDisplays();
+  const display = displays.find((d) => String(d.id) === String(displayId)) || screen.getPrimaryDisplay();
+  const input = new RemoteInput({
+    log: process.env.LANMSG_INPUT_LOG ? [] : null,
+    // Windows refused to start the input helper (blocked by a policy, for example).
+    onFail: () => { if (remote && remote.input === input) remoteStop('error'); },
+  });
+  input.start();
+  remote = { peerId, sid, display, input, since: Date.now() };
+  try { globalShortcut.register('CommandOrControl+Alt+End', () => remoteStop('local')); } catch { /* taken */ }
+  messenger.sendRtc(peerId, sid, { kind: 'ctl-ok', w: display.size.width, h: display.size.height });
+  send('remote', { peerId, sid, active: true });
+  return true;
+}
+
+// Ends remote control: 'local' (this user took back control), 'remote' (the
+// helper stopped) or null (silently, e.g. a new session replaces it).
+function remoteStop(by) {
+  if (!remote) return;
+  const r = remote;
+  remote = null;
+  r.input.stop();
+  try { globalShortcut.unregister('CommandOrControl+Alt+End'); } catch { /* ignore */ }
+  if (by === 'local' || by === 'error') messenger.sendRtc(r.peerId, r.sid, { kind: 'ctl-end' });
+  if (by) send('remote', { peerId: r.peerId, sid: r.sid, active: false, by });
+}
+
+function remoteEvents(e) {
+  if (!remote || e.peerId !== remote.peerId || e.sid !== remote.sid) return;
+  const list = Array.isArray(e.data.ev) ? e.data.ev.slice(0, 200) : [];
+  const { bounds } = remote.display;
+  const inp = remote.input;
+  for (const ev of list) {
+    if (!ev || typeof ev !== 'object') continue;
+    if (ev.t === 'm' || ev.t === 'd' || ev.t === 'u') {
+      if (Number.isFinite(ev.x) && Number.isFinite(ev.y)) {
+        const x = bounds.x + Math.max(0, Math.min(1, ev.x)) * bounds.width;
+        const y = bounds.y + Math.max(0, Math.min(1, ev.y)) * bounds.height;
+        const p = process.platform === 'win32' && screen.dipToScreenPoint ? screen.dipToScreenPoint({ x, y }) : { x, y };
+        inp.move(p.x, p.y);
+      }
+      if (ev.t !== 'm') inp.button(Number(ev.b), ev.t === 'd');
+    } else if (ev.t === 'w' && Number.isFinite(ev.dy)) inp.wheel(ev.dy);
+    else if (ev.t === 'k' && typeof ev.c === 'string') inp.key(ev.c.slice(0, 30), !!ev.d);
+  }
+}
+
 function routeRtc(e) {
+  const k0 = String((e.data && e.data.kind) || '');
+  if (k0 === 'in') return remoteEvents(e);
+  if (remote && e.peerId === remote.peerId && e.sid === remote.sid && (k0 === 'ctl-end' || k0 === 'end' || k0 === 'decline')) remoteStop('remote');
   const target = rtcRoutes.get(e.sid);
   if (target && !target.isDestroyed()) return target.send('evt', { type: 'rtc', payload: e });
   const kind = String(e.data.kind || '');
@@ -870,9 +928,12 @@ function registerIpc() {
     const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 200 } });
     return sources
       .filter((s) => !s.name.endsWith(APP_NAME))
-      .map((s) => ({ id: s.id, name: s.name, screen: s.id.startsWith('screen'), thumb: s.thumbnail.toDataURL() }));
+      .map((s) => ({ id: s.id, name: s.name, screen: s.id.startsWith('screen'), display: s.display_id || '', thumb: s.thumbnail.toDataURL() }));
   });
   h('share-select', (id) => { shareSourceId = id; });
+  h('remote-allow', (peerId, sid, displayId) => remoteAllow(peerId, sid, displayId));
+  h('remote-stop', () => remoteStop('local'));
+  h('remote-log', () => (remote && remote.input.log ? remote.input.log.slice() : null));
   h('rtc-send', (peerId, sid, data) => messenger.sendRtc(peerId, sid, data));
   h('open-viewer', (peerId, sid, name) => openViewer(peerId, sid, name));
   h('call-start', (conv, video) => startCall(conv, video));
@@ -1035,7 +1096,7 @@ app.whenReady().then(async () => {
   powerMonitor.on('resume', () => messenger.discovery && messenger.discovery.query());
 });
 
-app.on('before-quit', () => { quitting = true; });
+app.on('before-quit', () => { quitting = true; remoteStop(null); });
 
 app.on('will-quit', (e) => {
   if (!messenger || !messenger.started) return;

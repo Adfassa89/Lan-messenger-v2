@@ -168,7 +168,7 @@ const FilesPanel = (() => {
       return;
     }
     if (mode === 'files' && tab === 'photos') {
-      body.innerHTML = `<div class="sp-grid">${list.map((x) => `<button class="sp-photo" data-id="${esc(x.id)}" data-conv="${esc(x.conv)}" data-a="${x.file.path && x.exists ? 'view' : 'jump'}" title="${esc(x.file.name)}"><span>${esc(x.file.path && x.exists ? '' : t('Not downloaded'))}</span></button>`).join('')}</div>`;
+      body.innerHTML = `<div class="sp-grid">${list.map((x) => `<button class="sp-photo" data-id="${esc(x.id)}" data-conv="${esc(x.conv)}" data-a="${x.file.path && x.exists ? 'view' : 'jump'}" title="${esc(x.file.name)}"><span>${esc(x.file.path && x.exists ? x.file.name : t('Not downloaded'))}</span></button>`).join('')}</div>`;
       for (const b of body.querySelectorAll('.sp-photo')) {
         const x = list.find((i) => i.id === b.dataset.id);
         if (x && x.file.path && x.exists) thumbInto(b, x.file.path);
@@ -194,6 +194,7 @@ const FilesPanel = (() => {
       S.thumbs.set(p, info);
     }
     b.style.backgroundImage = `url("${info.url}")`;
+    b.firstChild.textContent = '';
     b.dataset.path = p;
   }
 
