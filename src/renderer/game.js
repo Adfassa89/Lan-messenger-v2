@@ -229,6 +229,14 @@ const Game = (() => {
 
   // ------------------------------------------------------------------ chat card
   function cardHtml(msg) {
+    if (msg.game.type === 'pudgewars') {
+      const host = msg.from === S.me.id ? t('You') : esc(msg.fromName || peerName(msg.from));
+      return `<div class="game-card warlock-card pudge-card">
+        <div class="wl-card-art"><span>🪝</span></div>
+        <div class="gc-head"><div><b>Pudge Wars</b><div class="gc-players">${esc(t('{name} opened Pudge Wars. Hook the other team!', { name: host }))}</div></div></div>
+        <button class="fbtn wl-join" data-act="game">${esc(t('Join the game'))}</button>
+      </div>`;
+    }
     if (msg.game.type === 'warlock') {
       const host = msg.from === S.me.id ? t('You') : esc(msg.fromName || peerName(msg.from));
       return `<div class="game-card warlock-card">
@@ -253,7 +261,7 @@ const Game = (() => {
   // ------------------------------------------------------------------ game window
   function show(conv, id) {
     const m = (S.msgs.get(conv) || []).find((x) => x.id === id);
-    if (m && m.game && m.game.type === 'warlock') {
+    if (m && m.game && (m.game.type === 'warlock' || m.game.type === 'pudgewars')) {
       call(api.openWarlock(conv, id));
       return;
     }

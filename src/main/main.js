@@ -263,8 +263,10 @@ function notify(conv, msg) {
   let body = preview(msg);
   if (msg.kind === 'file') body = msg.file.voice ? `🎤 ${t('Voice message')}` : `${msg.file.folder ? '📁' : '📎'} ${msg.file.name}`;
   if (msg.kind === 'game') {
-    const title = msg.game.type === 'warlock' ? 'Warlock' : Games.RULES[msg.game.type].title;
-    body = msg.game.type === 'warlock' ? `🔥 ${t('{name} opened a Warlock arena – join!', { name: msg.fromName || t('Someone') })}` : `🎮 ${t('New game: {game}', { game: t(title) })}`;
+    const title = ARENAS[msg.game.type] ? ARENAS[msg.game.type].title : Games.RULES[msg.game.type].title;
+    body = msg.game.type === 'warlock' ? `🔥 ${t('{name} opened a Warlock arena – join!', { name: msg.fromName || t('Someone') })}`
+      : msg.game.type === 'pudgewars' ? `🪝 ${t('{name} opened a Pudge Wars game – join!', { name: msg.fromName || t('Someone') })}`
+        : `🎮 ${t('New game: {game}', { game: t(title) })}`;
   }
   showNotification({ title, body: body.slice(0, 200), silent: true }, () => openInWindow('open-conv', conv));
   if (messenger.settings.sound) send('play-sound');
@@ -480,23 +482,30 @@ function openTetris(conv, id) {
   guardNavigation(w);
 }
 
-// Warlock: one window per arena. The PC that opened the arena runs the game.
+// Arena games (Warlock, Pudge Wars): one window per arena. The PC that opened
+// the arena runs the game.
+const ARENAS = {
+  warlock: { title: 'Warlock', page: 'warlock.html', bg: '#120806' },
+  pudgewars: { title: 'Pudge Wars', page: 'pudge.html', bg: '#0b1408' },
+};
+const isArena = (msg) => !!(msg && msg.game && ARENAS[msg.game.type]);
 const warlockWindows = new Map();
 function openWarlock(conv, id) {
   const existing = warlockWindows.get(id);
   if (existing && !existing.isDestroyed()) return existing.focus();
   const msg = messenger.store.getMessage(conv, id);
-  if (!msg || !msg.game || msg.game.type !== 'warlock') throw new Error(t('Game not found'));
+  if (!isArena(msg)) throw new Error(t('Game not found'));
+  const arena = ARENAS[msg.game.type];
   const w = new BrowserWindow({
     ...fitted({ width: 1280, height: 860, minWidth: 760, minHeight: 520 }),
-    title: 'Warlock',
+    title: arena.title,
     icon: appIcon(),
-    backgroundColor: '#120806',
+    backgroundColor: arena.bg,
     autoHideMenuBar: true,
     webPreferences,
   });
   w.removeMenu();
-  w.loadFile(path.join(RENDERER, 'warlock.html'), { query: { conv, id, lang: messenger.settings.language } });
+  w.loadFile(path.join(RENDERER, arena.page), { query: { conv, id, lang: messenger.settings.language } });
   warlockWindows.set(id, w);
   const wc = w.webContents;
   rtcRoutes.set(id, wc);
@@ -510,7 +519,7 @@ function openWarlock(conv, id) {
 
 function warlockInfo(conv, id) {
   const msg = messenger.store.getMessage(conv, id);
-  if (!msg || !msg.game || msg.game.type !== 'warlock') return null;
+  if (!isArena(msg)) return null;
   const host = msg.game.host || msg.from;
   return {
     me: messenger.id, myName: messenger.config.name, host,
@@ -852,13 +861,13 @@ function registerIpc() {
   h('create-game', (conv, type, options) => messenger.createGame(conv, type, options || {}));
   h('game-move', (conv, id, move) => messenger.gameMove(conv, id, move));
   h('open-tetris', (conv, id) => openTetris(conv, id));
-  h('create-warlock', (conv) => messenger.createWarlock(conv));
+  h('create-warlock', (conv, type) => messenger.createWarlock(conv, type || 'warlock'));
   h('open-warlock', (conv, id) => openWarlock(conv, id));
   h('warlock-info', (conv, id) => warlockInfo(conv, id));
   // The arena's results, posted to the group by the PC that ran it.
   h('warlock-result', (conv, id, text) => {
     const msg = messenger.store.getMessage(conv, id);
-    if (!msg || !msg.game || msg.game.type !== 'warlock' || msg.game.host !== messenger.id) return null;
+    if (!isArena(msg) || msg.game.host !== messenger.id) return null;
     return messenger.sendText(conv, String(text || '').slice(0, 2000));
   });
   h('tetris-info', (conv, id) => tetrisInfo(conv, id));

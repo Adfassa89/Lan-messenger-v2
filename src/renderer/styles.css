@@ -1461,3 +1461,6 @@ body.overlay-controls { --modal-top: 54px; }
 .wl-card-art { position: absolute; right: -10px; top: -14px; font: 72px/1 "Segoe UI Emoji", sans-serif; opacity: .25; filter: blur(.5px); pointer-events: none; }
 .warlock-card .wl-join { background: linear-gradient(180deg, #ff8a2a, #c43d12) !important; color: #fff !important; font-weight: 800; }
 .warlock-card { padding: 14px 16px !important; border-radius: 12px; min-width: 260px; display: grid; gap: 10px; }
+.pudge-card { background: linear-gradient(160deg, #18301a, #0a140b) !important; border-color: #3a6a2a !important; }
+.pudge-card .gc-head b { color: #c8f07a; text-shadow: 0 0 12px rgba(120, 220, 60, .5); }
+.pudge-card .wl-join { background: linear-gradient(180deg, #7ac83a, #3a7a12) !important; }

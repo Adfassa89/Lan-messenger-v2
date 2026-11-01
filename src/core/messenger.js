@@ -1,4 +1,7 @@
 'use strict';
+
+// Group arena games: one PC runs the game, everyone in the group can join.
+const ARENA_GAMES = ['warlock', 'pudgewars'];
 // The heart of the app: keeps track of people on the network, delivers
 // messages reliably (queued until the other PC confirms it received them)
 // and stores history. It has no user interface and no Electron dependency,
@@ -793,10 +796,10 @@ class Messenger extends EventEmitter {
       msg.poll = cleanPoll(w.poll);
       if (!msg.poll) return;
     }
-    if (kind === 'game' && w.game && w.game.type === 'warlock') {
-      // Warlock: an arena for a whole group, run by the PC that opened it.
+    if (kind === 'game' && w.game && ARENA_GAMES.includes(w.game.type)) {
+      // Warlock / Pudge Wars: an arena for a whole group, run by the PC that opened it.
       if (type !== 'group') return;
-      msg.game = { type: 'warlock', host: peerId };
+      msg.game = { type: w.game.type, host: peerId };
     } else if (kind === 'game') {
       // Games are only between the two people of a private chat.
       const g = w.game || {};
@@ -929,7 +932,7 @@ class Messenger extends EventEmitter {
       wire.game = { type: msg.game.type, players: msg.game.players };
       if (msg.game.clock) wire.game.clock = msg.game.clock;
       if (msg.game.bestOf) wire.game.bestOf = msg.game.bestOf;
-      if (msg.game.type === 'warlock') wire.game = { type: 'warlock' };
+      if (ARENA_GAMES.includes(msg.game.type)) wire.game = { type: msg.game.type };
     }
     const type = this._convType(conv);
     if (type === 'broadcast') wire.broadcast = true;
@@ -1279,10 +1282,11 @@ class Messenger extends EventEmitter {
     return stored || msg;
   }
 
-  // "/warlock" in a group chat: opens an arena the group can join.
-  createWarlock(conv) {
-    if (this._convType(conv) !== 'group') throw new Error('Warlock can be played in group chats');
-    return this._sendMsg(conv, { kind: 'game', text: '', game: { type: 'warlock', host: this.id } });
+  // "/warlock" or "/pudge" in a group chat: opens an arena the group can join.
+  createWarlock(conv, type = 'warlock') {
+    if (this._convType(conv) !== 'group') throw new Error('Arena games can be played in group chats');
+    if (!ARENA_GAMES.includes(type)) throw new Error('Unknown game');
+    return this._sendMsg(conv, { kind: 'game', text: '', game: { type, host: this.id } });
   }
 
   // Timed chess: whoever's clock reaches zero loses. The player out of time
