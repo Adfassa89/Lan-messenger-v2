@@ -75,7 +75,7 @@ export class View {
     this.camera = new THREE.PerspectiveCamera(FOV, 1, 20, 30000);
     this.target = V();
     this.dist = FOLLOW_DIST;
-    this.zoom = 1; // mouse wheel, 0.55 – 1.35
+    this.zoom = 1.35; // mouse wheel, 0.55 – 1.35; starts fully zoomed out
     this.yaw = 0;
     this.time = 0;
     this.shakeAmp = 0;

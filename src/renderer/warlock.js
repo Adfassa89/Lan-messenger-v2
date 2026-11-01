@@ -80,7 +80,7 @@ function renderLobby() {
   $('lobbyHelp').innerHTML = `${t('Right-click to move, aim with the mouse.')} ${t('Mouse wheel zooms.')}<br>
     <kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd><kbd>D</kbd><kbd>F</kbd> ${t('spells')} · <kbd>T</kbd> ${t('Fireball')} · <kbd>G</kbd> ${t('Scourge')} · <kbd>S</kbd> ${t('stop')}<br>
     ${t('spell key, then left-click to cast (quick cast in Esc menu)')}<br>
-    <kbd>1</kbd> ${t('select your hero')}, ${t('hold 1 to follow your hero, double-tap to jump to it')} · ${t('move the mouse to the screen edge to look around')}<br>
+    <kbd>1</kbd> ${t('select your hero')}<br>
     ${t('Left-click a warlock to see its health, spells and items.')} · <kbd>Esc</kbd> ${t('Menu')}<br>
     ${t('Knock the others into the lava. Last warlock standing wins the round.')}`;
 }
@@ -255,7 +255,7 @@ window.addEventListener('resize', () => view && view.resize());
 // ------------------------------------------------------------------ controls
 // Player settings (Esc menu), kept on this PC.
 const PREFS_KEY = 'lanmsg.warlock.v1';
-const prefs = { quickCast: false, repeatMove: true, followHero: false, lockCursor: true, camSpeed: 1 };
+const prefs = { quickCast: false, repeatMove: true, lockCursor: true, camSpeed: 1 };
 try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch { /* defaults */ }
 const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* ignore */ } };
 
@@ -437,7 +437,6 @@ function renderMenu() {
   $('menuOpts').innerHTML = [
     row('quickCast', t('Quick cast'), t('Spells go off at the cursor as soon as you press the key. Off: the key shows an aim arrow and a left click casts.')),
     row('repeatMove', t('Repeat move command'), t('Holding the right mouse button keeps sending move orders.')),
-    row('followHero', t('Always follow hero'), t('The camera stays on your warlock. Off: move the mouse to the screen edge to look around; hold 1 to follow.')),
     row('lockCursor', t('Keep the cursor in the window'), t('The mouse cannot leave the game window while you fight.')),
   ].join('') + `<div class="menu-opt"><span><b>${esc(t('Camera speed'))}</b></span><div class="seg" id="camSpeedSeg">${[[0.6, t('Slow')], [1, t('Normal')], [1.6, t('Fast')]].map(([v, l]) => `<button data-cam="${v}" class="${prefs.camSpeed === v ? 'on' : ''}">${esc(l)}</button>`).join('')}</div></div>`;
 }
@@ -464,8 +463,8 @@ function updateCamera(s, dt) {
   const mine = myPawn(s);
   if (s.ph !== 'fight') { cam.started = false; return { mode: 'overview' }; }
   if (!cam.started && mine) { cam.started = true; cam.x = mine.x; cam.y = mine.y; } // round start: on your hero
-  const hold = keys.has('Digit1');
-  if (mine && !mine.d && (prefs.followHero || hold || cam.snap)) {
+  // The camera always follows your warlock; only while you are dead can you look around.
+  if (mine && !mine.d) {
     cam.x = mine.x;
     cam.y = mine.y;
     const snap = cam.snap;
