@@ -1189,12 +1189,12 @@ async function sendCurrent() {
     return;
   }
   if (!text) return;
-  // Secret: "/warlock" or "/pudge" in a group chat opens an arena game.
+  // Secret: "/warlock" or "/pudge" in a group or private chat opens an arena game.
   const arena = { '/warlock': 'warlock', '/pudge': 'pudgewars', '/pudgewars': 'pudgewars' }[text.toLowerCase()];
   if (arena) {
     input.value = '';
     autoGrow();
-    if (!S.active.startsWith('g:')) return toast(t(arena === 'warlock' ? 'Warlock can be played in group chats' : 'Pudge Wars can be played in group chats'), 'error');
+    if (S.active === 'broadcast') return toast(t(arena === 'warlock' ? 'Warlock can be played in group and private chats' : 'Pudge Wars can be played in group and private chats'), 'error');
     const g = await call(api.createWarlock(S.active, arena));
     if (g) call(api.openWarlock(S.active, g.id));
     return undefined;

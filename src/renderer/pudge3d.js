@@ -9,14 +9,14 @@ import { UnrealBloomPass } from './vendor/three/postprocessing/UnrealBloomPass.j
 import { OutputPass } from './vendor/three/postprocessing/OutputPass.js';
 import { GLTFLoader } from './vendor/three/loaders/GLTFLoader.js';
 import * as SkeletonUtils from './vendor/three/utils/SkeletonUtils.js';
-import { mergeVertices } from './vendor/three/utils/BufferGeometryUtils.js';
+import { buildPudgeMap, groundH, WATER_Y } from './pudge-map.js';
 import {
-  rand, col, fbm, vnoise, Particles, particleAtlas, TILE_GLOW, TILE_FLAME, TILE_SMOKE, TILE_SPARK,
-  shockMaterial, bubbleMaterial, ribbonMaterial, stoneTexture, addRim, GLSL_NOISE,
+  rand, col, Particles, particleAtlas, TILE_FLAME, TILE_SMOKE, TILE_SPARK,
+  shockMaterial, bubbleMaterial, ribbonMaterial, addRim,
 } from './warlock3d-lib.js';
 
 const PW = window.PudgeWars;
-const { WALL_X, WALL_Y, RIVER, CENTER, RADIUS, COLORS } = PW;
+const { RIVER, COLORS } = PW;
 const MODEL_HEIGHT = 235; // Pudge is big
 const CLIPS = {
   Idle: 'pudge_idle_anim', Walk: '@pudge_walkN_anim', Haste: 'pudge_run_haste_anim', Hook: 'pudge_meathook_start_anim',
@@ -27,7 +27,6 @@ const ONCE = ['Hook', 'HookEnd', 'Attack', 'Cleaver', 'Death', 'Spawn', 'HookPos
 const PITCH = 0.98;
 const FOV = 40;
 const FOLLOW_DIST = 2050;
-const WATER_Y = -16;
 const HAND_Y = 95; // chain height
 const TAU = Math.PI * 2;
 const TEAM_COL = ['#46e046', '#e8443a']; // Radiant green, Dire red (as in Dota)
@@ -36,16 +35,6 @@ const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const angleLerp = (a, b, t) => { let d = b - a; d = Math.atan2(Math.sin(d), Math.cos(d)); return a + d * t; };
 const approach = (cur, target, dt, speed) => cur + (target - cur) * Math.min(1, dt * speed);
 const smooth = (a, b, x) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
-
-// Ground height at a game point: the river trench, the banks, the raised forest.
-function groundH(x, y) {
-  const ax = Math.abs(x);
-  let h = -48 * (1 - smooth(RIVER - 20, RIVER + 70, ax));
-  const out = Math.max(ax - (WALL_X + 60), Math.abs(y) - (WALL_Y + 60));
-  if (out > 0 && ax > RIVER + 80) h += Math.min(1, out / 260) * (60 + 50 * fbm(x / 700, y / 700, 3, 4));
-  h += (fbm(x / 400, y / 400, 3, 9) - 0.5) * 10 * smooth(RIVER, RIVER + 120, ax);
-  return h;
-}
 
 export class View {
   constructor(canvas, labels) {
@@ -95,8 +84,7 @@ export class View {
     this.sphereGeo = new THREE.SphereGeometry(1, 32, 20);
     this.ringGeo = new THREE.RingGeometry(0.88, 1, 72);
     this.ringGeo.rotateX(-Math.PI / 2);
-    this.buildMap();
-    this.buildProps();
+    this.map = buildPudgeMap(this.scene, this);
 
     this.pawns = new Map();
     this.hookHeads = new Map();
@@ -210,290 +198,6 @@ export class View {
       this.glowTex = new THREE.CanvasTexture(c);
     }
     return this.glowTex;
-  }
-
-  // ------------------------------------------------------------ the map
-  buildMap() {
-    // Ground: one big mesh with the river trench and raised forest; colours by
-    // area (Radiant grass, Dire's darker ground, mud banks), a tiling grass texture on top.
-    const SIZE = 9000;
-    const SEG = 180;
-    const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
-    geo.rotateX(-Math.PI / 2);
-    const pos = geo.attributes.position;
-    const colors = new Float32Array(pos.count * 3);
-    const c = new THREE.Color();
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const y = -pos.getZ(i);
-      pos.setY(i, groundH(x, y));
-      const ax = Math.abs(x);
-      const n = fbm(x / 500, y / 500, 3, 2);
-      const n2 = vnoise(x / 120, y / 120, 5);
-      if (x < 0) c.setRGB(0.17 + 0.08 * n, 0.33 + 0.1 * n, 0.08 + 0.04 * n2); // Radiant grass
-      else c.setRGB(0.25 + 0.08 * n, 0.25 + 0.07 * n, 0.12 + 0.04 * n2); // Dire: dry, darker
-      // Worn dirt where the Pudges stand, and paths along the bank.
-      const spawn = Math.max(0, 1 - Math.hypot((ax - 1250) / 260, y / 750));
-      const path = smooth(RIVER + 260, RIVER + 90, ax) * smooth(RIVER + 30, RIVER + 90, ax);
-      const dirt = Math.min(1, spawn * 0.8 + path * 0.7) * (0.6 + 0.4 * n2);
-      c.lerp(new THREE.Color(0.36, 0.28, 0.18), dirt);
-      // Mud banks and the river bed.
-      const bank = 1 - smooth(RIVER + 10, RIVER + 80, ax);
-      c.lerp(new THREE.Color(0.36, 0.3, 0.2), bank);
-      c.lerp(new THREE.Color(0.2, 0.22, 0.16), 1 - smooth(RIVER - 60, RIVER, ax));
-      // Forest floor outside the arena.
-      const out = Math.max(ax - WALL_X - 40, Math.abs(y) - WALL_Y - 40);
-      if (out > 0 && ax > RIVER + 60) c.lerp(new THREE.Color(0.14, 0.2, 0.09), Math.min(1, out / 200) * 0.8);
-      colors.set([c.r, c.g, c.b], i * 3);
-    }
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.computeVertexNormals();
-    const grass = this.grassTexture();
-    grass.repeat.set(SIZE / 260, SIZE / 260);
-    const groundMat = new THREE.MeshStandardMaterial({ map: grass, vertexColors: true, roughness: 0.95, metalness: 0 });
-    const ground = new THREE.Mesh(geo, groundMat);
-    ground.receiveShadow = true;
-    this.scene.add(ground);
-
-    // The river: flowing water, foam at the banks and around the rock.
-    this.waterMat = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 } },
-      transparent: true,
-      depthWrite: false,
-      vertexShader: 'varying vec2 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }',
-      fragmentShader: `
-        uniform float uTime; varying vec2 vW;
-        ${GLSL_NOISE}
-        void main() {
-          vec2 p = vW / 260.0;
-          // The river flows north (-z).
-          float n1 = fbm(p * vec2(1.0, 0.6) + vec2(0.0, uTime * 0.35));
-          float n2 = fbm(p * 2.3 + vec2(3.1, uTime * 0.6));
-          float waves = n1 * 0.6 + n2 * 0.4;
-          vec3 deep = vec3(0.04, 0.16, 0.2);
-          vec3 shallow = vec3(0.12, 0.34, 0.36);
-          float ax = abs(vW.x);
-          float edge = smoothstep(${(RIVER - 70).toFixed(1)}, ${(RIVER + 30).toFixed(1)}, ax);
-          vec3 c = mix(deep, shallow, edge * 0.8 + waves * 0.35);
-          float glint = pow(max(0.0, n2 - 0.55) * 2.2, 3.0);
-          c += vec3(0.7, 0.85, 0.9) * glint * 0.6;
-          // Foam at the banks and around the centre rock.
-          float rock = length(vW - vec2(${CENTER.x.toFixed(1)}, ${(-CENTER.y).toFixed(1)}));
-          float foam = smoothstep(${(RIVER + 5).toFixed(1)}, ${(RIVER + 40).toFixed(1)}, ax) + smoothstep(${(CENTER.r + 60).toFixed(1)}, ${(CENTER.r + 5).toFixed(1)}, rock);
-          foam *= smoothstep(0.35, 0.75, fbm(p * 4.0 + vec2(0.0, uTime * 0.9)));
-          c = mix(c, vec3(0.85, 0.92, 0.9), clamp(foam, 0.0, 1.0) * 0.75);
-          float a = 0.82 - edge * 0.25 + foam * 0.2;
-          gl_FragColor = vec4(c, a);
-        }`,
-    });
-    const water = new THREE.Mesh(new THREE.PlaneGeometry(RIVER * 2 + 140, SIZE, 1, 1), this.waterMat);
-    water.rotation.x = -Math.PI / 2;
-    water.position.y = WATER_Y;
-    water.renderOrder = 1;
-    this.scene.add(water);
-
-    // The rock in the middle of the river that hooks bounce off.
-    const stone = stoneTexture(1);
-    const rockMat = new THREE.MeshStandardMaterial({ map: stone, bumpMap: stone, bumpScale: 4, roughness: 0.9, color: 0x9a948a, flatShading: true });
-    const rocks = [[0, 0, 125, 95], [-70, 60, 70, 60], [80, -50, 80, 70], [40, 90, 55, 45], [-60, -80, 65, 50]];
-    for (const [dx, dy, r, h] of rocks) {
-      // Welded first, so the jitter moves shared corners together.
-      const g = mergeVertices(new THREE.IcosahedronGeometry(1, 2).deleteAttribute('normal').deleteAttribute('uv'));
-      const p = g.attributes.position;
-      const uv = new Float32Array(p.count * 2);
-      const seed = rand(0, 100);
-      for (let k = 0; k < p.count; k++) {
-        const x = p.getX(k);
-        const y = p.getY(k);
-        const z = p.getZ(k);
-        const n = 0.8 + 0.4 * vnoise(x * 2.3 + seed, z * 2.3 + y * 1.7, 7);
-        p.setXYZ(k, x * n, Math.max(-0.4, y) * n, z * n);
-        uv[k * 2] = x * 0.5 + 0.5 + y * 0.3;
-        uv[k * 2 + 1] = z * 0.5 + 0.5 + y * 0.3;
-      }
-      g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-      g.computeVertexNormals();
-      const m = new THREE.Mesh(g, rockMat);
-      m.scale.set(r, h, r * rand(0.8, 1.1));
-      m.position.set(CENTER.x + dx, WATER_Y + h * 0.2, -(CENTER.y + dy));
-      m.rotation.y = rand(0, TAU);
-      m.castShadow = true;
-      m.receiveShadow = true;
-      this.scene.add(m);
-    }
-
-    // The arena edge (hooks bounce here): a low dry-stone wall.
-    const wallTex = stoneTexture(2);
-    wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
-    const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, bumpMap: wallTex, bumpScale: 3, roughness: 0.95, color: 0x8a8070 });
-    const wall = (x1, y1, x2, y2) => {
-      const L = Math.hypot(x2 - x1, y2 - y1);
-      const g = new THREE.BoxGeometry(L, 46, 34);
-      const m = new THREE.Mesh(g, wallMat);
-      m.position.set((x1 + x2) / 2, Math.max(groundH((x1 + x2) / 2, (y1 + y2) / 2), WATER_Y) + 14, -(y1 + y2) / 2);
-      m.rotation.y = -Math.atan2(-(y2 - y1), x2 - x1);
-      m.castShadow = true;
-      m.receiveShadow = true;
-      this.scene.add(m);
-    };
-    const X = WALL_X + 30;
-    const Y = WALL_Y + 30;
-    for (const s of [-1, 1]) {
-      wall(s * X, -Y, s * X, Y); // east / west
-      wall(s * (RIVER + 60), s > 0 ? Y : -Y, s * X, s > 0 ? Y : -Y); // north / south, either side of the river
-      wall(-s * (RIVER + 60), s > 0 ? Y : -Y, -s * X, s > 0 ? Y : -Y);
-    }
-
-    // Forest around the arena: Radiant pines, Dire's darker, autumn-red trees.
-    const trees = [];
-    for (let i = 0; i < 900 && trees.length < 420; i++) {
-      const x = rand(-3600, 3600);
-      const y = rand(-3400, 3400);
-      const ax = Math.abs(x);
-      if (ax < RIVER + 150) continue;
-      const out = Math.max(ax - WALL_X - 150, Math.abs(y) - WALL_Y - 150);
-      if (out < 0) continue;
-      if (Math.hypot(ax - 1800, y) < 260) continue; // keep the fountains clear
-      if (trees.some((t) => Math.hypot(t[0] - x, t[1] - y) < 120)) continue;
-      trees.push([x, y, rand(0.8, 1.35)]);
-    }
-    const trunkGeo = new THREE.CylinderGeometry(9, 14, 90, 6);
-    trunkGeo.translate(0, 45, 0);
-    const crown = [];
-    for (let k = 0; k < 3; k++) {
-      const g = new THREE.ConeGeometry(95 - k * 22, 150 - k * 20, 7);
-      g.translate(0, 120 + k * 75, 0);
-      crown.push(g);
-    }
-    const crownGeo = mergeGeos(crown);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3420, roughness: 1 });
-    const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true });
-    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, trees.length);
-    const crowns = new THREE.InstancedMesh(crownGeo, crownMat, trees.length);
-    const m4 = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    trees.forEach(([x, y, s], i) => {
-      q.setFromAxisAngle(V(0, 1, 0), rand(0, TAU));
-      m4.compose(V(x, groundH(x, y) - 5, -y), q, V(s, s * rand(0.9, 1.2), s));
-      trunks.setMatrixAt(i, m4);
-      crowns.setMatrixAt(i, m4);
-      crowns.setColorAt(i, x < 0 ? new THREE.Color().setHSL(rand(0.27, 0.33), 0.55, rand(0.2, 0.28)) : new THREE.Color().setHSL(rand(0.02, 0.1), 0.45, rand(0.2, 0.27)));
-    });
-    trunks.castShadow = crowns.castShadow = true;
-    crowns.receiveShadow = true;
-    this.scene.add(trunks, crowns);
-
-    // Grass tufts and stones scattered on the fields.
-    const tuftGeo = new THREE.ConeGeometry(6, 26, 4);
-    tuftGeo.translate(0, 10, 0);
-    const tufts = new THREE.InstancedMesh(tuftGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), 900);
-    for (let i = 0; i < 900; i++) {
-      let x;
-      let y;
-      do { x = rand(-WALL_X, WALL_X); y = rand(-WALL_Y, WALL_Y); } while (Math.abs(x) < RIVER + 70);
-      q.setFromEuler(new THREE.Euler(rand(-0.3, 0.3), rand(0, TAU), rand(-0.3, 0.3)));
-      m4.compose(V(x, groundH(x, y), -y), q, V(1, rand(0.6, 1.4), 1));
-      tufts.setMatrixAt(i, m4);
-      tufts.setColorAt(i, x < 0 ? new THREE.Color().setHSL(rand(0.22, 0.3), 0.6, rand(0.22, 0.32)) : new THREE.Color().setHSL(rand(0.1, 0.15), 0.45, rand(0.24, 0.3)));
-    }
-    this.scene.add(tufts);
-  }
-
-  grassTexture() {
-    const S = 256;
-    const c = document.createElement('canvas');
-    c.width = c.height = S;
-    const g = c.getContext('2d');
-    const img = g.createImageData(S, S);
-    for (let y = 0; y < S; y++) {
-      for (let x = 0; x < S; x++) {
-        const n = fbm(x / 32, y / 32, 4, 3, 8);
-        const v = 150 + n * 105;
-        const i = (y * S + x) * 4;
-        img.data[i] = v;
-        img.data[i + 1] = v;
-        img.data[i + 2] = v * 0.95;
-        img.data[i + 3] = 255;
-      }
-    }
-    g.putImageData(img, 0, 0);
-    // Blades of grass.
-    for (let k = 0; k < 2400; k++) {
-      const x = Math.random() * S;
-      const y = Math.random() * S;
-      const l = 3 + Math.random() * 6;
-      const a = -Math.PI / 2 + (Math.random() - 0.5) * 0.9;
-      const v = 110 + Math.random() * 145;
-      g.strokeStyle = `rgba(${v},${v},${v * 0.9},0.55)`;
-      g.lineWidth = 1;
-      g.beginPath();
-      g.moveTo(x, y);
-      g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
-      g.stroke();
-    }
-    const tex = new THREE.CanvasTexture(c);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
-    return tex;
-  }
-
-  // Campfires along both sides and the two fountains.
-  buildProps() {
-    this.fires = [];
-    const logMat = new THREE.MeshStandardMaterial({ color: 0x3a2414, roughness: 1 });
-    const emberMat = new THREE.MeshBasicMaterial({ color: col('#ff7a2a').multiplyScalar(2) });
-    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6a6660, roughness: 1, flatShading: true });
-    for (const sx of [-750, 750]) {
-      for (const y of [-1000, 0, 1000]) {
-        const g = new THREE.Group();
-        g.position.set(sx, groundH(sx, y), -y);
-        for (let i = 0; i < 4; i++) {
-          const log = new THREE.Mesh(new THREE.CylinderGeometry(6, 7, 70, 6), logMat);
-          log.rotation.z = Math.PI / 2 - 0.35;
-          log.rotation.y = (i / 4) * TAU;
-          log.position.set(Math.cos((i / 4) * TAU) * 12, 14, -Math.sin((i / 4) * TAU) * 12);
-          log.castShadow = true;
-          g.add(log);
-        }
-        for (let i = 0; i < 9; i++) {
-          const s = new THREE.Mesh(new THREE.DodecahedronGeometry(10, 0), stoneMat);
-          s.position.set(Math.cos((i / 9) * TAU) * 40, 4, Math.sin((i / 9) * TAU) * 40);
-          g.add(s);
-        }
-        const ember = new THREE.Mesh(new THREE.SphereGeometry(16, 10, 6), emberMat);
-        ember.scale.y = 0.35;
-        ember.position.y = 4;
-        g.add(ember);
-        this.scene.add(g);
-        this.fires.push({ x: sx, y });
-      }
-    }
-    // Fountains behind each base: stone basin with glowing water.
-    this.fountains = [];
-    for (const [team, x] of [[0, -1800], [1, 1800]]) {
-      const g = new THREE.Group();
-      g.position.set(x, groundH(x, 0), 0);
-      const stone = new THREE.MeshStandardMaterial({ color: team === 0 ? 0xd8d0c0 : 0x5a4a48, roughness: 0.8 });
-      const base = new THREE.Mesh(new THREE.CylinderGeometry(150, 170, 40, 24), stone);
-      base.position.y = 20;
-      const rim = new THREE.Mesh(new THREE.TorusGeometry(150, 14, 8, 32), stone);
-      rim.rotation.x = Math.PI / 2;
-      rim.position.y = 42;
-      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(22, 30, 170, 10), stone);
-      pillar.position.y = 105;
-      const waterMat = new THREE.MeshBasicMaterial({ color: col(team === 0 ? '#5ae0ff' : '#ff5a3a').multiplyScalar(1.4), transparent: true, opacity: 0.85 });
-      const pool = new THREE.Mesh(new THREE.CircleGeometry(140, 32), waterMat);
-      pool.rotation.x = -Math.PI / 2;
-      pool.position.y = 38;
-      const orb = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow(), color: col(team === 0 ? '#7ae8ff' : '#ff6a4a').multiplyScalar(1.5), blending: THREE.AdditiveBlending, depthWrite: false }));
-      orb.scale.setScalar(160);
-      orb.position.y = 200;
-      for (const m of [base, rim, pillar]) { m.castShadow = true; m.receiveShadow = true; }
-      g.add(base, rim, pillar, pool, orb);
-      this.scene.add(g);
-      this.fountains.push({ x, team });
-    }
   }
 
   // ------------------------------------------------------------ Pudges
@@ -1234,21 +938,7 @@ export class View {
       u.uWidth.value = 0.12;
       u.uAlpha.value = 1 - mk;
     }
-    // Campfires burn; the ones near the camera light the ground.
-    let lit = 0;
-    for (const f of this.fires) {
-      const near = Math.hypot(f.x - this.target.x, -f.y - this.target.z) < 2600;
-      if (!near) continue;
-      const h = groundH(f.x, f.y);
-      if (Math.random() < dt * 30) this.fire.add({ p: [f.x + rand(-12, 12), h + 10, -f.y + rand(-12, 12)], v: [rand(-15, 15), rand(90, 170), rand(-15, 15)], c0: col('#ffe090'), c1: col('#c02800'), size: rand(28, 44), size1: 6, life: rand(0.5, 0.8), tile: TILE_FLAME, drag: 0.97 });
-      if (Math.random() < dt * 4) this.smoke.add({ p: [f.x, h + 90, -f.y], v: [rand(-10, 10), rand(50, 80), rand(-10, 10)], c0: col('#3a3430'), size: 40, size1: 140, life: 2.5, a: 0.25, tile: TILE_SMOKE, spin: rand(-0.5, 0.5) });
-      if (Math.random() < dt * 6) this.fire.add({ p: [f.x, h + 40, -f.y], v: [rand(-30, 30), rand(150, 260), rand(-30, 30)], c0: col('#ffd080'), c1: col('#ff4000'), size: 3, life: 1.2, tile: TILE_SPARK, stretch: 0.03, drag: 0.98 });
-      if (lit++ < 3) this.light(f.x, h + 60, -f.y, '#ff9a40', 2.2 + 0.4 * Math.sin(this.time * 13 + f.x) + 0.3 * Math.sin(this.time * 7.3 + f.y));
-    }
-    // The fountains bubble.
-    for (const f of this.fountains) {
-      if (Math.random() < dt * 20) this.fire.add({ p: [f.x + rand(-60, 60), 50, rand(-60, 60)], v: [0, rand(100, 220), 0], c0: col(f.team === 0 ? '#c0f4ff' : '#ffc0a0'), c1: col(f.team === 0 ? '#2a8ac0' : '#c02a10'), size: 8, life: 0.8, tile: TILE_SPARK, stretch: 0.03, grav: 200 });
-    }
+    this.map.update(dt, this.time, this.target);
     this.fire.update(dt);
     this.smoke.update(dt);
   }
@@ -1325,7 +1015,6 @@ export class View {
   frame({ s, prev, k, dt, me, names, cam, aim }) {
     this.time += dt;
     this.lightN = 0;
-    this.waterMat.uniforms.uTime.value = this.time;
     if (this.gltf) {
       this.updatePawns(s, prev, k, me, names, dt);
       this.updateHooks(s, prev, k, dt);
@@ -1383,28 +1072,6 @@ export class View {
     if (this.quality >= 1) this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
   }
-}
-
-// Merges plain geometries (same attributes) into one.
-function mergeGeos(list) {
-  const pos = [];
-  const nor = [];
-  const idx = [];
-  let off = 0;
-  for (const g0 of list) {
-    const g = g0.index ? g0 : g0;
-    const p = g.attributes.position;
-    const n = g.attributes.normal;
-    for (let i = 0; i < p.count; i++) { pos.push(p.getX(i), p.getY(i), p.getZ(i)); nor.push(n.getX(i), n.getY(i), n.getZ(i)); }
-    if (g.index) for (let i = 0; i < g.index.count; i++) idx.push(g.index.getX(i) + off);
-    else for (let i = 0; i < p.count; i++) idx.push(i + off);
-    off += p.count;
-  }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-  out.setIndex(idx);
-  return out;
 }
 
 export { groundH, TEAM_COL, RUNE_COL };

@@ -797,8 +797,8 @@ class Messenger extends EventEmitter {
       if (!msg.poll) return;
     }
     if (kind === 'game' && w.game && ARENA_GAMES.includes(w.game.type)) {
-      // Warlock / Pudge Wars: an arena for a whole group, run by the PC that opened it.
-      if (type !== 'group') return;
+      // Warlock / Pudge Wars: an arena for a group or two people, run by the PC that opened it.
+      if (type !== 'group' && type !== 'direct') return;
       msg.game = { type: w.game.type, host: peerId };
     } else if (kind === 'game') {
       // Games are only between the two people of a private chat.
@@ -1282,9 +1282,9 @@ class Messenger extends EventEmitter {
     return stored || msg;
   }
 
-  // "/warlock" or "/pudge" in a group chat: opens an arena the group can join.
+  // "/warlock" or "/pudge" in a group or private chat: opens an arena the chat can join.
   createWarlock(conv, type = 'warlock') {
-    if (this._convType(conv) !== 'group') throw new Error('Arena games can be played in group chats');
+    if (this._convType(conv) === 'broadcast') throw new Error('Arena games can be played in group and private chats');
     if (!ARENA_GAMES.includes(type)) throw new Error('Unknown game');
     return this._sendMsg(conv, { kind: 'game', text: '', game: { type, host: this.id } });
   }

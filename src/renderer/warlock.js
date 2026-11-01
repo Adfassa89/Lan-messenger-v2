@@ -47,7 +47,7 @@ function toHost(data) { send(info.host, data); }
 // ------------------------------------------------------------------ lobby
 function renderLobby() {
   $('lobbySub').textContent = isHost
-    ? t('Players join from the group chat. Start when everyone is in.')
+    ? t('Players join from the chat. Start when everyone is in.')
     : started ? t('The match has started.') : t('Waiting for {name} to start the match…', { name: info.hostName });
   const picking = settings.teams === 'lobby';
   players.forEach((p, i) => { if (!Number.isInteger(lobbyTeams[p.id])) lobbyTeams[p.id] = i % 2; });

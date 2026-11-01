@@ -53,7 +53,7 @@ function balanceTeams() {
 function renderLobby() {
   balanceTeams();
   $('lobbySub').textContent = isHost
-    ? t('Players join from the group chat. Start when everyone is in.')
+    ? t('Players join from the chat. Start when everyone is in.')
     : started ? t('The match has started.') : t('Waiting for {name} to start the match…', { name: info.hostName });
   const chip = (p) => {
     const tm = teams[p.id];
