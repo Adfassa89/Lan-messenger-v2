@@ -9,6 +9,7 @@ import { UnrealBloomPass } from './vendor/three/postprocessing/UnrealBloomPass.j
 import { OutputPass } from './vendor/three/postprocessing/OutputPass.js';
 import { GLTFLoader } from './vendor/three/loaders/GLTFLoader.js';
 import * as SkeletonUtils from './vendor/three/utils/SkeletonUtils.js';
+import { mergeVertices } from './vendor/three/utils/BufferGeometryUtils.js';
 import {
   rand, col, fbm, vnoise, Particles, particleAtlas, TILE_GLOW, TILE_FLAME, TILE_SMOKE, TILE_SPARK,
   shockMaterial, bubbleMaterial, ribbonMaterial, stoneTexture, addRim, GLSL_NOISE,
@@ -70,8 +71,8 @@ export class View {
     this.shakeT = 0;
 
     // Dota daylight: a warm sun with shadows and a soft sky.
-    this.scene.add(new THREE.HemisphereLight(0xcfe4ff, 0x3a3018, 1.25));
-    const sun = new THREE.DirectionalLight(0xfff0d8, 2.6);
+    this.scene.add(new THREE.HemisphereLight(0xcfe4ff, 0x3a3018, 0.95));
+    const sun = new THREE.DirectionalLight(0xfff0d8, 2.4);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.bias = -0.0005;
@@ -229,13 +230,13 @@ export class View {
       const ax = Math.abs(x);
       const n = fbm(x / 500, y / 500, 3, 2);
       const n2 = vnoise(x / 120, y / 120, 5);
-      if (x < 0) c.setRGB(0.28 + 0.1 * n, 0.42 + 0.12 * n, 0.14 + 0.05 * n2); // Radiant grass
-      else c.setRGB(0.3 + 0.1 * n, 0.3 + 0.08 * n, 0.16 + 0.05 * n2); // Dire: dry, darker
+      if (x < 0) c.setRGB(0.17 + 0.08 * n, 0.33 + 0.1 * n, 0.08 + 0.04 * n2); // Radiant grass
+      else c.setRGB(0.25 + 0.08 * n, 0.25 + 0.07 * n, 0.12 + 0.04 * n2); // Dire: dry, darker
       // Worn dirt where the Pudges stand, and paths along the bank.
       const spawn = Math.max(0, 1 - Math.hypot((ax - 1250) / 260, y / 750));
       const path = smooth(RIVER + 260, RIVER + 90, ax) * smooth(RIVER + 30, RIVER + 90, ax);
       const dirt = Math.min(1, spawn * 0.8 + path * 0.7) * (0.6 + 0.4 * n2);
-      c.lerp(new THREE.Color(0.42, 0.34, 0.22), dirt);
+      c.lerp(new THREE.Color(0.36, 0.28, 0.18), dirt);
       // Mud banks and the river bed.
       const bank = 1 - smooth(RIVER + 10, RIVER + 80, ax);
       c.lerp(new THREE.Color(0.36, 0.3, 0.2), bank);
@@ -296,9 +297,21 @@ export class View {
     const rockMat = new THREE.MeshStandardMaterial({ map: stone, bumpMap: stone, bumpScale: 4, roughness: 0.9, color: 0x9a948a, flatShading: true });
     const rocks = [[0, 0, 125, 95], [-70, 60, 70, 60], [80, -50, 80, 70], [40, 90, 55, 45], [-60, -80, 65, 50]];
     for (const [dx, dy, r, h] of rocks) {
-      const g = new THREE.DodecahedronGeometry(1, 1);
+      // Welded first, so the jitter moves shared corners together.
+      const g = mergeVertices(new THREE.IcosahedronGeometry(1, 2).deleteAttribute('normal').deleteAttribute('uv'));
       const p = g.attributes.position;
-      for (let k = 0; k < p.count; k++) p.setXYZ(k, p.getX(k) * rand(0.85, 1.15), p.getY(k) * rand(0.8, 1.1), p.getZ(k) * rand(0.85, 1.15));
+      const uv = new Float32Array(p.count * 2);
+      const seed = rand(0, 100);
+      for (let k = 0; k < p.count; k++) {
+        const x = p.getX(k);
+        const y = p.getY(k);
+        const z = p.getZ(k);
+        const n = 0.8 + 0.4 * vnoise(x * 2.3 + seed, z * 2.3 + y * 1.7, 7);
+        p.setXYZ(k, x * n, Math.max(-0.4, y) * n, z * n);
+        uv[k * 2] = x * 0.5 + 0.5 + y * 0.3;
+        uv[k * 2 + 1] = z * 0.5 + 0.5 + y * 0.3;
+      }
+      g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
       g.computeVertexNormals();
       const m = new THREE.Mesh(g, rockMat);
       m.scale.set(r, h, r * rand(0.8, 1.1));
@@ -395,7 +408,7 @@ export class View {
     for (let y = 0; y < S; y++) {
       for (let x = 0; x < S; x++) {
         const n = fbm(x / 32, y / 32, 4, 3, 8);
-        const v = 175 + n * 80;
+        const v = 150 + n * 105;
         const i = (y * S + x) * 4;
         img.data[i] = v;
         img.data[i + 1] = v;
@@ -410,7 +423,7 @@ export class View {
       const y = Math.random() * S;
       const l = 3 + Math.random() * 6;
       const a = -Math.PI / 2 + (Math.random() - 0.5) * 0.9;
-      const v = 140 + Math.random() * 115;
+      const v = 110 + Math.random() * 145;
       g.strokeStyle = `rgba(${v},${v},${v * 0.9},0.55)`;
       g.lineWidth = 1;
       g.beginPath();
@@ -503,7 +516,7 @@ export class View {
       o.castShadow = true;
       o.frustumCulled = false;
       const m = o.material.clone();
-      addRim(m, col(TEAM_COL[team]).multiplyScalar(0.5), 0.5);
+      addRim(m, new THREE.Color(1, 0.9, 0.8).lerp(col(TEAM_COL[team]), 0.3), 0.22);
       mats.push(m);
       o.material = m;
     });
@@ -749,9 +762,11 @@ export class View {
 
   chainMesh() {
     if (!this.links) {
-      const geo = new THREE.TorusGeometry(7, 2.2, 6, 10);
-      const mat = new THREE.MeshStandardMaterial({ color: 0x6a6a6e, metalness: 0.85, roughness: 0.4 });
+      const geo = new THREE.TorusGeometry(10, 3.2, 6, 12);
+      geo.scale(1.35, 1, 1);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xb0b0b8, metalness: 0.75, roughness: 0.3, emissive: 0x202024 });
       this.links = new THREE.InstancedMesh(geo, mat, 2400);
+      this.linkMax = 2400;
       this.links.castShadow = true;
       this.links.frustumCulled = false;
       this.scene.add(this.links);
@@ -766,14 +781,15 @@ export class View {
     const q = new THREE.Quaternion();
     const q2 = new THREE.Quaternion();
     let n = from;
-    for (let i = 1; i < path.length && n < links.count; i++) {
+    const max = this.linkMax;
+    for (let i = 1; i < path.length && n < max; i++) {
       const [x1, y1, h1] = path[i - 1];
       const [x2, y2, h2] = path[i];
       const L = Math.hypot(x2 - x1, y2 - y1);
       if (L < 1) continue;
       const a = Math.atan2(y2 - y1, x2 - x1);
       const cnt = Math.ceil(L / step);
-      for (let j = 0; j < cnt && n < links.count; j++) {
+      for (let j = 0; j < cnt && n < max; j++) {
         const k = j / cnt;
         const x = x1 + (x2 - x1) * k;
         const y = y1 + (y2 - y1) * k;
@@ -815,11 +831,11 @@ export class View {
       o.g.position.set(hx, hh, -hy);
       // The point leads on the way out; on the way back it trails.
       o.g.rotation.set(0, (o.dir || 0) + (hk[8] ? 0 : Math.PI), 0);
-      o.g.scale.setScalar(1.3 * sc);
+      o.g.scale.setScalar(1.8 * sc);
       const hand = handPos(owner);
       if (hand) {
         const path = [hand, ...corners.map(([cx, cy]) => [cx, cy, Math.max(groundH(cx, cy), WATER_Y) + HAND_Y * 0.8]), [hx, hy, hh]];
-        n = this.layChain(path, n, 16, 1);
+        n = this.layChain(path, n, 22, 1);
       }
       if (fire && Math.random() < dt * 60) this.fire.add({ p: [hx + rand(-20, 20), hh, -hy + rand(-20, 20)], v: [rand(-30, 30), rand(80, 160), rand(-30, 30)], c0: col('#ffd070'), c1: col('#c02000'), size: rand(30, 50), size1: 8, life: 0.6, tile: TILE_FLAME });
       if (hooked && Math.random() < dt * 25) this.blood(hx, hy, hh, 1, 60);
