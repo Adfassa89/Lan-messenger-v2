@@ -1461,6 +1461,17 @@ export class View {
         this.wave(e.x1, e.y1, 120, '#7affc8', 0.35);
         this.wave(e.x2, e.y2, 120, '#7affc8', 0.35);
         break;
+      case 'redirect':
+        this.burst(e.x, e.y, BALL_Y, { n: 24, c0: col('#d0e8ff').multiplyScalar(2), c1: col('#2a6ad8'), size: 4, life: 0.4, speed: 300, tile: TILE_SPARK, stretch: 0.05 });
+        for (let i = 0; i < 12; i++) this.fire.add({ p: [e.x, BALL_Y, e.y], v: [e.dx * (300 + i * 60), 0, e.dy * (300 + i * 60)], c0: col('#a8d0ff').multiplyScalar(2), c1: col('#2a4aa8'), size: 5, life: 0.3, tile: TILE_SPARK, stretch: 0.06, drag: 0.85 });
+        this.wave(e.x, e.y, 80, '#7ab8ff', 0.3);
+        break;
+      case 'pactBoost':
+        if (w) {
+          this.wave(w.x, w.y, 160, '#ff2a4a', 0.4, 0.1);
+          this.burst(w.x, w.y, 80, { n: 30, c0: col('#ff8090').multiplyScalar(2), c1: col('#500010'), size: 30, size1: 8, life: 0.5, speed: 260, tile: TILE_FLAME, up: 0.3 });
+        }
+        break;
       case 'obstacleBoom':
         this.explode(e.x, e.y, 60, 2, ['#fff0b0', '#ff7a1a', '#801000'], { rocks: 20 });
         this.wave(e.x, e.y, 300, '#ff8a3a', 0.5, 0.06);
@@ -1799,6 +1810,18 @@ export class View {
         const a = rand(0, TAU);
         this.fire.add({ p: [tx + Math.cos(a) * 60, rand(10, 160), ty + Math.sin(a) * 60], v: [-Math.sin(a) * 120, 20, Math.cos(a) * 120], c0: col('#a0ffe0').multiplyScalar(1.6), c1: col('#0a6a4a'), size: 6, life: 0.4, drag: 1 });
       }
+    }
+    if (m.includes('pact')) {
+      tint[0] += 0.25;
+      if (Math.random() < dt * 25) {
+        const a = rand(0, TAU);
+        this.fire.add({ p: [tx + Math.cos(a) * 40, rand(20, 150), ty + Math.sin(a) * 40], v: [0, rand(40, 90), 0], c0: col('#ff5a6a').multiplyScalar(1.5), c1: col('#400010'), size: 14, size1: 3, life: 0.6, tile: TILE_FLAME });
+      }
+    }
+    if (m.includes('pactSlow') && Math.random() < dt * 10) this.smoke.add({ p: [tx, 20, ty], v: [rand(-20, 20), 30, rand(-20, 20)], c0: col('#3a0a14'), size: 30, size1: 70, life: 0.9, a: 0.35, tile: TILE_SMOKE });
+    if (m.includes('redirPenalty') && Math.random() < dt * 12) {
+      const a = rand(0, TAU);
+      this.fire.add({ p: [tx + Math.cos(a) * 35, rand(30, 140), ty + Math.sin(a) * 35], v: [0, -30, 0], c0: col('#7ab8ff'), c1: col('#10204a'), size: 6, life: 0.6 });
     }
     if (tint[0] || tint[1] || tint[2]) for (const mat of w.mats) { mat.emissive.r += tint[0]; mat.emissive.g += tint[1]; mat.emissive.b += tint[2]; }
   }

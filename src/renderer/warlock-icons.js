@@ -9,6 +9,7 @@ export const ICON_COLOR = {
   shield: '#7fd2ff', rush: '#ff4a1a', gravity: '#a060ff', link: '#9ec9ff',
   twin: '#e07aff', drain: '#7aff5a', recharge: '#b86aff', splitter: '#5ae0ff', snowball: '#cfefff', alteration: '#7affc8',
   grip: '#ff3a3a', warpzone: '#4ab8ff', magnetize: '#4affe0', rockpillar: '#c8a070',
+  cursed: '#c040ff', watch: '#e8c870', redirector: '#7ab8ff', pact: '#ff3a5a', m_dur: '#e8c870', m_range: '#7affb0', m_life: '#ff4a4a', m_all: '#ffb35c',
   ring: '#ff6a8a', cape: '#c0a0ff', armor: '#c8c8d0', boots: '#d8a060', hero: '#ff8a3a',
 };
 

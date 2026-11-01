@@ -18,7 +18,8 @@ const SPELL_KEYS = ['Q', 'W', 'E', 'R', 'D', 'F']; // spell columns 1 – 6
 const SPELL_CODES = { KeyQ: 1, KeyW: 2, KeyE: 3, KeyR: 4, KeyD: 5, KeyF: 6 };
 const ITEM_KEYS = ['T', 'G', 'Spc', '3', '4', '5'];
 const ITEM_CODES = { KeyT: 0, KeyG: 1, Space: 2, Digit3: 3, Digit4: 4, Digit5: 5 };
-const ITEM_ORDER = ['ring', 'cape', 'armor', 'boots'];
+const ITEM_ORDER = ['ring', 'cursed', 'cape', 'armor', 'boots', 'watch', 'redirector', 'pact'];
+const ITEM_SLOT = { redirector: 8, pact: 9 }; // usable items cast from these slots
 
 let info = null;
 let isHost = false;
@@ -310,7 +311,7 @@ function inventory(p) {
   const inv = [];
   if (p.sp[0]) inv.push({ key: p.sp[0][0], level: p.sp[0][1], slot: 0 });
   if (p.sp[7]) inv.push({ key: p.sp[7][0], level: p.sp[7][1], slot: 7 });
-  for (const k of Object.keys(p.it || {})) if (p.it[k] && ITEM_ORDER.includes(k)) inv.push({ key: k, level: p.it[k] });
+  for (const k of Object.keys(p.it || {})) if (p.it[k] && ITEM_ORDER.includes(k)) inv.push({ key: k, level: p.it[k], slot: ITEM_SLOT[k] });
   return inv.slice(0, 6);
 }
 
@@ -374,6 +375,12 @@ function effect(e, s) {
       break;
     case 'grip':
       Sfx.play('wlChain');
+      break;
+    case 'redirect':
+      Sfx.play('wlBlink');
+      break;
+    case 'pactBoost':
+      Sfx.play('wlScourge');
       break;
     case 'pillar':
       Sfx.play('wlShrink');
@@ -497,7 +504,8 @@ function renderCard(s, u) {
   $('card').classList.toggle('enemy', !mine);
   $('hpFill').style.width = `${Math.max(0, (u.hp / u.mx) * 100)}%`;
   $('hpText').textContent = u.d ? (u.rs ? t('Respawn in {n} s', { n: u.rs }) : t('Dead – wait for the next round')) : `${u.hp} / ${u.mx}`;
-  $('uStats').innerHTML = `<span>${esc(t('Knockback'))} <b>+${Math.round(u.dp / 10)}%</b></span><span>💀 ${u.k}</span><span>🏆 ${u.sc}</span>`;
+  const ms = u.ms || [0, 0, 0];
+  $('uStats').innerHTML = `<span>${esc(t('Knockback'))} <b>+${Math.round(u.dp / 10)}%</b></span><span>💀 ${u.k}</span><span>🏆 ${u.sc}</span>${ms.some((m) => m) ? `<span title="${esc(t('Masteries'))}">⏳${ms[0]} 🎯${ms[1]} 🩸${ms[2]}</span>` : ''}`;
   const inv = inventory(u);
   const key = JSON.stringify([u.id, u.sp, inv]);
   if (key === cardKey) return;
@@ -574,12 +582,25 @@ function renderShop(s, p) {
     ['scourge', SPELLS.scourge, sc ? sc[1] : 1, 3],
     ...Object.entries(ITEMS).map(([k, def]) => [k, def, p.it[k] || 0, def.max]),
   ].map(([k, def, level, max]) => {
-    const price = level >= max ? null : (SPELLS[k] ? def.up[level - 1] : def.buy);
+    const price = level >= max ? null : (k === 'fireball' || k === 'scourge' ? def.up[level - 1] : def.buy);
     return `<button class="buy${level ? ' owned' : ''}${price !== null && p.c < price ? ' poor' : ''}" data-buy="${k}" data-tip="${esc(itemTip(k))}"><img class="ic" src="${iconURL(k, 96)}" alt="">
       <span class="nm">${esc(def.name)} ${level ? `(${level}/${max})` : ''}</span><span class="pr">${price === null ? t('Max') : `💰 ${price}`}</span></button>`;
   }).join('');
   if ($('shopCols').dataset.html !== html) { $('shopCols').innerHTML = html; $('shopCols').dataset.html = html; }
   if ($('shopItems').dataset.html !== items) { $('shopItems').innerHTML = items; $('shopItems').dataset.html = items; }
+  // Masteries: Duration, Range, Lifesteal (5 gold a level), or all three for 13.
+  const M = Warlock.MASTERY;
+  const ms = p.ms || [0, 0, 0];
+  const mast = `<h4>${esc(t('MASTERIES'))}</h4>` + ['m_dur', 'm_range', 'm_life'].map((k, i) => {
+    const level = ms[i];
+    const max = level >= M.max;
+    return `<button class="buy${level ? ' owned' : ''}${!max && p.c < M.cost ? ' poor' : ''}" data-buy="${k}" data-tip="${esc(itemTip(k))}"><img class="ic" src="${iconURL(k, 96)}" alt="">
+      <span class="nm">${esc(t(M.names[i]))}</span><span class="pr">${max ? t('Max') : `💰 ${M.cost}`}</span><span class="lv">${'●'.repeat(level)}${'○'.repeat(M.max - level)}</span></button>`;
+  }).join('') + (() => {
+    const max = ms.some((m) => m >= M.max);
+    return `<button class="buy${max || p.c < M.allCost ? ' poor' : ''}" data-buy="m_all" data-tip="${esc(itemTip('m_all'))}"><img class="ic" src="${iconURL('m_all', 96)}" alt=""><span class="nm">${esc(t('All three'))}</span><span class="pr">${max ? t('Max') : `💰 ${M.allCost}`}</span></button>`;
+  })();
+  if ($('shopMastery').dataset.html !== mast) { $('shopMastery').innerHTML = mast; $('shopMastery').dataset.html = mast; }
   $('btnReady').textContent = readySent ? `✓ ${t('Ready')}` : t('Ready');
   $('btnReady').classList.toggle('done', readySent);
 }
@@ -626,6 +647,14 @@ function itemTip(k) {
     cape: t('Cape: faster health regeneration.'),
     armor: t('Armor: less knockback.'),
     boots: t('Boots: faster movement.'),
+    cursed: t('Cursed Ring: +100 / +200 health and 15% less knockback, but debuffs on you last 25% / 30% longer.'),
+    watch: t('Pocket Watch: debuffs on you last 35% / 45% shorter.'),
+    redirector: t('Redirector (usable): turns your own spell nearest to the cursor towards it; you take 30% more knockback for 8 s.'),
+    pact: t('Pact (usable): your next damaging spell within 5 s hits 1.5 times as hard, then you are slowed for 6 s.'),
+    m_dur: t('Duration mastery: your buffs, zones and pillars last longer and your debuffs on others too (+10% first level).'),
+    m_range: t('Range mastery: your spells fly further (+12% first level).'),
+    m_life: t('Lifesteal mastery: heal a share of the damage you deal (9% first level).'),
+    m_all: t('One level of all three masteries for 13 gold.'),
   }[k] || '';
 }
 

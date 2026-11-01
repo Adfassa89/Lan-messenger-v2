@@ -364,3 +364,95 @@ test('Deathmatch: kills score for the team, respawn after 10 s, shop open, 60 s 
   run(sim, 61);
   assert.strictEqual(sim.phase, 'over', 'first to 3 wins at the end of a round');
 });
+
+// ---------------------------------------------------------------- items and masteries
+const shopSim = () => {
+  const sim = new W.Sim([{ id: 'p0', name: 'A' }, { id: 'p1', name: 'B' }], { seed: 5 });
+  sim.start();
+  sim.pawns[0].cash = 200;
+  return sim;
+};
+
+test('Cursed Ring: more health, less knockback, longer debuffs; Pocket Watch: shorter debuffs', () => {
+  const sim = shopSim();
+  const a = sim.pawns[0];
+  assert.ok(sim.buy('p0', 'cursed'));
+  assert.ok(sim.buy('p0', 'cursed'));
+  assert.ok(!sim.buy('p0', 'cursed'), 'max level 2');
+  assert.strictEqual(sim.maxHp(a), 1200);
+  assert.ok(Math.abs(sim.debuffFactor(a) - 1.3) < 1e-9);
+  sim.toFight();
+  a.mods = {}; a.vx = 0;
+  sim.damage(a, sim.pawns[1], 70, 1, 0, 1);
+  assert.ok(Math.abs(a.vx - 700 * 0.85) < 1, 'knockback -15%');
+  const b = sim.pawns[1];
+  b.items.watch = 2;
+  assert.ok(Math.abs(sim.debuffTime(4, b, a) - 4 * 0.55) < 1e-9, 'debuffs 45% shorter');
+});
+
+test('Item slots: Fireball, Scourge and four more at most', () => {
+  const sim = shopSim();
+  for (const k of ['ring', 'cape', 'armor', 'boots']) assert.ok(sim.buy('p0', k), k);
+  assert.ok(!sim.buy('p0', 'watch'), 'inventory full');
+});
+
+test('Pact: the next damaging spell hits 1.5x as hard, then the caster is slowed', () => {
+  const sim = shopSim();
+  assert.ok(sim.buy('p0', 'pact'));
+  assert.strictEqual(sim.pawns[0].cash, 190, 'costs 10 gold');
+  assert.strictEqual(sim.pawns[0].items.pact, 1);
+  sim.toFight();
+  const [a, b] = sim.pawns;
+  sim.obstacles = [];
+  a.mods = {}; b.mods = {};
+  a.x = 0; a.y = 0; b.x = 400; b.y = 0; a.face = 0;
+  sim.input('p0', { cast: 9, x: 0, y: 0 });
+  run(sim, 0.3);
+  assert.ok(a.mods.pact, 'pact active');
+  sim.input('p0', { cast: 0, x: 400, y: 0 });
+  run(sim, 0.8);
+  assert.ok(b.hp <= 1000 - 70 * 1.5 + 6, `fireball boosted (${Math.round(b.hp)})`);
+  assert.ok(!a.mods.pact && a.mods.pactSlow, 'pact used up, caster slowed');
+  assert.strictEqual(sim.speed(a), 210 - 66);
+});
+
+test('Redirector turns your nearest spell to the target point and costs knockback', () => {
+  const sim = shopSim();
+  assert.ok(sim.buy('p0', 'redirector'));
+  sim.toFight();
+  const [a] = sim.pawns;
+  sim.obstacles = [];
+  a.mods = {}; a.x = 0; a.y = 0; a.face = Math.PI / 2;
+  sim.projectiles.push({ id: 500, k: 'fireball', owner: 'p0', x: 300, y: 0, vx: 1000, vy: 0, r: 25, life: 0.8, dmg: 70, kb: 1, hits: [], age: 0 });
+  sim.input('p0', { cast: 8, x: 300, y: 800 });
+  run(sim, 0.35);
+  const fb = sim.projectiles.find((q) => q.id === 500);
+  const [tx, ty] = [300 - fb.x, 800 - fb.y];
+  const cos = (fb.vx * tx + fb.vy * ty) / (Math.hypot(fb.vx, fb.vy) * Math.hypot(tx, ty));
+  assert.ok(cos > 0.99, `now flying towards the point (${cos.toFixed(3)})`);
+  assert.ok(a.mods.redirPenalty, 'knockback penalty');
+});
+
+test('Masteries: Range makes spells fly further, Duration lengthens buffs, Lifesteal heals', () => {
+  const sim = shopSim();
+  const a = sim.pawns[0];
+  assert.ok(sim.buy('p0', 'm_all'));
+  assert.strictEqual(a.cash, 200 - 13);
+  assert.ok(sim.buy('p0', 'm_range'));
+  assert.deepStrictEqual(a.mastery, [1, 2, 1]);
+  assert.ok(Math.abs(sim.mastery(a, 1) - 1.22) < 1e-9);
+  sim.toFight();
+  const b = sim.pawns[1];
+  sim.obstacles = [];
+  a.mods = {}; b.mods = {}; a.face = 0; a.x = 0; a.y = 0; b.x = 3000; b.y = 3000;
+  sim.input('p0', { cast: 0, x: 500, y: 0 });
+  run(sim, 0.25);
+  const fb = sim.projectiles.find((q) => q.k === 'fireball');
+  assert.ok(fb.life > 1.1, 'range mastery lengthens the flight');
+  a.spells[5] = { key: 'shield', level: 1 };
+  sim.input('p0', { cast: 5, x: 0, y: 0 });
+  assert.ok(Math.abs(a.mods.shield.t - 1.2 * 1.1) < 1e-9, 'duration mastery');
+  a.hp = 500;
+  sim.damage(b, a, 100, 1, 0, 1);
+  assert.ok(Math.abs(a.hp - 509) < 1e-6, 'lifesteal 9%');
+});

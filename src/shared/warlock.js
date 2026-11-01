@@ -44,7 +44,7 @@
   const TURN_SPEED = Math.PI / 0.0875;
   const FACE_TOLERANCE = (11.5 * Math.PI) / 180;
   // Spells without a direction are used on the spot, without turning.
-  const NO_TURN = new Set(['scourge', 'windwalk', 'shield', 'rush', 'alteration', 'splitter']); // Splitter: IGNORE_TURN
+  const NO_TURN = new Set(['scourge', 'windwalk', 'shield', 'rush', 'alteration', 'splitter', 'pact']); // Splitter: IGNORE_TURN
   const COLORS = ['#e8443a', '#3a7be8', '#2fbf71', '#f2c230', '#a35ce8', '#f2862e', '#2fc6c9', '#e85ca8', '#9aa13a', '#8a8f99'];
 
   const lv = (arr, level) => arr[Math.min(arr.length, Math.max(1, level)) - 1];
@@ -79,6 +79,9 @@
     warpzone: { name: 'Warpzone', col: 6, cd: [23, 21, 20, 19, 18, 17, 16], duration: 4.5, scale: [0.4, 0.36, 0.32, 0.28, 0.24, 0.2, 0.16], radius: steps(200, 10), range: 700, cast: CAST_POINT, buy: 12, up: [6, 7, 8, 9, 10, 11] },
     magnetize: { name: 'Magnetize', col: 6, cd: [22, 21, 20, 19, 18, 17, 16], duration: steps(3.5, 0.5), radius: 36, speed: 800, life: 1.2, cast: CAST_POINT, buy: 14, up: [5, 6, 7, 8, 9, 10] },
     rockpillar: { name: 'Rockpillar', col: 6, cd: [26, 24, 22, 20, 18, 16, 14], duration: 4, range: steps(650, 75), pillar: 90, cast: CAST_POINT, buy: 13, up: [5, 6, 7, 8, 9, 10] },
+    // Usable items (npc_items_custom.txt): cast from item slots like Fireball and Scourge.
+    redirector: { name: 'Redirector', col: 8, cd: [24], cast: CAST_POINT, penalty: 0.3, penaltyTime: 8 },
+    pact: { name: 'Pact', col: 9, cd: [30], cast: CAST_POINT, duration: 5, mul: 1.5, slow: 66, slowTime: 6 },
     link: { name: 'Link', icon: '⛓️', col: 6, cd: [17, 15, 13, 11, 9, 7, 7], dmg: steps(12, 8), range: 860, speed: 950, radius: 35, pull: 1550, hold: 2.5, cast: CAST_POINT, buy: 12, up: [6, 7, 8, 9, 10, 11] },
   };
   const COLUMN_SPELLS = [[], ['boomerang', 'lightning', 'homing', 'twin'], ['teleport', 'thrust', 'swap'], ['cluster', 'drain', 'bouncer', 'recharge'], ['windwalk', 'meteor', 'splitter', 'snowball'], ['shield', 'rush', 'alteration'], ['gravity', 'grip', 'warpzone', 'magnetize', 'rockpillar', 'link']];
@@ -93,7 +96,23 @@
     cape: { name: 'Cape', icon: '🧥', buy: 3, max: 3, regen: [1.5, 2.5, 3.5] },
     armor: { name: 'Armor', icon: '🦺', buy: 6, max: 3, kbRed: [0.12, 0.18, 0.22] },
     boots: { name: 'Boots', icon: '👢', buy: 5, max: 3, speed: [18, 29, 40] },
+    cursed: { name: 'Cursed Ring', buy: 4, max: 2, hp: [100, 200], kbRed: 0.15, debuff: [0.25, 0.3] },
+    watch: { name: 'Pocket Watch', buy: 2, max: 2, debuff: [-0.35, -0.45] },
+    redirector: { name: 'Redirector', buy: 8, max: 1, slot: 8 },
+    pact: { name: 'Pact', buy: 10, max: 1, slot: 9 },
   };
+
+  // Masteries (shop.lua): Duration, Range, Lifesteal; 6 levels each, 5 gold a
+  // level or 13 for one level of all three.
+  const MASTERY = {
+    names: ['Duration', 'Range', 'Lifesteal'],
+    gain: [[0.10, 0.08, 0.07, 0.06, 0.05, 0.04], [0.12, 0.10, 0.09, 0.08, 0.07, 0.06], [0.09, 0.08, 0.07, 0.06, 0.05, 0.04]],
+    cost: 5,
+    allCost: 13,
+    max: 6,
+  };
+  // Spells whose damage Pact boosts (they have a damage value).
+  const DAMAGE_SPELLS = new Set(['fireball', 'scourge', 'lightning', 'homing', 'boomerang', 'thrust', 'cluster', 'bouncer', 'meteor', 'windwalk', 'twin', 'drain', 'recharge', 'splitter', 'snowball', 'link']);
 
   // ------------------------------------------------------------------ helpers
   const len = (x, y) => Math.hypot(x, y);
@@ -125,7 +144,7 @@
         id: p.id, name: p.name, color: COLORS[i % COLORS.length], score: 0, cash: CASH_START, kills: 0, dmgDone: 0,
         spells: { 0: { key: 'fireball', level: 1 }, 7: { key: 'scourge', level: 1 } }, items: {},
         x: 0, y: 0, vx: 0, vy: 0, face: 0, hp: MAX_HP, dp: 0, dead: true, left: false,
-        move: null, cd: {}, casting: null, mods: {}, lastHit: null, team: i, respawnAt: 0,
+        move: null, cd: {}, casting: null, mods: {}, lastHit: null, team: i, respawnAt: 0, mastery: [0, 0, 0],
       }));
       this.obstacles = [];
       this.zones = []; // warp zones
@@ -284,7 +303,20 @@
       if (inShop) { p.x = 0; p.y = 0; }
     }
 
-    maxHp(p) { return MAX_HP + (p.items.ring ? lv(ITEMS.ring.hp, p.items.ring) : 0); }
+    maxHp(p) { return MAX_HP + (p.items.ring ? lv(ITEMS.ring.hp, p.items.ring) : 0) + (p.items.cursed ? lv(ITEMS.cursed.hp, p.items.cursed) : 0); }
+    // Mastery factors: duration and range start at 1, lifesteal at 0.
+    mastery(p, i) {
+      let f = i === 2 ? 0 : 1;
+      for (let k = 0; k < (p.mastery[i] || 0); k++) f += MASTERY.gain[i][k];
+      return f;
+    }
+    // How long debuffs last on a warlock: Pocket Watch shortens, Cursed Ring lengthens.
+    debuffFactor(p) {
+      return 1 + (p.items.cursed ? lv(ITEMS.cursed.debuff, p.items.cursed) : 0) + (p.items.watch ? lv(ITEMS.watch.debuff, p.items.watch) : 0);
+    }
+    // Pawn:getBuffDuration / getDebuffDuration.
+    buffTime(t, target, caster) { return t * this.mastery(target, 0) * (caster && caster !== target ? this.mastery(caster, 0) : 1); }
+    debuffTime(t, target, caster) { return t * this.debuffFactor(target) * (caster && caster !== target ? this.mastery(caster, 0) : 1); }
     regen(p) { return REGEN + (p.items.cape ? lv(ITEMS.cape.regen, p.items.cape) : 0); }
     speed(p) {
       let s = MOVE_SPEED + (p.items.boots ? lv(ITEMS.boots.speed, p.items.boots) : 0);
@@ -292,6 +324,7 @@
       if (p.mods.rush) s += 35 + p.mods.rush.bonus;
       if (p.mods.drained) s -= 50;
       if (p.mods.hasted) s += p.mods.hasted.v;
+      if (p.mods.pactSlow) s -= SPELLS.pact.slow;
       if (p.mods.snowed) s -= 100;
       if (p.mods.gripped) return 0;
       return Math.max(0, s);
@@ -309,7 +342,7 @@
     buy(id, what) {
       const p = this.pawn(id);
       if (!p || !(this.phase === 'shop' || (this.mode === 'dm' && this.phase === 'fight'))) return false;
-      if (SPELLS[what]) {
+      if (SPELLS[what] && !ITEMS[what] && SPELLS[what].buy) {
         const def = SPELLS[what];
         const cur = p.spells[def.col];
         if (cur && cur.key === what) {
@@ -334,7 +367,21 @@
         if (level >= def.max || (!level && count >= 6) || p.cash < def.buy) return false;
         p.cash -= def.buy;
         p.items[what] = level + 1;
+        if (def.slot) p.spells[def.slot] = { key: what, level: 1 };
         p.hp = this.maxHp(p);
+        return true;
+      }
+      const mi = ['m_dur', 'm_range', 'm_life'].indexOf(what);
+      if (mi >= 0) {
+        if (p.mastery[mi] >= MASTERY.max || p.cash < MASTERY.cost) return false;
+        p.cash -= MASTERY.cost;
+        p.mastery[mi]++;
+        return true;
+      }
+      if (what === 'm_all') {
+        if (p.mastery.some((m) => m >= MASTERY.max) || p.cash < MASTERY.allCost) return false;
+        p.cash -= MASTERY.allCost;
+        p.mastery = p.mastery.map((m) => m + 1);
         return true;
       }
       return false;
@@ -386,18 +433,28 @@
       const def = SPELLS[s.key];
       const L = s.level;
       p.cd[slot] = lv(def.cd, L);
+      // Pact: the next damaging spell hits 1.5x as hard, then the caster is slowed.
+      let mul = 1;
+      if (p.mods.pact && DAMAGE_SPELLS.has(s.key)) {
+        mul = SPELLS.pact.mul;
+        delete p.mods.pact;
+        p.mods.pactSlow = { t: this.debuffTime(SPELLS.pact.slowTime, p, p) };
+        this.fx({ e: 'pactBoost', id: p.id });
+      }
+      const rF = this.mastery(p, 1); // Range mastery: spells fly further
+      const dF = (t) => this.buffTime(t, p, p); // Duration mastery on your own buffs
       if (p.mods.windwalk) delete p.mods.windwalk; // casting breaks invisibility
       if (p.mods.gripped) p.dp += SPELLS.grip.dpGain; // Grip: every spell cast adds damage points
       const [dx, dy] = norm(tx - p.x, ty - p.y);
       const dist = len(tx - p.x, ty - p.y);
-      const proj = (o) => this.projectiles.push({ id: this.nextId++, owner: p.id, age: 0, hits: [], ...o });
+      const proj = (o) => this.projectiles.push({ id: this.nextId++, owner: p.id, age: 0, hits: [], ...o, life: o.noRange ? o.life : o.life * rF });
       this.fx({ e: 'cast', k: s.key, id: p.id, x: p.x, y: p.y });
       switch (s.key) {
         case 'fireball':
-          proj({ k: 'fireball', x: p.x + dx * 40, y: p.y + dy * 40, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: def.range / def.speed, dmg: lv(def.dmg, L), kb: 1 });
+          proj({ k: 'fireball', x: p.x + dx * 40, y: p.y + dy * 40, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: def.range / def.speed, dmg: lv(def.dmg, L) * mul, kb: 1 });
           break;
         case 'scourge': {
-          const dmg = lv(def.dmg, L);
+          const dmg = lv(def.dmg, L) * mul;
           this.damageArea(p, p.x, p.y, def.radius, { amount: dmg, kbMin: 0.75, kbMax: 1 });
           p.hp = Math.max(1, p.hp - (L === 1 ? dmg : 100));
           this.fx({ e: 'scourge', x: p.x, y: p.y, r: def.radius });
@@ -405,7 +462,7 @@
         }
         case 'lightning': {
           // Instant beam: hits the first enemy along the line.
-          const range = def.range;
+          const range = def.range * rF;
           let best = null;
           for (const o of this.alive()) {
             if (this.ally(o.id, p.id)) continue;
@@ -424,8 +481,8 @@
           if (wall && (!best || wall.along < best.along)) best = null; else wall = null;
           const end = best ? best.along : wall ? wall.along : range;
           this.fx({ e: 'bolt', x1: p.x, y1: p.y, x2: p.x + dx * end, y2: p.y + dy * end });
-          if (best) this.damage(best.o, p, lv(def.dmg, L), dx, dy, def.kb);
-          if (wall) this.damageObstacle(wall.o, lv(def.dmg, L), p);
+          if (best) this.damage(best.o, p, lv(def.dmg, L) * mul, dx, dy, def.kb);
+          if (wall) this.damageObstacle(wall.o, lv(def.dmg, L) * mul, p);
           break;
         }
         case 'homing': {
@@ -436,12 +493,12 @@
             const d = len(o.x - tx, o.y - ty);
             if (d < bd) { bd = d; target = o.id; }
           }
-          proj({ k: 'homing', x: p.x + dx * 40, y: p.y + dy * 40, vx: dx * 800, vy: dy * 800, r: def.radius, life: def.life, dmg: lv(def.dmg, L), kb: 1, target, speed: def.speed });
+          proj({ k: 'homing', x: p.x + dx * 40, y: p.y + dy * 40, vx: dx * 800, vy: dy * 800, r: def.radius, life: def.life, dmg: lv(def.dmg, L) * mul, kb: 1, target, speed: def.speed });
           break;
         }
         case 'boomerang': {
-          const d = Math.max(300, Math.min(dist, def.range));
-          proj({ k: 'boomerang', x: p.x + dx * 40, y: p.y + dy * 40, dirx: dx, diry: dy, d, phase: 'out', t: 0, vx: dx * 1500 + -dy * 300, vy: dy * 1500 + dx * 300, r: def.radius, life: 6, dmg: lv(def.dmg, L), kb: def.kb });
+          const d = Math.max(300, Math.min(dist, def.range * rF));
+          proj({ k: 'boomerang', noRange: true, x: p.x + dx * 40, y: p.y + dy * 40, dirx: dx, diry: dy, d, phase: 'out', t: 0, vx: dx * 1500 + -dy * 300, vy: dy * 1500 + dx * 300, r: def.radius, life: 6, dmg: lv(def.dmg, L) * mul, kb: def.kb });
           break;
         }
         case 'teleport': {
@@ -458,12 +515,12 @@
           const d = Math.min(dist, def.range);
           p.vx = dx * def.speed * 0.77;
           p.vy = dy * def.speed * 0.77;
-          p.mods.thrust = { t: 0.09 + d / def.speed, dx, dy, dmg: lv(def.dmg, L) };
+          p.mods.thrust = { t: 0.09 + d / def.speed, dx, dy, dmg: lv(def.dmg, L) * mul };
           p.move = null;
           break;
         }
         case 'swap':
-          proj({ k: 'swap', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: Math.min(dist / def.speed, def.life), any: true });
+          proj({ k: 'swap', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: Math.min(dist / def.speed, def.life * rF), any: true, noRange: true });
           break;
         case 'cluster':
           for (const a of [-0.18, -0.06, 0.06, 0.18]) {
@@ -471,69 +528,69 @@
             const sn = Math.sin(a);
             const ux = dx * c - dy * sn;
             const uy = dx * sn + dy * c;
-            proj({ k: 'cluster', x: p.x + ux * 40, y: p.y + uy * 40, vx: ux * def.speed, vy: uy * def.speed, r: def.radius, life: def.range / def.speed, dmg: lv(def.dmg, L), kb: def.kb });
+            proj({ k: 'cluster', x: p.x + ux * 40, y: p.y + uy * 40, vx: ux * def.speed, vy: uy * def.speed, r: def.radius, life: def.range / def.speed, dmg: lv(def.dmg, L) * mul, kb: def.kb });
           }
           break;
         case 'bouncer':
-          proj({ k: 'bouncer', x: p.x + dx * 40, y: p.y + dy * 40, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: 1, dmg: lv(def.dmg, L), kb: def.kb, prev: null });
+          proj({ k: 'bouncer', x: p.x + dx * 40, y: p.y + dy * 40, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: 1, dmg: lv(def.dmg, L) * mul, kb: def.kb, prev: null });
           break;
         case 'meteor': {
           const d = Math.min(dist, def.range);
-          proj({ k: 'meteor', x: p.x + dx * d, y: p.y + dy * d, vx: 0, vy: 0, r: lv(def.radius, L), life: def.delay, dmg: lv(def.dmg, L), dmgMin: def.dmgMin, ghost: true });
+          proj({ k: 'meteor', x: p.x + dx * d, y: p.y + dy * d, vx: 0, vy: 0, r: lv(def.radius, L), life: def.delay, dmg: lv(def.dmg, L) * mul, dmgMin: def.dmgMin * mul, ghost: true, noRange: true });
           break;
         }
         case 'windwalk':
-          p.mods.windwalk = { t: def.duration, dmg: lv(def.dmg, L) };
+          p.mods.windwalk = { t: dF(def.duration), dmg: lv(def.dmg, L) * mul };
           break;
         case 'shield':
-          p.mods.shield = { t: def.duration, r: lv(def.radius, L) };
+          p.mods.shield = { t: dF(def.duration), r: lv(def.radius, L) };
           break;
         case 'rush':
-          p.mods.rush = { t: lv(def.duration, L), absorb: lv(def.absorb, L), bonus: 0 };
+          p.mods.rush = { t: dF(lv(def.duration, L)), absorb: lv(def.absorb, L), bonus: 0 };
           break;
         case 'gravity':
           proj({ k: 'gravity', x: p.x + dx * 40, y: p.y + dy * 40, vx: dx * def.speed, vy: dy * def.speed, r: 25, life: def.life, strength: lv(def.strength, L), dps: lv(def.dps, L), ghost: true, tick: 0 });
           break;
         case 'twin': {
           // Two orbs on mirrored half-ellipses that meet at the target point.
-          const range = def.range;
+          const range = def.range * rF;
           const minDist = Math.max(10, (2 * def.area) / (Math.PI * range));
           const d = Math.min(Math.max(dist, minDist), range);
           const ex = p.x + dx * d;
           const ey = p.y + dy * d;
           const a = d / 2;
           for (const sign of [1, -1]) {
-            proj({ k: 'twin', x: p.x, y: p.y, vx: 0, vy: 0, r: def.radius, life: 9, dmg: lv(def.dmg, L), kb: 1,
+            proj({ k: 'twin', noRange: true, x: p.x, y: p.y, vx: 0, vy: 0, r: def.radius, life: 9, dmg: lv(def.dmg, L) * mul, kb: 1,
               cx: (p.x + ex) / 2, cy: (p.y + ey) / 2, ea: a, eb: def.area / (Math.PI * a), ux: -dx, uy: -dy, sign, et: 0, speed: def.speed });
           }
           break;
         }
         case 'drain': {
           // Flies to the target point, then turns to the nearest warlock.
-          const d = Math.min(dist, def.range);
-          proj({ k: 'drain', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: d / def.speed + def.extra, turnAt: def.extra, turned: false, dmg: lv(def.dmg, L), dur: lv(def.duration, L) });
+          const d = Math.min(dist, def.range * rF);
+          proj({ k: 'drain', noRange: true, x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: d / def.speed + def.extra * rF, turnAt: def.extra * rF, turned: false, dmg: lv(def.dmg, L) * mul, dur: lv(def.duration, L) });
           break;
         }
         case 'recharge':
-          proj({ k: 'recharge', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: def.life, dmg: lv(def.dmg, L) + def.perHit * (p.recharge || 0), caster: p.id });
+          proj({ k: 'recharge', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: def.life, dmg: lv(def.dmg, L) * mul + def.perHit * (p.recharge || 0), caster: p.id });
           break;
         case 'splitter': {
-          const life = Math.min(def.life, dist / def.speed);
-          proj({ k: 'splitter', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life, dmg: lv(def.dmg, L) });
+          const life = Math.min(def.life * rF, dist / def.speed);
+          proj({ k: 'splitter', noRange: true, rF, x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life, dmg: lv(def.dmg, L) * mul });
           break;
         }
         case 'snowball':
-          proj({ k: 'snowball', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: lv(def.radius, L), life: def.range / def.speed, dmg: lv(def.dmg, L), dmgMax: lv(def.dmgMax, L) });
+          proj({ k: 'snowball', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: lv(def.radius, L), life: def.range / def.speed, dmg: lv(def.dmg, L) * mul, dmgMax: lv(def.dmgMax, L) * mul });
           break;
         case 'alteration':
-          p.mods.alteration = { t: def.duration };
+          p.mods.alteration = { t: dF(def.duration) };
           break;
         case 'grip':
           proj({ k: 'grip', x: p.x, y: p.y, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: def.life, dur: lv(def.duration, L) });
           break;
         case 'warpzone': {
           const d = Math.min(dist, def.range);
-          this.zones.push({ id: this.nextId++, owner: p.id, x: p.x + dx * d, y: p.y + dy * d, r: lv(def.radius, L), life: def.duration, scale: lv(def.scale, L) });
+          this.zones.push({ id: this.nextId++, owner: p.id, x: p.x + dx * d, y: p.y + dy * d, r: lv(def.radius, L), life: def.duration * this.mastery(p, 0), scale: lv(def.scale, L) });
           break;
         }
         case 'magnetize':
@@ -541,13 +598,39 @@
           break;
         case 'rockpillar': {
           const d = Math.min(dist, lv(def.range, L));
-          const o = this.addObstacle(p.x + dx * d, p.y + dy * d, def.pillar, 0, def.duration);
+          const o = this.addObstacle(p.x + dx * d, p.y + dy * d, def.pillar, 0, def.duration * this.mastery(p, 0));
           o.pillar = 1;
           this.fx({ e: 'pillar', x: o.x, y: o.y });
           break;
         }
+        case 'redirector': {
+          // Turns your own spell nearest to the target point towards it (+0.5 s),
+          // but you take 30% more knockback for 8 s.
+          let best = null;
+          let bd = Infinity;
+          for (const b of this.projectiles) {
+            if (b.owner !== p.id || ['meteor', 'linked', 'spawner', 'drainHeal', 'rechargeBack'].includes(b.k)) continue;
+            const d = len(tx - b.x, ty - b.y);
+            if (d < bd) { bd = d; best = b; }
+          }
+          if (best) {
+            const sp = len(best.vx, best.vy);
+            const [ux, uy] = norm(tx - best.x, ty - best.y);
+            best.vx = ux * sp;
+            best.vy = uy * sp;
+            best.life += 0.5;
+            if (best.k === 'twin') best.k = 'twinLoose';
+            if (best.k === 'boomerang') best.phase = 'free';
+            this.fx({ e: 'redirect', x: best.x, y: best.y, dx: ux, dy: uy });
+          }
+          p.mods.redirPenalty = { t: this.debuffTime(def.penaltyTime, p, p) };
+          break;
+        }
+        case 'pact':
+          p.mods.pact = { t: dF(def.duration) };
+          break;
         case 'link':
-          proj({ k: 'link', x: p.x + dx * 40, y: p.y + dy * 40, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: def.range / def.speed, dmg: lv(def.dmg, L), any: true });
+          proj({ k: 'link', x: p.x + dx * 40, y: p.y + dy * 40, vx: dx * def.speed, vy: dy * def.speed, r: def.radius, life: def.range / def.speed, dmg: lv(def.dmg, L) * mul, any: true });
           break;
         default:
           break;
@@ -568,12 +651,16 @@
       if (src && src.id !== target.id) {
         target.lastHit = { id: src.id, t: this.time };
         src.dmgDone += dmg;
+        // Lifesteal mastery: heal a share of the damage dealt.
+        const ls = this.mastery(src, 2);
+        if (ls > 0 && !src.dead) src.hp = Math.min(this.maxHp(src), src.hp + dmg * ls);
       }
       if (!noKb) {
-        const kbRed = target.items.armor ? lv(ITEMS.armor.kbRed, target.items.armor) : 0;
+        // Knockback factor: 1 minus Armor, Cursed Ring and Grip, plus the Redirector penalty.
+        const kbF = 1 - (target.items.armor ? lv(ITEMS.armor.kbRed, target.items.armor) : 0) - (target.items.cursed ? ITEMS.cursed.kbRed : 0)
+          - (target.mods.gripped ? 0.67 : 0) + (target.mods.redirPenalty ? SPELLS.redirector.penalty : 0);
         const k = dmg > 100 ? Math.sqrt(100 * dmg) : dmg;
-        const grip = target.mods.gripped ? 1 - 0.67 : 1;
-        const kb = Math.max(0, 1 - kbRed) * k * KB_DMG_TO_VELOCITY * (1 + target.dp / 1000) * kbFactor * grip;
+        const kb = Math.max(0, kbF) * k * KB_DMG_TO_VELOCITY * (1 + target.dp / 1000) * kbFactor;
         target.vx += nx * kb;
         target.vy += ny * kb;
       }
@@ -936,7 +1023,7 @@
             for (const sign of [-1, 1]) {
               const cx = (ux - sign * uy * alpha) / (1 + alpha);
               const cy = (uy + sign * ux * alpha) / (1 + alpha);
-              this.projectiles.push({ id: this.nextId++, k: 'splitChild', owner: b.owner, age: 0, hits: [], x: b.x, y: b.y, vx: cx * 600, vy: cy * 600, r: 21, life: 1.2, dmg: b.dmg, kb: 1 });
+              this.projectiles.push({ id: this.nextId++, k: 'splitChild', owner: b.owner, age: 0, hits: [], x: b.x, y: b.y, vx: cx * 600, vy: cy * 600, r: 21, life: 1.2 * (b.rF || 1), dmg: b.dmg, kb: 1 });
             }
             b.waves++;
           }
@@ -1092,7 +1179,7 @@
               if (len(o.x - b.x, o.y - b.y) > b.r + RADIUS) continue;
               if (b.k === 'drain') {
                 o.hp = Math.min(this.maxHp(o), o.hp + b.dmg);
-                o.mods.hasted = { t: b.dur, v: 50 };
+                o.mods.hasted = { t: this.buffTime(b.dur, o, owner), v: 50 };
                 this.fx({ e: 'heal', id: o.id, n: Math.round(b.dmg) });
                 gone = true;
                 break;
@@ -1101,13 +1188,13 @@
                 // Bursts at the ally, hurting enemies around, and speeds the ally up.
                 const thrusting = !!o.mods.thrust;
                 this.damageArea(owner, b.x, b.y, SPELLS.homing.explode * (thrusting ? 1.05 : 1), { amount: b.dmg, amountMin: 0, kbMin: 0.9, kbMax: 0.9 });
-                o.mods.hasted = { t: 4, v: thrusting ? 120 : 50 };
+                o.mods.hasted = { t: this.buffTime(4, o, owner), v: thrusting ? 120 : 50 };
                 this.fx({ e: 'boom', k: 'homing', x: b.x, y: b.y });
                 gone = true;
                 break;
               }
               if (b.k === 'magnet') {
-                o.mods.magnet = { t: b.dur, sign: -1 };
+                o.mods.magnet = { t: this.buffTime(b.dur, o, owner), sign: -1 };
                 this.fx({ e: 'magnet', id: o.id, sign: -1 });
                 gone = true;
                 break;
@@ -1151,21 +1238,21 @@
               if (!o.mods.spawnShield) {
                 o.move = null;
                 o.casting = null;
-                o.mods.gripped = { t: b.dur };
+                o.mods.gripped = { t: this.debuffTime(b.dur, o, owner) };
                 this.fx({ e: 'grip', id: o.id });
               }
               gone = true;
               break;
             }
             if (b.k === 'magnet') {
-              o.mods.magnet = { t: b.dur, sign: self ? -1 : 1 };
+              o.mods.magnet = { t: self ? this.buffTime(b.dur, o, owner) : this.debuffTime(b.dur, o, owner), sign: self ? -1 : 1 };
               this.fx({ e: 'magnet', id: o.id, sign: self ? -1 : 1 });
               gone = true;
               break;
             }
             if (b.k === 'drain') {
               this.damage(o, owner, b.dmg, nx, ny, 0.2);
-              if (!o.dead && !o.mods.spawnShield) o.mods.drained = { t: b.dur };
+              if (!o.dead && !o.mods.spawnShield) o.mods.drained = { t: this.debuffTime(b.dur, o, owner) };
               if (owner) this.projectiles.push({ id: this.nextId++, k: 'drainHeal', owner: b.owner, age: 0, hits: [], x: b.x, y: b.y, vx: 0, vy: 0, r: 0, life: 30, heal: b.dmg });
               this.fx({ e: 'boom', k: 'drain', x: b.x, y: b.y });
               gone = true;
@@ -1242,7 +1329,7 @@
         owner.y = b.y;
         owner.move = null;
       } else if (b.k === 'splitter') {
-        this.projectiles.push({ id: this.nextId++, k: 'spawner', owner: b.owner, age: 0, hits: [], x: b.x, y: b.y, ...((() => { const [ux, uy] = norm(b.vx, b.vy); return { vx: ux * 250, vy: uy * 250 }; })()), r: 0, life: 5, spawnLife: 0.48, waves: 0, tick: 0, dmg: b.dmg });
+        this.projectiles.push({ id: this.nextId++, k: 'spawner', owner: b.owner, age: 0, hits: [], x: b.x, y: b.y, ...((() => { const [ux, uy] = norm(b.vx, b.vy); return { vx: ux * 250, vy: uy * 250 }; })()), r: 0, life: 5, spawnLife: 0.48, waves: 0, tick: 0, dmg: b.dmg, rF: b.rF });
         this.fx({ e: 'split', x: b.x, y: b.y });
       } else if (b.k === 'snowball') {
         // Bursts: up to its full damage at the centre, pushing with 0.8 force.
@@ -1287,6 +1374,7 @@
           cd: Object.fromEntries(Object.entries(p.cd).filter(([, v]) => v > 0).map(([k, v]) => [k, r1(v)])),
           sp: Object.fromEntries(Object.entries(p.spells).map(([k, v]) => [k, [v.key, v.level]])),
           it: p.items,
+          ms: p.mastery,
         })),
         b: this.projectiles.filter((b) => b.k !== 'spawner').map((b) => [b.k, r1(b.x), r1(b.y), r1(b.vx * (b.ts ?? 1)), r1(b.vy * (b.ts ?? 1)), b.r, b.owner, b.k === 'linked' ? b.target : b.life > 0 ? r1(b.life) : 0, b.id]),
         o: this.obstacles.map((o) => [o.id, r1(o.x), r1(o.y), o.r, Math.round(o.hp), o.variant, o.pillar ? 1 : 0]),
@@ -1311,7 +1399,7 @@
   }
 
   const Warlock = {
-    Sim, SPELLS, ITEMS, COLUMN_SPELLS, COLORS, TEAM_COLORS, DM_ROUND_TIME, OBSTACLE_HP, TICK, TILE, LAYER_RADIUS, RADIUS, MAX_HP, SHOP_TIME, SHRINK_PERIOD, lv,
+    Sim, SPELLS, ITEMS, MASTERY, COLUMN_SPELLS, COLORS, TEAM_COLORS, DM_ROUND_TIME, OBSTACLE_HP, TICK, TILE, LAYER_RADIUS, RADIUS, MAX_HP, SHOP_TIME, SHRINK_PERIOD, lv,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Warlock;
   else root.Warlock = Warlock;
