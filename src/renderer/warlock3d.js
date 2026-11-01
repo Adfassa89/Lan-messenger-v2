@@ -1827,7 +1827,79 @@ export class View {
   }
 
   // ------------------------------------------------------------ frame
-  frame({ s, prev, k, since, dt, me, names, follow }) {
+  // Dota-style aim indicator: an arrow corridor as wide as the spell's hit
+  // area and as long as its range, or a circle where an area spell lands.
+  updateAim(aim, s, me) {
+    if (!this.aimG) {
+      const lineMat = new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 }, uColor: { value: col('#8fe8ff') } },
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: `
+          uniform float uTime; uniform vec3 uColor; varying vec2 vUv;
+          void main() {
+            float edge = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.92, vUv.x);
+            float border = 1.0 - smoothstep(0.03, 0.09, min(vUv.x, 1.0 - vUv.x));
+            float chev = smoothstep(0.55, 0.9, fract(vUv.y * 9.0 + abs(vUv.x - 0.5) * 2.0 - uTime * 1.6));
+            float tip = smoothstep(0.82, 1.0, vUv.y);
+            float a = edge * (0.14 + 0.22 * chev) + border * 0.6;
+            a *= 1.0 - tip * 0.9;
+            gl_FragColor = vec4(uColor * a, 1.0);
+          }`,
+      });
+      const line = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), lineMat);
+      line.rotation.x = -Math.PI / 2;
+      const head = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 3), new THREE.MeshBasicMaterial({ color: col('#bff4ff').multiplyScalar(1.4), transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending }));
+      head.rotation.x = -Math.PI / 2;
+      const circle = new THREE.Mesh(this.discGeo, shockMaterial('#8fe8ff'));
+      const reach = new THREE.Mesh(this.discGeo, shockMaterial('#8fe8ff'));
+      for (const m of [line, head, circle, reach]) m.renderOrder = 7;
+      this.aimG = { line, head, circle, reach };
+      this.scene.add(line, head, circle, reach);
+    }
+    const g = this.aimG;
+    const w = this.pawns.get(me);
+    const show = !!(aim && w && w.seen);
+    g.line.visible = g.head.visible = show && aim.kind === 'line';
+    g.circle.visible = show && aim.kind === 'area';
+    g.reach.visible = show && aim.kind === 'area' && aim.range > 0;
+    if (!show) return;
+    const dx = aim.at.x - w.x;
+    const dy = aim.at.y - w.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const ux = dx / d;
+    const uy = dy / d;
+    if (aim.kind === 'line') {
+      const L = aim.range;
+      g.line.material.uniforms.uTime.value = this.time;
+      g.line.scale.set(aim.width * 2, L, 1);
+      g.line.position.set(w.x + ux * L / 2, 6, w.y + uy * L / 2);
+      g.line.rotation.set(-Math.PI / 2, 0, Math.atan2(-ux, -uy));
+      g.head.scale.set(aim.width * 1.1, 60, aim.width * 0.25);
+      g.head.position.set(w.x + ux * (L + 20), 6, w.y + uy * (L + 20));
+      g.head.rotation.set(-Math.PI / 2, 0, Math.atan2(-ux, -uy));
+    } else {
+      const r = aim.range > 0 ? Math.min(d, aim.range) : d;
+      const cx = w.x + ux * r;
+      const cy = w.y + uy * r;
+      g.circle.position.set(cx, 6, cy);
+      g.circle.scale.setScalar(aim.radius);
+      const u = g.circle.material.uniforms;
+      u.uProg.value = 0.95;
+      u.uWidth.value = 0.06;
+      u.uAlpha.value = 0.8 + 0.2 * Math.sin(this.time * 6);
+      g.reach.position.set(w.x, 5, w.y);
+      g.reach.scale.setScalar(aim.range || 1);
+      const v = g.reach.material.uniforms;
+      v.uProg.value = 0.985;
+      v.uWidth.value = 0.012;
+      v.uAlpha.value = 0.35;
+    }
+  }
+
+  frame({ s, prev, k, since, dt, me, names, follow, cam, aim }) {
     this.time += dt;
     this.lightN = 0;
     if (s.layer !== this.builtLayer) this.buildTiles(s.layer);
@@ -1847,17 +1919,26 @@ export class View {
     let tx = 0;
     let tz = 0;
     let dist;
-    if (follow && mine && mine.seen) {
+    let camRate = 5;
+    if (!cam) cam = follow && mine && mine.seen ? { mode: 'follow', x: mine.x, y: mine.y } : { mode: 'overview' };
+    if (cam.mode === 'follow' && mine && mine.seen) {
+      // Follow: centred on the smoothed position of your warlock.
       tx = mine.x;
       tz = mine.y;
       dist = FOLLOW_DIST * this.zoom;
+      if (cam.snap) camRate = 1000;
+    } else if (cam.mode === 'free' || cam.mode === 'follow') {
+      tx = cam.x;
+      tz = cam.y;
+      dist = FOLLOW_DIST * this.zoom;
+      camRate = 14;
     } else {
       const R = s.layer * 100 + 300;
       const fovV = (FOV * Math.PI) / 180;
       const fovH = 2 * Math.atan(Math.tan(fovV / 2) * this.camera.aspect);
       dist = Math.max(((R * 1.15) / Math.tan(fovV / 2)) * Math.sin(PITCH) * 0.95, R / Math.tan(fovH / 2)) * 1.05;
     }
-    const a = Math.min(1, dt * 5);
+    const a = Math.min(1, dt * camRate);
     this.target.x += (tx - this.target.x) * a;
     this.target.z += (tz - this.target.z) * a;
     this.dist += (dist - this.dist) * Math.min(1, dt * 3);
@@ -1880,6 +1961,7 @@ export class View {
     const sc = this.sun.shadow.camera;
     if (sc.right !== sh) { sc.left = -sh; sc.right = sh; sc.top = sh; sc.bottom = -sh; sc.near = 100; sc.far = 6000; sc.updateProjectionMatrix(); }
 
+    this.updateAim(aim, s, me);
     this.updateEffects(dt);
     for (let i = this.lightN; i < this.lights.length; i++) this.lights[i].intensity = 0;
     this.measure(dt);

@@ -79,7 +79,9 @@ function renderLobby() {
   $('btnStart').textContent = players.length < 2 ? t('Waiting for players…') : t('Start the match ({n} players)', { n: players.length });
   $('lobbyHelp').innerHTML = `${t('Right-click to move, aim with the mouse.')} ${t('Mouse wheel zooms.')}<br>
     <kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd><kbd>D</kbd><kbd>F</kbd> ${t('spells')} · <kbd>T</kbd> ${t('Fireball')} · <kbd>G</kbd> ${t('Scourge')} · <kbd>S</kbd> ${t('stop')}<br>
-    <kbd>1</kbd> ${t('select your hero')} · ${t('Left-click a warlock to see its health, spells and items.')}<br>
+    ${t('spell key, then left-click to cast (quick cast in Esc menu)')}<br>
+    <kbd>1</kbd> ${t('select your hero')}, ${t('hold 1 to follow your hero, double-tap to jump to it')} · ${t('move the mouse to the screen edge to look around')}<br>
+    ${t('Left-click a warlock to see its health, spells and items.')} · <kbd>Esc</kbd> ${t('Menu')}<br>
     ${t('Knock the others into the lava. Last warlock standing wins the round.')}`;
 }
 
@@ -250,60 +252,252 @@ try {
 }
 window.addEventListener('resize', () => view && view.resize());
 
-// ------------------------------------------------------------------ input
-let mouse = { x: 0, y: 0 };
+// ------------------------------------------------------------------ controls
+// Player settings (Esc menu), kept on this PC.
+const PREFS_KEY = 'lanmsg.warlock.v1';
+const prefs = { quickCast: false, repeatMove: true, followHero: false, lockCursor: true, camSpeed: 1 };
+try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch { /* defaults */ }
+const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* ignore */ } };
+
+// The mouse: the real cursor, or a drawn one while it is locked inside the window.
+const mouse = { x: innerWidth / 2, y: innerHeight / 2, inside: true, right: false };
+const cursorEl = $('cursor');
+const locked = () => document.pointerLockElement === canvas;
 const pick = (cx, cy) => (view ? view.pick(cx, cy) : { x: 0, y: 0 });
-canvas.addEventListener('mousemove', (e) => {
-  mouse = { x: e.clientX, y: e.clientY };
-  if (e.buttons & 2) moveTo(e, false);
+function placeCursor() {
+  cursorEl.style.transform = `translate(${mouse.x}px, ${mouse.y}px)`;
+  cursorEl.classList.toggle('hidden', !locked());
+  cursorEl.classList.toggle('aim', !!aiming);
+  document.body.classList.toggle('aiming', !!aiming);
+}
+document.addEventListener('mousemove', (e) => {
+  if (locked()) {
+    mouse.x = Math.max(0, Math.min(innerWidth - 1, mouse.x + e.movementX));
+    mouse.y = Math.max(0, Math.min(innerHeight - 1, mouse.y + e.movementY));
+  } else {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+  }
+  mouse.inside = true;
+  placeCursor();
+  if (mouse.right && prefs.repeatMove) moveOrder(false);
 });
+document.addEventListener('mouseleave', () => { mouse.inside = false; });
+document.addEventListener('mouseenter', () => { mouse.inside = true; });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 canvas.addEventListener('wheel', (e) => {
   if (view) view.zoom = Math.min(1.35, Math.max(0.55, view.zoom * (e.deltaY > 0 ? 1.08 : 1 / 1.08)));
 }, { passive: true });
+
+// Keep the cursor inside the game window while fighting (Pointer Lock with a
+// drawn cursor); losing the lock (Esc, Alt+Tab) opens the menu.
+const fighting = () => started && lastSnap && lastSnap.ph === 'fight' && $('shop').classList.contains('hidden') && $('menu').classList.contains('hidden');
+function grabCursor() {
+  if (!prefs.lockCursor || locked() || !fighting()) return;
+  try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch { /* not supported */ }
+}
+function releaseCursor() { if (locked()) document.exitPointerLock(); }
+document.addEventListener('pointerlockchange', () => {
+  placeCursor();
+  if (!locked() && started && lastSnap && lastSnap.ph === 'fight' && !releasingOnPurpose) openMenu();
+  releasingOnPurpose = false;
+});
+let releasingOnPurpose = false;
+function releaseQuietly() { if (locked()) { releasingOnPurpose = true; document.exitPointerLock(); } }
+
 // Like Dota, orders go to the selected unit: with an enemy selected your
 // clicks and keys do nothing until you select your own hero again (1).
 let selected = null; // null = your own hero
 const selId = () => selected || me;
 const commanding = () => selId() === me;
-canvas.addEventListener('mousedown', (e) => {
-  if (e.button === 0 && view && started) {
-    const id = view.pawnAt(e.clientX, e.clientY, me);
-    if (id) select(id);
-  }
-  if (e.button === 2 && commanding()) moveTo(e, true);
-});
 function select(id) {
   selected = id === me ? null : id;
   if (view) view.selected = selId();
   if (lastSnap) renderHud(lastSnap);
 }
+
+// Move orders. Holding the right button repeats them, so steering is fluid.
 let lastMoveSent = 0;
-function moveTo(e, click) {
-  if (!commanding()) return;
+function moveOrder(click) {
+  if (!commanding() || !started) return;
   const now = performance.now();
-  if (!click && now - lastMoveSent < 50) return;
+  if (!click && now - lastMoveSent < 90) return;
   lastMoveSent = now;
-  const { x, y } = pick(e.clientX, e.clientY);
+  const { x, y } = pick(mouse.x, mouse.y);
   sendInput({ move: [Math.round(x), Math.round(y)] });
   if (click && view) view.showMove(x, y);
 }
-document.addEventListener('keydown', (e) => {
-  if (!started || e.repeat) return;
-  if (e.code === 'Space' || e.code.startsWith('Digit')) e.preventDefault();
-  if (e.code === 'Digit1') { select(me); return; }
-  if (!commanding()) return;
-  if (e.code === 'KeyS') { sendInput({ stop: true }); return; }
-  let slot = SPELL_CODES[e.code];
-  if (slot === undefined && ITEM_CODES[e.code] !== undefined) {
-    const it = inventory(myPawn(lastSnap))[ITEM_CODES[e.code]];
+setInterval(() => { if (mouse.right && prefs.repeatMove && started) moveOrder(false); }, 100);
+
+canvas.addEventListener('mousedown', (e) => {
+  if (!started) return;
+  // With a locked cursor, clicks on the interface go to what is under the drawn cursor.
+  if (locked()) {
+    const el = document.elementFromPoint(mouse.x, mouse.y);
+    const btn = el && el !== canvas && el.closest('button');
+    if (btn && e.button === 0) { btn.click(); return; }
+  } else grabCursor();
+  if (e.button === 0) {
+    if (aiming) { castAiming(); return; }
+    const id = view && view.pawnAt(mouse.x, mouse.y, me);
+    if (id) select(id);
+  }
+  if (e.button === 2) {
+    mouse.right = true;
+    if (aiming) { aiming = null; placeCursor(); } // right-click cancels aiming (and moves, like Dota)
+    moveOrder(true);
+  }
+});
+document.addEventListener('mouseup', (e) => { if (e.button === 2) mouse.right = false; });
+window.addEventListener('blur', () => { mouse.right = false; keys.clear(); });
+
+// Spells: quick cast fires at the cursor at once; otherwise the key shows a
+// Dota-style aim indicator and a left click casts (right click / Esc cancels).
+const NO_TARGET = new Set(['scourge', 'windwalk', 'shield', 'rush', 'alteration', 'pact']);
+let aiming = null; // { slot, key, level }
+function slotForKey(code) {
+  let slot = SPELL_CODES[code];
+  if (slot === undefined && ITEM_CODES[code] !== undefined) {
+    const it = inventory(myPawn(lastSnap))[ITEM_CODES[code]];
     slot = it && it.slot !== undefined ? it.slot : undefined;
   }
-  if (slot === undefined) return;
-  e.preventDefault();
+  return slot;
+}
+function castAt(slot) {
   const { x, y } = pick(mouse.x, mouse.y);
   sendInput({ cast: slot, x: Math.round(x), y: Math.round(y) });
+}
+function castAiming() {
+  if (!aiming) return;
+  castAt(aiming.slot);
+  aiming = null;
+  placeCursor();
+}
+function startCast(slot) {
+  const p = myPawn(lastSnap);
+  const sp = p && p.sp[slot];
+  if (!sp || p.d) return;
+  if (prefs.quickCast || NO_TARGET.has(sp[0])) { castAt(slot); return; }
+  aiming = { slot, key: sp[0], level: sp[1] };
+  placeCursor();
+}
+
+// Camera: free by default (move the mouse to the screen edge or use the arrow
+// keys); tap 1 selects your hero, double-tap centres on it, hold 1 to follow.
+const keys = new Set();
+const cam = { x: 0, y: 0, snap: false };
+let oneDownAt = 0;
+let lastOneTap = 0;
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape') { e.preventDefault(); onEscape(); return; }
+  if (!started) return;
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) { e.preventDefault(); keys.add(e.code); return; }
+  if (e.repeat) return;
+  if (e.code === 'Space' || e.code.startsWith('Digit') || e.code === 'F1') e.preventDefault();
+  if (e.code === 'Digit1' || e.code === 'F1') {
+    select(me);
+    const now = performance.now();
+    if (now - lastOneTap < 450) cam.snap = true; // double tap: jump to the hero
+    lastOneTap = now;
+    oneDownAt = now;
+    keys.add('Digit1');
+    return;
+  }
+  if (!$('menu').classList.contains('hidden') || !commanding()) return;
+  if (e.code === 'KeyS') { aiming = null; placeCursor(); sendInput({ stop: true }); return; }
+  const slot = slotForKey(e.code);
+  if (slot === undefined) return;
+  e.preventDefault();
+  startCast(slot);
 });
+document.addEventListener('keyup', (e) => {
+  keys.delete(e.code);
+  if (e.code === 'F1') keys.delete('Digit1');
+});
+
+// Esc: cancel aiming, then close the shop, then open / close the menu.
+function onEscape() {
+  if (aiming) { aiming = null; placeCursor(); return; }
+  if (lastSnap && lastSnap.mode === 'dm' && shopOpen) { shopOpen = false; renderHud(lastSnap); return; }
+  if ($('menu').classList.contains('hidden')) openMenu(); else closeMenu();
+}
+function openMenu() {
+  aiming = null;
+  mouse.right = false;
+  releaseQuietly();
+  renderMenu();
+  $('menu').classList.remove('hidden');
+}
+function closeMenu() {
+  $('menu').classList.add('hidden');
+  $('menuConfirm').classList.add('hidden');
+}
+function renderMenu() {
+  const row = (k, label, hint) => `<label class="menu-opt"><input type="checkbox" data-pref="${k}" ${prefs[k] ? 'checked' : ''}><span><b>${esc(label)}</b><small>${esc(hint)}</small></span></label>`;
+  $('menuOpts').innerHTML = [
+    row('quickCast', t('Quick cast'), t('Spells go off at the cursor as soon as you press the key. Off: the key shows an aim arrow and a left click casts.')),
+    row('repeatMove', t('Repeat move command'), t('Holding the right mouse button keeps sending move orders.')),
+    row('followHero', t('Always follow hero'), t('The camera stays on your warlock. Off: move the mouse to the screen edge to look around; hold 1 to follow.')),
+    row('lockCursor', t('Keep the cursor in the window'), t('The mouse cannot leave the game window while you fight.')),
+  ].join('') + `<div class="menu-opt"><span><b>${esc(t('Camera speed'))}</b></span><div class="seg" id="camSpeedSeg">${[[0.6, t('Slow')], [1, t('Normal')], [1.6, t('Fast')]].map(([v, l]) => `<button data-cam="${v}" class="${prefs.camSpeed === v ? 'on' : ''}">${esc(l)}</button>`).join('')}</div></div>`;
+}
+$('menuOpts').addEventListener('change', (e) => {
+  const k = e.target.dataset.pref;
+  if (!k) return;
+  prefs[k] = e.target.checked;
+  savePrefs();
+});
+$('menuOpts').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-cam]');
+  if (!b) return;
+  prefs.camSpeed = Number(b.dataset.cam);
+  savePrefs();
+  renderMenu();
+});
+$('btnResume').addEventListener('click', () => { closeMenu(); grabCursor(); });
+$('btnLeave').addEventListener('click', () => $('menuConfirm').classList.remove('hidden'));
+$('btnLeaveNo').addEventListener('click', () => $('menuConfirm').classList.add('hidden'));
+$('btnLeaveYes').addEventListener('click', () => window.close());
+
+// Camera target for this frame.
+function updateCamera(s, dt) {
+  const mine = myPawn(s);
+  if (s.ph !== 'fight') { cam.started = false; return { mode: 'overview' }; }
+  if (!cam.started && mine) { cam.started = true; cam.x = mine.x; cam.y = mine.y; } // round start: on your hero
+  const hold = keys.has('Digit1');
+  if (mine && !mine.d && (prefs.followHero || hold || cam.snap)) {
+    cam.x = mine.x;
+    cam.y = mine.y;
+    const snap = cam.snap;
+    cam.snap = false;
+    return { mode: 'follow', x: cam.x, y: cam.y, snap };
+  }
+  cam.snap = false;
+  // Edge and arrow-key panning, faster when zoomed out.
+  const sp = 2200 * prefs.camSpeed * (view ? view.zoom : 1) * dt;
+  const edge = 14;
+  const canEdge = mouse.inside && $('menu').classList.contains('hidden') && $('shop').classList.contains('hidden');
+  if (keys.has('ArrowLeft') || (canEdge && mouse.x <= edge)) cam.x -= sp;
+  if (keys.has('ArrowRight') || (canEdge && mouse.x >= innerWidth - 1 - edge)) cam.x += sp;
+  if (keys.has('ArrowUp') || (canEdge && mouse.y <= edge)) cam.y -= sp;
+  if (keys.has('ArrowDown') || (canEdge && mouse.y >= innerHeight - 1 - edge)) cam.y += sp;
+  const lim = s.layer * 100 + 900;
+  const d = Math.hypot(cam.x, cam.y);
+  if (d > lim) { cam.x *= lim / d; cam.y *= lim / d; }
+  return { mode: 'free', x: cam.x, y: cam.y };
+}
+
+// What the aim indicator should show for a spell (Warlock Brawl values).
+function aimShape(key, level, p) {
+  const def = SPELLS[key];
+  const L = (v) => (Array.isArray(v) ? Warlock.lv(v, level) : v);
+  const rF = p && p.ms ? 1 + [0.12, 0.10, 0.09, 0.08, 0.07, 0.06].slice(0, p.ms[1]).reduce((a, b) => a + b, 0) : 1;
+  const area = { meteor: [L(def.radius), def.range], warpzone: [L(def.radius), def.range], rockpillar: [def.pillar, L(def.range)], teleport: [60, L(def.range)], redirector: [45, 0] }[key];
+  if (area) return { kind: 'area', radius: area[0], range: area[1] ? area[1] * (key === 'teleport' || key === 'rockpillar' ? 1 : rF) : 0 };
+  const width = key === 'lightning' ? 25 : key === 'cluster' ? 70 : (L(def.radius) || 30);
+  const range = (def.range ? L(def.range) : def.speed && def.life ? def.speed * def.life : 900) * rF;
+  return { kind: 'line', width: width + Warlock.RADIUS, range };
+}
 
 // The six item slots: Fireball and Scourge (usable), then passive items in the order bought.
 function inventory(p) {
@@ -450,7 +644,7 @@ function frame(now) {
   if (!started || !snaps.length) {
     // Lobby: the empty arena slowly turning behind the menu.
     const idle = { ph: 'lobby', layer: 14 + Math.max(2, players.length), p: [], b: [], shrink: 10 };
-    view.frame({ s: idle, prev: idle, k: 1, since: 0, dt, me, names, follow: false });
+    view.frame({ s: idle, prev: idle, k: 1, since: 0, dt, me, names, cam: { mode: 'overview' } });
     return;
   }
   const s = snaps[snaps.length - 1];
@@ -458,8 +652,10 @@ function frame(now) {
   // Smooth positions between the last two snapshots.
   const k = Math.min(1, (now - snapAt) / (TICK * 1000));
   const mine = myPawn(s);
-  const follow = !!(mine && !mine.d && s.ph === 'fight');
-  view.frame({ s, prev, k, since: (now - snapAt) / 1000, dt, me, names, follow });
+  if (aiming && (!mine || mine.d || s.ph !== 'fight' || !mine.sp[aiming.slot])) { aiming = null; placeCursor(); }
+  const aim = aiming && mine ? { ...aimShape(aiming.key, aiming.level, mine), at: pick(mouse.x, mouse.y) } : null;
+  view.frame({ s, prev, k, since: (now - snapAt) / 1000, dt, me, names, cam: updateCamera(s, dt), aim });
+  if (s.ph !== 'fight' || !$('shop').classList.contains('hidden')) releaseQuietly();
   updateCooldowns(s, now);
 }
 
@@ -551,9 +747,10 @@ let shopOpen = false;
 $('btnShop').addEventListener('click', () => { shopOpen = !shopOpen; if (lastSnap) renderHud(lastSnap); });
 document.addEventListener('keydown', (e) => {
   if (!started || e.repeat || !lastSnap || lastSnap.mode !== 'dm') return;
-  if (e.code === 'KeyB' || e.code === 'F4' || (e.code === 'Escape' && shopOpen)) {
+  if (e.code === 'KeyB' || e.code === 'F4') {
     e.preventDefault();
-    shopOpen = e.code === 'Escape' ? false : !shopOpen;
+    shopOpen = !shopOpen;
+    if (shopOpen) releaseQuietly();
     renderHud(lastSnap);
   }
 });
@@ -714,6 +911,9 @@ window.WL = {
   get view() { return view; },
   myPawn,
   toScreen: (x, y) => (view ? view.toScreen(x, y) : [0, 0]),
+  prefs,
+  get aiming() { return aiming; },
+  get mouse() { return mouse; },
 };
 
 init();

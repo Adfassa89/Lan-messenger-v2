@@ -58,6 +58,27 @@
     </div>
   </section>
 
+  <!-- Esc menu -->
+  <section class="menu hidden" id="menu">
+    <div class="menu-card">
+      <div class="menu-title" data-t="Menu"></div>
+      <div class="menu-opts" id="menuOpts"></div>
+      <div class="menu-btns">
+        <button class="big-btn small" id="btnResume" data-t="Resume"></button>
+        <button class="big-btn small leave" id="btnLeave" data-t="Leave game"></button>
+      </div>
+      <div class="menu-confirm hidden" id="menuConfirm">
+        <span data-t="Leave the match? You cannot come back in."></span>
+        <button class="big-btn small leave" id="btnLeaveYes" data-t="Leave"></button>
+        <button class="big-btn small" id="btnLeaveNo" data-t="Stay"></button>
+      </div>
+      <div class="menu-help" data-t="Esc opens and closes this menu."></div>
+    </div>
+  </section>
+
+  <!-- Drawn cursor while the mouse is kept inside the window -->
+  <div class="cursor hidden" id="cursor"></div>
+
   <script src="../shared/i18n.js"></script>
   <script src="../shared/warlock.js"></script>
   <script src="game-fx.js"></script>

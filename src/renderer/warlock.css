@@ -145,3 +145,25 @@ button { font: inherit; cursor: pointer; }
 .shop-mastery .buy { flex-direction: row; gap: 8px; padding: 6px 10px; }
 .shop-mastery .buy .ic { width: 30px; height: 30px; }
 .shop-mastery .buy .lv { margin-left: 2px; }
+
+/* ---------------------------------------------------------------- Esc menu */
+.menu { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(6, 2, 1, .62); z-index: 40; animation: rise .2s ease-out; }
+.menu-card { width: min(500px, calc(100vw - 32px)); padding: 22px; border-radius: 16px; background: linear-gradient(180deg, rgba(42, 22, 15, .97), rgba(20, 10, 7, .98)); border: 1px solid #6b3420; box-shadow: 0 30px 80px rgba(0, 0, 0, .7); }
+.menu-title { font: 900 24px "Segoe UI", sans-serif; letter-spacing: 3px; color: #ffb35c; text-align: center; margin-bottom: 14px; text-transform: uppercase; }
+.menu-opts { display: grid; gap: 8px; }
+.menu-opt { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 10px; background: rgba(255, 255, 255, .04); cursor: pointer; }
+.menu-opt input { width: 18px; height: 18px; accent-color: #ff8a2a; flex: none; }
+.menu-opt span { display: grid; gap: 2px; flex: 1; }
+.menu-opt b { font-size: 14px; color: #f5e9dc; }
+.menu-opt small { font-size: 11.5px; color: #b48c72; }
+.menu-btns { display: flex; gap: 10px; justify-content: center; margin-top: 16px; }
+.big-btn.leave { background: linear-gradient(180deg, #7a3a3a, #4a1a1a); box-shadow: none; }
+.menu-confirm { display: flex; align-items: center; gap: 10px; justify-content: center; margin-top: 12px; padding: 10px; border-radius: 10px; background: rgba(120, 20, 20, .25); font-size: 13px; }
+.menu-help { margin-top: 12px; text-align: center; font-size: 11.5px; color: #8a6a58; }
+
+/* Drawn cursor (the real one is hidden while it is kept inside the window). */
+.cursor { position: fixed; left: 0; top: 0; width: 22px; height: 26px; pointer-events: none; z-index: 60; will-change: transform;
+  background: no-repeat center/contain url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 26'><path d='M2 2 L2 21 L7 16.5 L10.5 24 L14 22.5 L10.5 15 L17.5 15 Z' fill='%23ffd27a' stroke='%23301000' stroke-width='1.6' stroke-linejoin='round'/></svg>"); }
+.cursor.aim { width: 30px; height: 30px; margin: -15px 0 0 -15px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'><circle cx='15' cy='15' r='9' fill='none' stroke='%237fe8ff' stroke-width='2'/><path d='M15 1v8M15 21v8M1 15h8M21 15h8' stroke='%237fe8ff' stroke-width='2'/><circle cx='15' cy='15' r='1.8' fill='%23fff'/></svg>"); }
+body.aiming canvas#view { cursor: crosshair; }
