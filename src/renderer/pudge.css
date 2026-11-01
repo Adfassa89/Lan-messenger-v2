@@ -1,0 +1,36 @@
+/* Pudge Wars: the Warlock window styles (warlock.css) in Dota's Radiant
+   green and Dire red, plus the experience bar, upgrade buttons and shop grid. */
+html, body.pudge { background: #0b1408; }
+.pudge .lobby { background: radial-gradient(ellipse at center, rgba(10, 30, 8, .25), rgba(3, 8, 2, .75)); }
+.pudge .lobby-card { background: linear-gradient(180deg, rgba(26, 36, 20, .95), rgba(10, 16, 8, .96)); border-color: #3e5a2c;
+  box-shadow: 0 0 0 1px rgba(140, 220, 90, .1), 0 30px 80px rgba(0, 0, 0, .7), 0 0 80px rgba(140, 40, 20, .15); }
+.pudge .logo { font-size: 38px; letter-spacing: 6px; color: #e8d0a0; text-shadow: 0 0 18px rgba(200, 30, 20, .8), 0 3px 0 #4a0a06; }
+.pudge .top-bar { background: rgba(4, 8, 2, .7); border-color: rgba(160, 200, 120, .25); align-items: center; }
+.pudge .scores, .pudge .feed div { background: rgba(4, 8, 2, .65); }
+.sc-rad, .sc-dire { font: 900 18px "Segoe UI", sans-serif; min-width: 34px; text-align: center; }
+.sc-rad { color: #6aff6a; text-shadow: 0 0 8px rgba(70, 224, 70, .6); }
+.sc-dire { color: #ff6a5a; text-shadow: 0 0 8px rgba(232, 68, 58, .6); }
+.pudge #phaseInfo { color: #e8d0a0; font-size: 13px; }
+.xp { position: relative; height: 11px; border-radius: 3px; background: rgba(0, 0, 0, .7); overflow: hidden; border: 1px solid #000; }
+.xp i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, #ffe58a, #c8961c); transition: width .2s; }
+.xp span { position: absolute; inset: 0; display: grid; place-items: center; font: 700 9.5px "Segoe UI", sans-serif; text-shadow: 0 1px 2px #000; }
+.spell.up { width: 46px; height: 46px; align-self: flex-end; }
+.spell .pips { position: absolute; left: 2px; right: 2px; bottom: 2px; display: flex; gap: 1px; }
+.spell .pips i { flex: 1; height: 3px; background: rgba(0, 0, 0, .7); border-radius: 1px; }
+.spell .pips i.on { background: #ffd23a; box-shadow: 0 0 3px #ffb000; }
+.spell.learn { box-shadow: 0 0 0 2px #ffd23a, 0 0 12px rgba(255, 210, 60, .8); cursor: pointer; animation: learn 1s ease-in-out infinite alternate; }
+.spell .plus { position: absolute; top: 1px; right: 3px; font: 900 13px "Segoe UI", sans-serif; color: #ffd23a; text-shadow: 0 0 3px #000; }
+@keyframes learn { to { box-shadow: 0 0 0 2px #fff2a0, 0 0 18px rgba(255, 210, 60, 1); } }
+.points { align-self: flex-start; font: 800 11px "Segoe UI", sans-serif; color: #ffd23a; }
+.pw-shop { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.pw-shop .buy { display: grid; grid-template-columns: 40px 1fr; grid-template-areas: "ic nm" "ic pr" "ic lv"; column-gap: 9px; row-gap: 0; align-items: center; justify-items: start; padding: 7px 9px; text-align: left; }
+.pw-shop .buy .ic { grid-area: ic; width: 40px; height: 40px; }
+.pw-shop .buy .nm { grid-area: nm; }
+.pw-shop .buy .pr { grid-area: pr; }
+.pw-shop .buy .lv { grid-area: lv; font-size: 9px; }
+.pudge .buy { border-color: #3e5a2c; }
+.pudge .buy:hover { border-color: #9ae06a; background: rgba(150, 230, 100, .08); }
+.pudge .shop-card, .pudge .menu-card { background: linear-gradient(180deg, rgba(26, 36, 20, .97), rgba(10, 16, 8, .98)); border-color: #3e5a2c; }
+.floater.big { font-size: 30px; letter-spacing: 2px; }
+.rune-buffs { display: flex; gap: 4px; }
+.rune-buffs img { width: 20px; height: 20px; border-radius: 4px; box-shadow: 0 0 0 1px #000; }

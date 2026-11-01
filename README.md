@@ -175,6 +175,10 @@ Third-party parts keep their own licenses (see Credits).
 - Warlock hero model and animations: ["red_super_wizard"](https://sketchfab.com/3d-models/red-super-wizard-26193351377c48d59ef5e2dddf4f8596)
   by [letmetankher](https://sketchfab.com/letmetankher), licensed
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (`src/renderer/models`).
+- Pudge Wars hero model and animations: "Dota 2 | Pudge animated", uploaded to Sketchfab by FimoZov
+  (labelled CC BY 4.0 by the uploader). Pudge and its artwork belong to Valve Corporation (Dota 2).
+- Pudge Wars rules follow the open-source Dota 2 custom game
+  [PudgeWars](https://github.com/CaioBrighenti/PudgeWars) (re-implemented, no code copied).
 - Spell and item icon shapes: [Game-icons.net](https://game-icons.net) by Lorc, Delapouite and contributors,
   licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) (`src/renderer/vendor/game-icons.js`);
   painted in-app by `src/renderer/warlock-icons.js`.

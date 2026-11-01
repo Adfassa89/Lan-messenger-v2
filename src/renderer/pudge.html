@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; connect-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Pudge Wars</title>
+  <link rel="stylesheet" href="warlock.css">
+  <link rel="stylesheet" href="pudge.css">
+  <link rel="stylesheet" href="game-fx.css">
+</head>
+<body class="pudge">
+  <canvas id="view"></canvas>
+  <div class="labels" id="labels"></div>
+
+  <!-- Lobby: who has joined; the host picks the teams and the kills to win. -->
+  <section class="lobby" id="lobby">
+    <div class="lobby-card">
+      <div class="logo">PUDGE WARS</div>
+      <div class="lobby-sub" id="lobbySub"></div>
+      <ul class="lobby-list" id="lobbyList"></ul>
+      <div class="lobby-opts hidden" id="lobbyOpts">
+        <div class="opt-row"><span data-t="Score to win"></span><div class="seg" id="targetSeg"></div></div>
+      </div>
+      <div class="lobby-rules" id="lobbyRules"></div>
+      <button class="big-btn hidden" id="btnStart"></button>
+      <div class="lobby-help" id="lobbyHelp"></div>
+    </div>
+  </section>
+
+  <!-- In-game HUD -->
+  <div class="hud hidden" id="hud">
+    <div class="top-bar"><span class="sc-rad" id="scoreRad"></span><span id="phaseInfo"></span><span class="sc-dire" id="scoreDire"></span><button class="shop-btn" id="btnShop"></button></div>
+    <div class="scores" id="scores"></div>
+    <div class="feed" id="feed"></div>
+    <div class="banner hidden" id="banner"></div>
+    <div class="card" id="card">
+      <div class="portrait" id="portrait"><img id="pImg" alt=""><span class="ptag" id="pTag"></span></div>
+      <div class="unit">
+        <div class="uname" id="uName"></div>
+        <div class="hp"><i id="hpFill"></i><span id="hpText"></span></div>
+        <div class="xp"><i id="xpFill"></i><span id="xpText"></span></div>
+        <div class="ustats" id="uStats"></div>
+      </div>
+      <div class="spells" id="spellBar"></div>
+      <div class="items" id="itemGrid"></div>
+    </div>
+  </div>
+
+  <!-- Shop (B) -->
+  <section class="shop hidden" id="shop">
+    <div class="shop-card">
+      <div class="shop-head"><b data-t="Shop"></b><span class="gold" id="gold"></span><span class="shop-time" id="shopTime"></span><button class="big-btn small" id="btnCloseShop" data-t="Close"></button></div>
+      <div class="pw-shop" id="shopItems"></div>
+      <div class="shop-tip" id="shopTip"></div>
+    </div>
+  </section>
+
+  <!-- Esc menu -->
+  <section class="menu hidden" id="menu">
+    <div class="menu-card">
+      <div class="menu-title" data-t="Menu"></div>
+      <div class="menu-opts" id="menuOpts"></div>
+      <div class="menu-btns">
+        <button class="big-btn small" id="btnResume" data-t="Resume"></button>
+        <button class="big-btn small leave" id="btnLeave" data-t="Leave game"></button>
+      </div>
+      <div class="menu-confirm hidden" id="menuConfirm">
+        <span data-t="Leave the match? You cannot come back in."></span>
+        <button class="big-btn small leave" id="btnLeaveYes" data-t="Leave"></button>
+        <button class="big-btn small" id="btnLeaveNo" data-t="Stay"></button>
+      </div>
+      <div class="menu-help" data-t="Esc opens and closes this menu."></div>
+    </div>
+  </section>
+
+  <div class="cursor hidden" id="cursor"></div>
+
+  <script src="../shared/i18n.js"></script>
+  <script src="../shared/pudgewars.js"></script>
+  <script src="game-fx.js"></script>
+  <script type="module" src="pudge.js"></script>
+</body>
+</html>

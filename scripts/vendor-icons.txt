@@ -5,3 +5,6 @@ body-swapping, fireflake, double-ringed-orb, meteor-impact, invisible, shield-re
 run, vortex, andromeda-chain, diamond-ring, cloak, breastplate, leather-boot, warlock-hood.
 Added later: gemini, heart-drop, battery-plus, split-arrows, snowflake-1, mirror-mirror, manacles, time-trap, magnet, stone-pile.
 Added later: fire-ring, pocket-watch, divert, contract, hourglass, target-arrows, fangs, sands-of-time.
+Added later (Pudge Wars): meat-hook, meat-cleaver, bloody-sword, striking-arrows, fast-arrow, expand, fist,
+grapple, paw, carnivore-mouth, lantern-flame, barrel, claw-slashes, turbine, totem, spell-book, black-book,
+book-aura, health-potion, ogre, sprint, two-coins, round-shield, fire-bowl, dynamite, lightning-trio.

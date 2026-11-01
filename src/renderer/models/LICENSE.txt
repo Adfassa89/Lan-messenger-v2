@@ -2,3 +2,8 @@ warlock.glb: "red_super_wizard" by letmetankher (https://sketchfab.com/letmetank
 https://sketchfab.com/3d-models/red-super-wizard-26193351377c48d59ef5e2dddf4f8596
 licensed under Creative Commons Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/).
 Used unchanged; in the game its red cloth is recoloured to each player's colour.
+
+pudge.glb: "Dota 2 | Pudge animated" uploaded to Sketchfab by FimoZov. The character
+(Pudge) and its artwork belong to Valve Corporation (Dota 2); the upload is labelled
+CC BY 4.0, but that label is the uploader's. Reduced to the animations the game uses
+and stripped of unused data; otherwise unchanged.

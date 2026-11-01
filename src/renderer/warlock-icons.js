@@ -11,6 +11,12 @@ export const ICON_COLOR = {
   grip: '#ff3a3a', warpzone: '#4ab8ff', magnetize: '#4affe0', rockpillar: '#c8a070',
   cursed: '#c040ff', watch: '#e8c870', redirector: '#7ab8ff', pact: '#ff3a5a', m_dur: '#e8c870', m_range: '#7affb0', m_life: '#ff4a4a', m_all: '#ffb35c',
   ring: '#ff6a8a', cape: '#c0a0ff', armor: '#c8c8d0', boots: '#d8a060', hero: '#ff8a3a',
+  // Pudge Wars
+  hook: '#c8d0d8', cleaver: '#d0a070', up_damage: '#ff3a3a', up_range: '#7affb0', up_speed: '#ffd23a', up_radius: '#7ab8ff',
+  tiny_arm: '#c8a070', grapple: '#b8c8e8', lycan_paw: '#a08060', naix_jaw: '#9aff5a', lantern: '#ffb03a', mine: '#ff7a2a',
+  claw: '#ff4a4a', turbine: '#5ae0ff', totem: '#c89050', tome_wisdom: '#7a9aff', tome_damage: '#ff5a3a', tome_health: '#ff5a8a',
+  salve: '#5aff7a', pudge: '#7aa050', r_haste: '#ff3a2a', r_gold: '#ffd23a', r_shield: '#7fd2ff', r_fire: '#ff7a1a',
+  r_dynamite: '#ff4a1a', r_lightning: '#9fd6ff',
 };
 
 const cache = new Map();
