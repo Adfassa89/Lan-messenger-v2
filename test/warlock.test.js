@@ -303,3 +303,64 @@ test('Every round places 2 – 8 obstacles within ±1000 in one style', () => {
   const snap = sim.snapshot();
   assert.strictEqual(snap.o.length, sim.obstacles.length);
 });
+
+// ---------------------------------------------------------------- modes and teams
+const four = (opts) => {
+  const sim = new W.Sim(['a', 'b', 'c', 'd'].map((id) => ({ id, name: id })), { seed: 3, ...opts });
+  sim.start();
+  sim.toFight();
+  for (const p of sim.pawns) p.mods = {};
+  sim.obstacles = [];
+  return sim;
+};
+
+test('Shuffle teams: 4 players become 2 teams of 2; team mates spawn side by side', () => {
+  const sim = four({ teams: 'shuffle' });
+  const counts = {};
+  for (const p of sim.pawns) counts[p.team] = (counts[p.team] || 0) + 1;
+  assert.deepStrictEqual(Object.values(counts).sort(), [2, 2]);
+  const [p, q] = sim.pawns.filter((x) => x.team === sim.pawns[0].team);
+  assert.ok(Math.hypot(p.x - q.x, p.y - q.y) < 500, 'mates close together');
+});
+
+test('Team mates: spells pass through, Drain heals, the round ends when one team is left', () => {
+  const sim = four({ teams: 'lobby', lobbyTeams: { a: 0, b: 0, c: 1, d: 1 } });
+  const [a, b, c, d] = sim.pawns;
+  a.x = 0; a.y = 0; b.x = 300; b.y = 0; c.x = 2000; c.y = 2000; d.x = -2000; d.y = 2000;
+  sim.projectiles.push({ id: 900, k: 'fireball', owner: 'a', x: 100, y: 0, vx: 1000, vy: 0, r: 25, life: 1, dmg: 70, kb: 1, hits: [], age: 0 });
+  run(sim, 0.4);
+  assert.strictEqual(b.hp, 1000, 'no friendly fire');
+  b.hp = 600;
+  sim.projectiles.push({ id: 901, k: 'drain', owner: 'a', x: 100, y: 0, vx: 700, vy: 0, r: 24.5, life: 1, turnAt: 0, turned: true, dmg: 60, dur: 4, hits: [], age: 0 });
+  run(sim, 0.4);
+  assert.ok(b.hp >= 660, `ally healed (${Math.round(b.hp)})`);
+  sim.kill(c);
+  sim.kill(d);
+  sim.step();
+  assert.strictEqual(sim.phase, 'roundEnd');
+  assert.strictEqual(a.score, 1);
+  assert.strictEqual(b.score, 1, 'every winning team member scores');
+  assert.strictEqual(c.score, 0);
+});
+
+test('Deathmatch: kills score for the team, respawn after 10 s, shop open, 60 s rounds', () => {
+  const sim = four({ mode: 'dm', teams: 'ffa', win: 'score', target: 3 });
+  const [a, b] = sim.pawns;
+  assert.ok(Math.abs(sim.phaseLeft - 60) < 0.1, '60 s round');
+  b.lastHit = { id: 'a', t: sim.time };
+  sim.kill(b);
+  assert.strictEqual(a.score, 1);
+  assert.strictEqual(a.kills, 1);
+  run(sim, 5);
+  assert.ok(b.dead, 'still waiting');
+  run(sim, 5.2);
+  assert.ok(!b.dead && b.mods.spawnShield, 'respawned with protection');
+  assert.ok(sim.buy('a', 'lightning'), 'shop works during the fight');
+  const round = sim.round;
+  run(sim, 50);
+  assert.strictEqual(sim.round, round + 1, 'next round without a shop break');
+  assert.strictEqual(sim.phase, 'fight');
+  a.score = 3;
+  run(sim, 61);
+  assert.strictEqual(sim.phase, 'over', 'first to 3 wins at the end of a round');
+});

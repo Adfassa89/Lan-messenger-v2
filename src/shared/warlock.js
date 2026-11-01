@@ -31,6 +31,11 @@
   const ROUND_START_SHIELD = 2;
   const CASH_START = 30;
   const CASH_ROUND = 10;
+  // Game modes (base/mode.lua): Rounds = last team standing scores; Deathmatch
+  // = 60 s rounds, respawn after 10 s, 1 score per kill, shop always open.
+  const DM_ROUND_TIME = 60;
+  const DM_RESPAWN = 10;
+  const TEAM_COLORS = ['#e8443a', '#3a7be8', '#2fbf71', '#f2c230', '#a35ce8', '#f2862e', '#2fc6c9', '#e85ca8', '#9aa13a', '#8a8f99'];
   const CAST_POINT = 0.2;
   // Dota 2 turning. Warlock Brawl's hero has MovementTurnRate 1.2
   // (npc_heroes_custom.txt), twice Dota's own Warlock (0.6, 180 degrees in
@@ -51,7 +56,7 @@
     fireball: { name: 'Fireball', icon: '🔥', col: 0, cd: [4.8], dmg: steps(70, 7), range: 1000, speed: 1000, radius: 25, cast: CAST_POINT, buy: 7, up: [7, 7, 7, 7, 7, 7] },
     scourge: { name: 'Scourge', icon: '💢', col: 7, cd: [3.0], dmg: [100, 110, 120], radius: 250, cast: 0.9, buy: 7, up: [7, 7], max: 3 },
     lightning: { name: 'Lightning', icon: '⚡', col: 1, cd: [16.5, 15.5, 15, 14.5, 14, 13.5, 13], dmg: steps(70, 8), range: 600, kb: 0.92, cast: CAST_POINT, buy: 11, up: [8, 9, 10, 11, 12, 13] },
-    homing: { name: 'Homing', icon: '🔮', col: 1, cd: [16.5, 14.5, 13, 12, 11, 10, 9], dmg: steps(70, 10), speed: 1000, radius: 30, life: 4.5, cast: CAST_POINT, buy: 11, up: [8, 9, 10, 11, 12, 13] },
+    homing: { name: 'Homing', icon: '🔮', col: 1, cd: [16.5, 14.5, 13, 12, 11, 10, 9], dmg: steps(70, 10), speed: 1000, radius: 30, life: 4.5, explode: 200 * 1.46, cast: CAST_POINT, buy: 11, up: [8, 9, 10, 11, 12, 13] },
     boomerang: { name: 'Boomerang', icon: '🪃', col: 1, cd: [16, 13.9, 12.5, 11.7, 11, 10.3, 9.6], dmg: steps(70, 6), range: 800, radius: 38, kb: 0.95, cast: CAST_POINT, buy: 11, up: [7, 8, 9, 10, 11, 12] },
     teleport: { name: 'Teleport', icon: '✨', col: 2, cd: [16, 13.5, 11.5, 10, 9, 8, 7], range: steps(770, 70), cast: 0, buy: 12, up: [6, 7, 8, 9, 10, 11] },
     thrust: { name: 'Thrust', icon: '💨', col: 2, cd: [16.5, 14.5, 13, 12, 11, 10, 9], dmg: steps(50, 5), range: 900, speed: 1300, radius: 60, kb: 1.2, cast: 0, buy: 11, up: [6, 7, 8, 9, 10, 11] },
@@ -99,8 +104,15 @@
 
   class Sim {
     // players: [{ id, name }]; options: { rounds }
-    constructor(players, { rounds = 11, seed = 1 } = {}) {
-      this.rounds = rounds;
+    // options: mode 'rounds' | 'dm'; teams 'shuffle' | 'ffa' | 'lobby' (with
+    // lobbyTeams { id: team }); win 'rounds' | 'score' with target (default 11).
+    constructor(players, { rounds = 11, seed = 1, mode = 'rounds', teams = 'shuffle', win = 'rounds', target, lobbyTeams = {} } = {}) {
+      this.mode = mode === 'dm' ? 'dm' : 'rounds';
+      this.teamMode = ['shuffle', 'ffa', 'lobby'].includes(teams) ? teams : 'shuffle';
+      this.win = win === 'score' ? 'score' : 'rounds';
+      this.target = target || rounds;
+      this.rounds = this.win === 'rounds' ? this.target : 0;
+      this.lobbyTeams = lobbyTeams;
       this.round = 0;
       this.rand = mulberry(seed);
       this.time = 0;
@@ -113,7 +125,7 @@
         id: p.id, name: p.name, color: COLORS[i % COLORS.length], score: 0, cash: CASH_START, kills: 0, dmgDone: 0,
         spells: { 0: { key: 'fireball', level: 1 }, 7: { key: 'scourge', level: 1 } }, items: {},
         x: 0, y: 0, vx: 0, vy: 0, face: 0, hp: MAX_HP, dp: 0, dead: true, left: false,
-        move: null, cd: {}, casting: null, mods: {}, lastHit: null,
+        move: null, cd: {}, casting: null, mods: {}, lastHit: null, team: i, respawnAt: 0,
       }));
       this.obstacles = [];
       this.zones = []; // warp zones
@@ -124,6 +136,42 @@
     }
 
     pawn(id) { return this.pawns.find((p) => p.id === id); }
+    // Same warlock or same team: spells pass through allies.
+    ally(a, b) {
+      if (a === b) return true;
+      const p = this.pawn(a);
+      const q = this.pawn(b);
+      return !!(p && q && p.team === q.team);
+    }
+    teamCount() { return new Set(this.pawns.filter((p) => !p.left).map((p) => p.team)).size; }
+
+    // Teams for the coming round (base/teammode.lua).
+    assignTeams() {
+      const active = this.pawns.filter((p) => !p.left);
+      if (this.teamMode === 'ffa') { active.forEach((p, i) => { p.team = i; }); return; }
+      if (this.teamMode === 'lobby') { active.forEach((p, i) => { p.team = Number.isInteger(this.lobbyTeams[p.id]) ? this.lobbyTeams[p.id] : i; }); return; }
+      // Shuffle: a random team count that divides the players evenly (not one per player
+      // unless there is no other way), players shuffled into them.
+      const n = active.length;
+      const counts = [];
+      for (let i = 2; i <= n; i++) if (n % i === 0) counts.push(i);
+      if (!counts.length) counts.push(1);
+      const teamCount = counts.length > 1 ? counts[Math.floor(this.rand() * (counts.length - 1))] : counts[0];
+      const order = active.slice();
+      for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(this.rand() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+      order.forEach((p, i) => { p.team = i % teamCount; });
+    }
+
+    // Spawn spots: teams spread around the ring, team mates side by side.
+    spawnSpot(p) {
+      const teams = [...new Set(this.pawns.filter((q) => !q.left).map((q) => q.team))].sort((a, b) => a - b);
+      const ti = Math.max(0, teams.indexOf(p.team));
+      const mates = this.pawns.filter((q) => !q.left && q.team === p.team);
+      const mi = mates.indexOf(p);
+      const a = ((2 * Math.PI) / teams.length) * ti + 0.2 * (mi - (mates.length - 1) / 2);
+      const r = (13 + this.pawns.length) * 100 - 600;
+      return [r * Math.cos(a), r * Math.sin(a)];
+    }
     alive() { return this.pawns.filter((p) => !p.dead && !p.left); }
     fx(e) { this.effects.push(e); }
 
@@ -157,17 +205,36 @@
       this.projectiles = [];
       this.zones = [];
       this.obstacles = this.obstacles.filter((o) => !o.temp);
-      const active = this.pawns.filter((p) => !p.left);
-      active.forEach((p, i) => {
-        const a = (2 * Math.PI * i) / active.length;
-        const r = (13 + this.pawns.length) * 100 - 600;
-        this.respawn(p, false);
-        p.x = r * Math.cos(a);
-        p.y = r * Math.sin(a);
-        p.face = Math.atan2(-p.y, -p.x);
-        p.mods.spawnShield = ROUND_START_SHIELD;
-      });
+      this.assignTeams();
+      if (this.mode === 'dm') this.phaseLeft = DM_ROUND_TIME;
+      for (const p of this.pawns.filter((q) => !q.left)) this.spawnAt(p);
       this.fx({ e: 'fight', round: this.round });
+    }
+
+    spawnAt(p) {
+      this.respawn(p, false);
+      [p.x, p.y] = this.spawnSpot(p);
+      p.face = Math.atan2(-p.y, -p.x);
+      p.mods.spawnShield = ROUND_START_SHIELD;
+      p.respawnAt = 0;
+    }
+
+    // Deathmatch: a new 60 s round without a shop break (the shop stays open):
+    // new teams, a full platform with new obstacles; living warlocks stay put.
+    nextDmRound() {
+      this.round++;
+      this.phaseLeft = DM_ROUND_TIME;
+      this.layer = 13 + this.pawns.length;
+      this.shrinkAcc = 0;
+      this.zones = [];
+      this.placeObstacles();
+      this.assignTeams();
+      this.fx({ e: 'fight', round: this.round, dm: 1 });
+    }
+
+    gameOver() {
+      if (this.win === 'rounds') return this.round >= this.target;
+      return this.pawns.some((p) => p.score >= this.target);
     }
 
     // A new random set of obstacles in one style for the coming round.
@@ -224,6 +291,7 @@
       if (p.mods.windwalk) s += SPELLS.windwalk.bonus;
       if (p.mods.rush) s += 35 + p.mods.rush.bonus;
       if (p.mods.drained) s -= 50;
+      if (p.mods.hasted) s += p.mods.hasted.v;
       if (p.mods.snowed) s -= 100;
       if (p.mods.gripped) return 0;
       return Math.max(0, s);
@@ -240,7 +308,7 @@
 
     buy(id, what) {
       const p = this.pawn(id);
-      if (!p || this.phase !== 'shop') return false;
+      if (!p || !(this.phase === 'shop' || (this.mode === 'dm' && this.phase === 'fight'))) return false;
       if (SPELLS[what]) {
         const def = SPELLS[what];
         const cur = p.spells[def.col];
@@ -340,7 +408,7 @@
           const range = def.range;
           let best = null;
           for (const o of this.alive()) {
-            if (o.id === p.id) continue;
+            if (this.ally(o.id, p.id)) continue;
             const along = (o.x - p.x) * dx + (o.y - p.y) * dy;
             if (along < 0 || along > range + RADIUS) continue;
             const off = Math.abs((o.x - p.x) * dy - (o.y - p.y) * dx);
@@ -364,7 +432,7 @@
           let target = null;
           let bd = Infinity;
           for (const o of this.alive()) {
-            if (o.id === p.id) continue;
+            if (this.ally(o.id, p.id)) continue;
             const d = len(o.x - tx, o.y - ty);
             if (d < bd) { bd = d; target = o.id; }
           }
@@ -518,7 +586,7 @@
     // Damage that falls off from the centre (meteor, scourge, explosions).
     damageArea(src, x, y, r, { amount, amountMin = amount, kbMin = 1, kbMax = 1 }) {
       for (const o of this.alive()) {
-        if (src && o.id === src.id) continue;
+        if (src && this.ally(o.id, src.id)) continue;
         const d = len(o.x - x, o.y - y);
         if (d > r + RADIUS) continue;
         const f = Math.min(1, d / r);
@@ -532,8 +600,14 @@
       p.hp = 0;
       p.vx = p.vy = 0;
       p.mods = {};
-      const killer = p.lastHit && this.time - p.lastHit.t < 8 ? this.pawn(p.lastHit.id) : null;
-      if (killer && killer.id !== p.id) killer.kills++;
+      let killer = p.lastHit && this.time - p.lastHit.t < 8 ? this.pawn(p.lastHit.id) : null;
+      if (killer && this.ally(killer.id, p.id)) killer = null;
+      if (killer) killer.kills++;
+      if (this.mode === 'dm') {
+        // A kill scores 1 for every player on the killer's team; respawn in 10 s.
+        if (killer) for (const q of this.pawns) if (q.team === killer.team) q.score++;
+        if (!p.left) p.respawnAt = this.time + DM_RESPAWN;
+      }
       this.fx({ e: 'death', id: p.id, x: p.x, y: p.y, by: killer ? killer.id : null });
     }
 
@@ -548,7 +622,7 @@
       }
       if (this.phase === 'roundEnd') {
         if (this.phaseLeft <= 0) {
-          if (this.round >= this.rounds) this.finish();
+          if (this.gameOver()) this.finish();
           else this.toShop();
         }
         return;
@@ -578,15 +652,28 @@
           }
         }
       }
-      // Last warlock standing wins the round.
+      if (this.mode === 'dm') {
+        // Respawns, and the end of each 60 s round.
+        for (const p of this.pawns) if (p.dead && !p.left && p.respawnAt && this.time >= p.respawnAt) this.spawnAt(p);
+        if (this.phaseLeft <= 0) {
+          for (const p of this.pawns) p.cash += CASH_ROUND;
+          this.fx({ e: 'roundEnd', round: this.round, winner: null, dm: 1 });
+          if (this.gameOver()) this.finish();
+          else this.nextDmRound();
+        }
+        return;
+      }
+      // Last team standing wins the round: everyone in it scores.
       const alive = this.alive();
-      if (alive.length <= 1) {
-        const winner = alive[0] || null;
-        if (winner) winner.score++;
+      const teamsAlive = new Set(alive.map((p) => p.team));
+      if (teamsAlive.size <= 1) {
+        const team = alive.length ? alive[0].team : null;
+        if (team !== null) for (const p of this.pawns) if (p.team === team && !p.left) p.score++;
         for (const p of this.pawns) p.cash += CASH_ROUND;
         this.phase = 'roundEnd';
         this.phaseLeft = 3;
-        this.fx({ e: 'roundEnd', round: this.round, winner: winner ? winner.id : null });
+        const winners = team === null ? [] : this.pawns.filter((p) => p.team === team && !p.left).map((p) => p.id);
+        this.fx({ e: 'roundEnd', round: this.round, winner: winners.length === 1 ? winners[0] : null, team, winners });
       }
     }
 
@@ -698,8 +785,9 @@
           if (d >= 2 * RADIUS || d < 1e-6) continue;
           const [nx, ny] = [dx / d, dy / d];
           // Thrust hits: damage scaled by speed, knockback 1.2, thrust ends.
+          const foes = !this.ally(p.id, q.id);
           for (const [s, t, sx, sy] of [[p, q, nx, ny], [q, p, -nx, -ny]]) {
-            if (!s.mods.thrust) continue;
+            if (!s.mods.thrust || !foes) continue;
             if (t.mods.shield) {
               s.vx = -s.vx;
               s.vy = -s.vy;
@@ -717,7 +805,7 @@
           }
           // Windwalk hits: damage, knockback 1, invisibility ends.
           for (const [s, t, sx, sy] of [[p, q, nx, ny], [q, p, -nx, -ny]]) {
-            if (!s.mods.windwalk) continue;
+            if (!s.mods.windwalk || !foes) continue;
             const dmg = s.mods.windwalk.dmg;
             delete s.mods.windwalk;
             this.damage(t, s, dmg, sx, sy, 1);
@@ -759,11 +847,11 @@
         // Movement per kind.
         if (b.k === 'homing') {
           const t = this.pawn(b.target);
-          if (!t || t.dead || t.id === b.owner) {
+          if (!t || t.dead || this.ally(t.id, b.owner)) {
             let bd = Infinity;
             b.target = null;
             for (const o of this.alive()) {
-              if (o.id === b.owner) continue;
+              if (this.ally(o.id, b.owner)) continue;
               const d = len(o.x - b.x, o.y - b.y);
               if (d < bd) { bd = d; b.target = o.id; }
             }
@@ -856,7 +944,7 @@
         } else if (b.k === 'gravity') {
           // Pulls enemies (and other spells) towards it and burns those close by.
           for (const o of this.alive()) {
-            if (o.id === b.owner) continue;
+            if (this.ally(o.id, b.owner)) continue;
             const d = len(o.x - b.x, o.y - b.y);
             if (d < 550) {
               const [ux, uy] = norm(b.x - o.x, b.y - o.y);
@@ -879,7 +967,7 @@
           if (b.tick >= 0.2) {
             b.tick -= 0.2;
             for (const o of this.alive()) {
-              if (o.id !== b.owner && len(o.x - b.x, o.y - b.y) <= 250) this.damage(o, owner, b.dps * 0.2, 0, 0, 1, { noKb: true });
+              if (!this.ally(o.id, b.owner) && len(o.x - b.x, o.y - b.y) <= 250) this.damage(o, owner, b.dps * 0.2, 0, 0, 1, { noKb: true });
             }
           }
         } else if (b.k === 'linked') {
@@ -899,7 +987,7 @@
         if (!['meteor', 'linked', 'spawner', 'drainHeal', 'rechargeBack'].includes(b.k)) {
           for (const o of this.alive()) {
             const m = o.mods.magnet;
-            if (!m || o.id === b.owner) continue;
+            if (!m || this.ally(o.id, b.owner)) continue;
             const d = len(o.x - b.x, o.y - b.y);
             if (d > 300) continue;
             const [ux, uy] = norm(o.x - b.x, o.y - b.y);
@@ -919,7 +1007,7 @@
         // Alteration: a warlock trades places with an enemy spell coming at it.
         if (!ghost && !gone && b.k !== 'gravity') {
           for (const o of this.alive()) {
-            if (!o.mods.alteration || o.id === b.owner) continue;
+            if (!o.mods.alteration || this.ally(o.id, b.owner)) continue;
             const dx = b.x - o.x;
             const dy = b.y - o.y;
             if (len(dx, dy) > SPELLS.alteration.radius + b.r || b.vx * dx + b.vy * dy >= 0) continue;
@@ -937,7 +1025,7 @@
         // Shields turn enemy spells around and make them the shield owner's.
         if (!ghost && b.k !== 'swap') {
           for (const o of this.alive()) {
-            if (!o.mods.shield || o.id === b.owner || b.shielded === o.id) continue;
+            if (!o.mods.shield || this.ally(o.id, b.owner) || b.shielded === o.id) continue;
             const d = len(b.x - o.x, b.y - o.y);
             if (d <= o.mods.shield.r) {
               const [nx, ny] = norm(b.x - o.x, b.y - o.y);
@@ -999,6 +1087,33 @@
           for (const o of this.alive()) {
             const self = o.id === b.owner;
             if (self && !(b.k === 'bouncer' && b.prev) && !(b.k === 'magnet' && b.bounced)) continue;
+            // Team mates: most spells pass through; a few help them instead.
+            if (!self && this.ally(o.id, b.owner) && !['swap', 'link'].includes(b.k)) {
+              if (len(o.x - b.x, o.y - b.y) > b.r + RADIUS) continue;
+              if (b.k === 'drain') {
+                o.hp = Math.min(this.maxHp(o), o.hp + b.dmg);
+                o.mods.hasted = { t: b.dur, v: 50 };
+                this.fx({ e: 'heal', id: o.id, n: Math.round(b.dmg) });
+                gone = true;
+                break;
+              }
+              if (b.k === 'homing') {
+                // Bursts at the ally, hurting enemies around, and speeds the ally up.
+                const thrusting = !!o.mods.thrust;
+                this.damageArea(owner, b.x, b.y, SPELLS.homing.explode * (thrusting ? 1.05 : 1), { amount: b.dmg, amountMin: 0, kbMin: 0.9, kbMax: 0.9 });
+                o.mods.hasted = { t: 4, v: thrusting ? 120 : 50 };
+                this.fx({ e: 'boom', k: 'homing', x: b.x, y: b.y });
+                gone = true;
+                break;
+              }
+              if (b.k === 'magnet') {
+                o.mods.magnet = { t: b.dur, sign: -1 };
+                this.fx({ e: 'magnet', id: o.id, sign: -1 });
+                gone = true;
+                break;
+              }
+              continue;
+            }
             if (b.hits.includes(o.id) && b.k !== 'bouncer' && b.k !== 'snowball') continue;
             if (b.k === 'bouncer' && b.prev === o.id) continue;
             if (len(o.x - b.x, o.y - b.y) > b.r + RADIUS) continue;
@@ -1071,7 +1186,7 @@
               let next = null;
               let bd = Infinity;
               for (const q of this.alive()) {
-                if (q.id === o.id) continue;
+                if (q.id === o.id || this.ally(q.id, b.owner)) continue;
                 const d = len(q.x - b.x, q.y - b.y);
                 if (d < bd) { bd = d; next = q; }
               }
@@ -1095,7 +1210,7 @@
         // Spells hitting spells: both burst. A snowball swallows what hits it.
         if (!gone && !ghost && b.k !== 'swap') {
           for (const q of this.projectiles) {
-            if (q === b || q.ghost || q.dead || ['linked', 'swap', 'spawner', 'drainHeal', 'rechargeBack'].includes(q.k) || q.owner === b.owner) continue;
+            if (q === b || q.ghost || q.dead || ['linked', 'swap', 'spawner', 'drainHeal', 'rechargeBack'].includes(q.k) || this.ally(q.owner, b.owner)) continue;
             if (len(q.x - b.x, q.y - b.y) <= b.r + q.r) {
               if (b.k !== 'snowball') gone = true;
               if (q.k !== 'snowball') q.dead = true;
@@ -1143,7 +1258,8 @@
     finish() {
       this.phase = 'over';
       const order = this.pawns.slice().sort((a, b) => b.score - a.score || b.kills - a.kills || b.dmgDone - a.dmgDone);
-      this.fx({ e: 'over', winner: order[0] ? order[0].id : null });
+      const top = order[0] ? order[0].score : 0;
+      this.fx({ e: 'over', winner: order[0] ? order[0].id : null, winners: this.pawns.filter((p) => p.score === top).map((p) => p.id) });
     }
 
     leave(id) {
@@ -1157,11 +1273,12 @@
     snapshot() {
       const r1 = (v) => Math.round(v * 10) / 10;
       const snap = {
+        mode: this.mode, tmode: this.teamMode, win: this.win, target: this.target,
         t: r1(this.time), ph: this.phase, left: Math.max(0, r1(this.phaseLeft)), round: this.round, rounds: this.rounds, layer: this.layer,
         shrink: r1(SHRINK_PERIOD - this.shrinkAcc),
         p: this.pawns.map((p) => ({
           id: p.id, x: r1(p.x), y: r1(p.y), f: Math.round(p.face * 100) / 100, hp: Math.round(p.hp), mx: this.maxHp(p), dp: Math.round(p.dp), d: p.dead ? 1 : 0, l: p.left ? 1 : 0,
-          sc: p.score, k: p.kills, c: p.cash, cast: p.casting && !p.casting.turning ? 1 : 0,
+          sc: p.score, k: p.kills, c: p.cash, tm: p.team, rs: p.dead && p.respawnAt ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0, cast: p.casting && !p.casting.turning ? 1 : 0,
           cs: p.casting && !p.casting.turning ? p.spells[p.casting.slot].key : '',
           cp: p.casting && !p.casting.turning && p.casting.total ? r1(1 - p.casting.t / p.casting.total) : 0,
           mv: p.move ? 1 : 0,
@@ -1194,7 +1311,7 @@
   }
 
   const Warlock = {
-    Sim, SPELLS, ITEMS, COLUMN_SPELLS, COLORS, OBSTACLE_HP, TICK, TILE, LAYER_RADIUS, RADIUS, MAX_HP, SHOP_TIME, SHRINK_PERIOD, lv,
+    Sim, SPELLS, ITEMS, COLUMN_SPELLS, COLORS, TEAM_COLORS, DM_ROUND_TIME, OBSTACLE_HP, TICK, TILE, LAYER_RADIUS, RADIUS, MAX_HP, SHOP_TIME, SHRINK_PERIOD, lv,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Warlock;
   else root.Warlock = Warlock;

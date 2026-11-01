@@ -18,9 +18,11 @@
       <div class="lobby-sub" id="lobbySub"></div>
       <ul class="lobby-list" id="lobbyList"></ul>
       <div class="lobby-opts hidden" id="lobbyOpts">
-        <span data-t="Rounds"></span>
-        <div class="seg" id="roundsSeg"></div>
+        <div class="opt-row"><span data-t="Mode"></span><div class="seg" id="modeSeg"></div></div>
+        <div class="opt-row"><span data-t="Teams"></span><div class="seg" id="teamSeg"></div></div>
+        <div class="opt-row"><span data-t="Win"></span><div class="seg" id="winSeg"></div><div class="seg" id="roundsSeg"></div></div>
       </div>
+      <div class="lobby-rules" id="lobbyRules"></div>
       <button class="big-btn hidden" id="btnStart"></button>
       <div class="lobby-help" id="lobbyHelp"></div>
     </div>
@@ -28,7 +30,7 @@
 
   <!-- In-game HUD -->
   <div class="hud hidden" id="hud">
-    <div class="top-bar"><span id="roundInfo"></span><span id="phaseInfo"></span></div>
+    <div class="top-bar"><span id="roundInfo"></span><span id="phaseInfo"></span><button class="shop-btn hidden" id="btnShop"></button></div>
     <div class="scores" id="scores"></div>
     <div class="feed" id="feed"></div>
     <div class="banner hidden" id="banner"></div>

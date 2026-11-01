@@ -762,6 +762,8 @@ export class View {
 
   updatePawns(s, prev, k, me, names, dt) {
     const alive = new Set();
+    const myTeam = (s.p.find((q) => q.id === me) || {}).tm;
+    const teamGame = new Set(s.p.map((q) => q.tm)).size < s.p.length;
     s.p.forEach((p, idx) => {
       alive.add(p.id);
       let w = this.pawns.get(p.id);
@@ -799,7 +801,7 @@ export class View {
       w.circle.material.opacity = p.id === me ? 0.95 : 0.55;
       w.sel.visible = this.selected === p.id;
       if (w.sel.visible) {
-        w.sel.material.uniforms.uColor.value.set(p.id === me ? '#40ff60' : '#ff3a2a');
+        w.sel.material.uniforms.uColor.value.set(p.id === me || p.tm === myTeam ? '#40ff60' : '#ff3a2a');
         w.sel.material.uniforms.uAlpha.value = 0.75 + 0.25 * Math.sin(this.time * 6);
       }
       if (onLava && Math.random() < dt * 40) this.fire.add({ p: [tx + rand(-28, 28), rand(0, 30), ty + rand(-28, 28)], v: [rand(-20, 20), rand(120, 260), rand(-20, 20)], c0: col('#ffd070'), c1: col('#c02000'), size: rand(22, 36), size1: 6, life: rand(0.4, 0.7), tile: TILE_FLAME, drag: 0.95 });
@@ -831,11 +833,14 @@ export class View {
       const [lx, ly] = this.toScreen(tx, ty, (onLava ? -12 : 0) + (w.model ? MODEL_HEIGHT + 30 : 152 * MODEL_SCALE));
       w.label.style.transform = `translate(${lx.toFixed(1)}px, ${ly.toFixed(1)}px) translate(-50%, -100%)`;
       const f = Math.max(0, p.hp / p.mx);
-      const lk = `${names[p.id] || ''}|${p.hp}|${p.dp}|${p.id === me}`;
+      const lk = `${names[p.id] || ''}|${p.hp}|${p.dp}|${p.id === me}|${p.tm}|${myTeam}|${teamGame}`;
       if (w.label.dataset.k !== lk) {
         w.label.dataset.k = lk;
-        w.label.firstChild.textContent = names[p.id] || '';
+        const ally = p.id !== me && p.tm === myTeam;
+        w.label.firstChild.innerHTML = `${teamGame ? `<span class="tm" style="background:${window.Warlock.TEAM_COLORS[p.tm % 10]}"></span>` : ''}${(names[p.id] || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))}`;
         w.label.classList.toggle('me', p.id === me);
+        w.label.classList.toggle('ally', ally);
+        w.label.classList.toggle('enemy', p.id !== me && !ally);
         const bar = w.label.querySelector('i');
         bar.style.width = `${f * 100}%`;
         bar.style.background = f > 0.5 ? 'linear-gradient(#7fe88a,#2fa846)' : f > 0.25 ? 'linear-gradient(#ffe070,#d29a10)' : 'linear-gradient(#ff7a6a,#c02018)';

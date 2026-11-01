@@ -24,7 +24,13 @@ let info = null;
 let isHost = false;
 let me = null;
 let players = []; // lobby: [{ id, name }]
-let rounds = 5;
+let rounds = 5; // the number of rounds, or the score to reach
+// Host's game settings, as in Warlock Brawl's lobby.
+let settings = { mode: 'rounds', teams: 'shuffle', win: 'rounds' };
+let lobbyTeams = {}; // 'Teams' mode: player id -> team index
+const TEAM_NAMES = ['Red', 'Blue', 'Green', 'Yellow'];
+const teamName = (i) => t(TEAM_NAMES[i] || 'Team {n}', { n: i + 1 });
+const teamColor = (i) => Warlock.TEAM_COLORS[i % 10];
 let started = false;
 let sim = null;
 let snaps = []; // last two snapshots, for smooth movement
@@ -42,11 +48,31 @@ function renderLobby() {
   $('lobbySub').textContent = isHost
     ? t('Players join from the group chat. Start when everyone is in.')
     : started ? t('The match has started.') : t('Waiting for {name} to start the match…', { name: info.hostName });
-  const list = players.map((p, i) => `<li><i style="color:${Warlock.COLORS[i % 10]};background:${Warlock.COLORS[i % 10]}"></i>${esc(p.name)}${p.id === info.host ? `<small>${esc(t('Host'))}</small>` : ''}</li>`).join('');
+  const picking = settings.teams === 'lobby';
+  players.forEach((p, i) => { if (!Number.isInteger(lobbyTeams[p.id])) lobbyTeams[p.id] = i % 2; });
+  const chip = (p) => {
+    const tm = lobbyTeams[p.id];
+    const style = `style="background:${teamColor(tm)}"`;
+    return isHost ? `<button class="team" data-team="${esc(p.id)}" ${style} title="${esc(t('Click to change team'))}">${esc(teamName(tm))}</button>` : `<span class="team" ${style}>${esc(teamName(tm))}</span>`;
+  };
+  const list = players.map((p, i) => `<li><i style="color:${Warlock.COLORS[i % 10]};background:${Warlock.COLORS[i % 10]}"></i>${esc(p.name)}${picking ? chip(p) : ''}${p.id === info.host ? `<small>${esc(t('Host'))}</small>` : ''}</li>`).join('');
   if ($('lobbyList').dataset.html !== list) { $('lobbyList').innerHTML = list; $('lobbyList').dataset.html = list; }
   $('lobbyOpts').classList.toggle('hidden', !isHost);
   const seg = [3, 5, 7, 11].map((n) => `<button data-r="${n}" class="${n === rounds ? 'on' : ''}">${n}</button>`).join('');
   if ($('roundsSeg').dataset.html !== seg) { $('roundsSeg').innerHTML = seg; $('roundsSeg').dataset.html = seg; }
+  const opts = (id, key, list) => {
+    const html = list.map(([v, label]) => `<button class="wide${settings[key] === v ? ' on' : ''}" data-set="${key}" data-v="${v}">${esc(label)}</button>`).join('');
+    if ($(id).dataset.html !== html) { $(id).innerHTML = html; $(id).dataset.html = html; }
+  };
+  opts('modeSeg', 'mode', [['rounds', t('Rounds')], ['dm', t('Deathmatch')]]);
+  opts('teamSeg', 'teams', [['shuffle', t('Shuffle')], ['ffa', t('Free for all')], ['lobby', t('Pick teams')]]);
+  opts('winSeg', 'win', [['rounds', t('Rounds')], ['score', t('Score')]]);
+  const rules = [
+    settings.mode === 'dm' ? t('Deathmatch: 60 s rounds, respawn after 10 s, 1 point per kill, the shop stays open.') : t('Rounds: the last team standing wins the round.'),
+    { shuffle: t('Random teams every round.'), ffa: t('Everyone for themselves.'), lobby: t('The host picks the teams.') }[settings.teams],
+    settings.win === 'score' ? t('First to {n} points wins.', { n: rounds }) : t('{n} rounds; most points wins.', { n: rounds }),
+  ].join(' ');
+  $('lobbyRules').textContent = rules;
   $('btnStart').classList.toggle('hidden', !isHost);
   $('btnStart').disabled = players.length < 2;
   $('btnStart').textContent = players.length < 2 ? t('Waiting for players…') : t('Start the match ({n} players)', { n: players.length });
@@ -58,18 +84,33 @@ function renderLobby() {
 
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
+const lobbyMsg = () => ({ kind: 'wl-lobby', players, rounds, settings, lobbyTeams });
 $('roundsSeg').addEventListener('click', (e) => {
   const b = e.target.closest('[data-r]');
   if (!b) return;
   rounds = Number(b.dataset.r);
   renderLobby();
-  toAll({ kind: 'wl-lobby', players, rounds });
+  toAll(lobbyMsg());
+});
+$('lobbyOpts').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-set]');
+  if (!b || !isHost) return;
+  settings[b.dataset.set] = b.dataset.v;
+  renderLobby();
+  toAll(lobbyMsg());
+});
+$('lobbyList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-team]');
+  if (!b || !isHost) return;
+  lobbyTeams[b.dataset.team] = ((lobbyTeams[b.dataset.team] || 0) + 1) % TEAM_NAMES.length;
+  renderLobby();
+  toAll(lobbyMsg());
 });
 
 $('btnStart').addEventListener('click', () => {
   if (!isHost || players.length < 2 || started) return;
   started = true;
-  sim = new Warlock.Sim(players, { rounds, seed: Math.floor(Math.random() * 2 ** 31) });
+  sim = new Warlock.Sim(players, { ...settings, target: rounds, lobbyTeams, seed: Math.floor(Math.random() * 2 ** 31) });
   sim.start();
   toAll({ kind: 'wl-start' });
   enterGame();
@@ -113,7 +154,7 @@ function postResults(snap) {
   if (posted) return;
   posted = true;
   const order = snap.p.slice().sort((a, b) => b.sc - a.sc || b.k - a.k);
-  const lines = order.map((p, i) => `${['🥇', '🥈', '🥉'][i] || `${i + 1}.`} ${names[p.id] || '?'} – ${t('{n} rounds', { n: p.sc })}, ${t('{n} kills', { n: p.k })}`);
+  const lines = order.map((p, i) => `${['🥇', '🥈', '🥉'][i] || `${i + 1}.`} ${names[p.id] || '?'} – ${t('{n} points', { n: p.sc })}, ${t('{n} kills', { n: p.k })}`);
   api.warlockResult(conv, gameId, `🔥 Warlock – ${t('{name} wins!', { name: names[order[0].id] || '?' })}\n${lines.join('\n')}`).catch(() => {});
 }
 
@@ -132,13 +173,13 @@ api.on(({ type, payload }) => {
           Sfx.play('notify');
         }
         renderLobby();
-        toAll({ kind: 'wl-lobby', players, rounds });
+        toAll(lobbyMsg());
         break;
       case 'wl-leave':
         if (!started) {
           players = players.filter((p) => p.id !== from);
           renderLobby();
-          toAll({ kind: 'wl-lobby', players, rounds });
+          toAll(lobbyMsg());
         } else if (sim) sim.leave(from);
         break;
       case 'wl-in':
@@ -161,6 +202,8 @@ api.on(({ type, payload }) => {
       players = Array.isArray(d.players) ? d.players : [];
       for (const p of players) names[p.id] = p.name;
       rounds = d.rounds || rounds;
+      if (d.settings) settings = d.settings;
+      if (d.lobbyTeams) lobbyTeams = d.lobbyTeams;
       renderLobby();
       break;
     case 'wl-start':
@@ -353,7 +396,7 @@ function effect(e, s) {
       break;
     case 'fight':
       EndFx.close();
-      banner(t('FIGHT!'), t('Round {n}', { n: e.round }));
+      banner(t('FIGHT!'), e.dm && e.round > 1 ? t('Round {n} – new teams and obstacles', { n: e.round }) : t('Round {n}', { n: e.round }));
       Sfx.play('wlHorn');
       break;
     case 'shop':
@@ -361,17 +404,25 @@ function effect(e, s) {
       Sfx.play('notify');
       break;
     case 'roundEnd': {
-      const w = e.winner;
-      banner(w === me ? t('ROUND WON!') : w ? t('{name} wins the round', { name: names[w] || '?' }) : t('Nobody survived'), '', 2600);
-      Sfx.play(w === me ? 'roundWin' : 'roundLose');
+      if (e.dm) {
+        banner(t('Round {n} over', { n: e.round }), t('+{n} gold', { n: 10 }), 2200);
+        Sfx.play('roundWin');
+        break;
+      }
+      const wins = e.winners || (e.winner ? [e.winner] : []);
+      const mine = wins.includes(me);
+      const text = mine ? t('ROUND WON!') : wins.length > 1 ? t('{team} team wins the round', { team: teamName(e.team) }) : wins.length ? t('{name} wins the round', { name: names[wins[0]] || '?' }) : t('Nobody survived');
+      banner(text, wins.length > 1 ? wins.map((id) => names[id] || '?').join(' + ') : '', 2600);
+      Sfx.play(mine ? 'roundWin' : 'roundLose');
       break;
     }
     case 'over': {
       const order = s.p.slice().sort((a, b) => b.sc - a.sc || b.k - a.k);
-      const won = order[0] && order[0].id === me;
+      const wins = e.winners || [order[0] && order[0].id];
+      const won = wins.includes(me);
       EndFx.show({
         outcome: won ? 'win' : 'lose',
-        title: won ? t('You won!') : t('{name} wins!', { name: names[order[0].id] || '?' }),
+        title: won ? t('You won!') : t('{name} wins!', { name: wins.map((id) => names[id] || '?').join(' + ') }),
         detail: order.map((p) => `${names[p.id] || '?'} ${p.sc}`).join(' · '),
         buttons: [{ label: t('Close'), primary: true, action: () => window.close() }],
       });
@@ -410,18 +461,32 @@ function myPawn(s) { return s && s.p.find((p) => p.id === me); }
 
 function renderHud(s) {
   const p = myPawn(s);
-  $('roundInfo').textContent = s.round ? t('Round {n} of {m}', { n: s.round, m: s.rounds }) : t('Get ready');
+  const dm = s.mode === 'dm';
+  const goal = s.win === 'score' ? t('first to {n}', { n: s.target }) : null;
+  $('roundInfo').textContent = !s.round ? t('Get ready')
+    : goal ? `${t('Round {n}', { n: s.round })} · ${goal}` : t('Round {n} of {m}', { n: s.round, m: s.rounds });
+  const clock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
   $('phaseInfo').textContent = s.ph === 'shop' ? t('Shop closes in {n} s', { n: Math.ceil(s.left) })
-    : s.ph === 'fight' ? (s.layer > 1 ? t('Platform sinks in {n} s', { n: Math.ceil(s.shrink) }) : t('Last tile!'))
+    : s.ph === 'fight' ? (dm ? `⏱ ${clock(Math.ceil(s.left))}` : '') + (dm ? ' · ' : '') + (s.layer > 1 ? t('Platform sinks in {n} s', { n: Math.ceil(s.shrink) }) : t('Last tile!'))
       : s.ph === 'over' ? t('Match over') : '';
+  // Scoreboard, grouped by team when there are teams.
   const order = s.p.slice().sort((a, b) => b.sc - a.sc || b.k - a.k);
-  $('scores').innerHTML = order.map((q) => `<div class="row${q.d && s.ph === 'fight' ? ' dead' : ''}"><i style="background:${colorOf(q.id, s)}"></i>${esc(names[q.id] || '?')}${q.id === me ? ' ★' : ''}<small>${q.k}💀</small><b>${q.sc}</b></div>`).join('');
+  const row = (q) => `<div class="row${q.d && s.ph === 'fight' ? ' dead' : ''}" style="border-left-color:${teamColor(q.tm)}"><i style="background:${colorOf(q.id, s)}"></i>${esc(names[q.id] || '?')}${q.id === me ? ' ★' : ''}<small>${q.d && q.rs ? `⟳${q.rs}` : `${q.k}💀`}</small><b>${q.sc}</b></div>`;
+  const teamsOf = [...new Set(s.p.map((q) => q.tm))];
+  const grouped = teamsOf.length < s.p.length;
+  $('scores').innerHTML = grouped
+    ? teamsOf.sort((a, b) => a - b).map((tm) => `<div class="team-head" style="background:${teamColor(tm)}33;color:${teamColor(tm)}">${esc(teamName(tm))}</div>${order.filter((q) => q.tm === tm).map(row).join('')}`).join('')
+    : order.map(row).join('');
+  // Deathmatch: the shop stays open; B (or F4) opens it.
+  $('btnShop').classList.toggle('hidden', !(dm && s.ph === 'fight'));
+  $('btnShop').textContent = `🛒 ${t('Shop')} (B)`;
   // The panel shows the selected hero (yourself unless you clicked another warlock).
   let u = s.p.find((q) => q.id === selId());
   if (!u || u.l || (u.id !== me && u.d)) { selected = null; if (view) view.selected = me; u = p; }
   renderCard(s, u);
-  const inShop = s.ph === 'shop';
+  const inShop = s.ph === 'shop' || (dm && s.ph === 'fight' && shopOpen);
   $('shop').classList.toggle('hidden', !inShop);
+  $('btnReady').classList.toggle('hidden', s.ph !== 'shop');
   if (inShop) renderShop(s, p);
 }
 
@@ -431,7 +496,7 @@ function renderCard(s, u) {
   const mine = u.id === me;
   $('card').classList.toggle('enemy', !mine);
   $('hpFill').style.width = `${Math.max(0, (u.hp / u.mx) * 100)}%`;
-  $('hpText').textContent = u.d ? t('Dead – wait for the next round') : `${u.hp} / ${u.mx}`;
+  $('hpText').textContent = u.d ? (u.rs ? t('Respawn in {n} s', { n: u.rs }) : t('Dead – wait for the next round')) : `${u.hp} / ${u.mx}`;
   $('uStats').innerHTML = `<span>${esc(t('Knockback'))} <b>+${Math.round(u.dp / 10)}%</b></span><span>💀 ${u.k}</span><span>🏆 ${u.sc}</span>`;
   const inv = inventory(u);
   const key = JSON.stringify([u.id, u.sp, inv]);
@@ -474,10 +539,20 @@ function updateCooldowns(s, now) {
 }
 
 let readySent = false;
+let shopOpen = false;
+$('btnShop').addEventListener('click', () => { shopOpen = !shopOpen; if (lastSnap) renderHud(lastSnap); });
+document.addEventListener('keydown', (e) => {
+  if (!started || e.repeat || !lastSnap || lastSnap.mode !== 'dm') return;
+  if (e.code === 'KeyB' || e.code === 'F4' || (e.code === 'Escape' && shopOpen)) {
+    e.preventDefault();
+    shopOpen = e.code === 'Escape' ? false : !shopOpen;
+    renderHud(lastSnap);
+  }
+});
 function renderShop(s, p) {
   if (!p) return;
   $('gold').textContent = `💰 ${p.c}`;
-  $('shopTime').textContent = t('Next round in {n} s', { n: Math.ceil(s.left) });
+  $('shopTime').textContent = s.ph === 'shop' ? t('Next round in {n} s', { n: Math.ceil(s.left) }) : t('Open all match – B closes it');
   const cols = [1, 2, 3, 4, 5, 6];
   const html = cols.map((col) => {
     const owned = p.sp[col];
