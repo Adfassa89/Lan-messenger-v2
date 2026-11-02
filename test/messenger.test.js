@@ -158,3 +158,16 @@ test('starting with Windows is on by default, also after updating from an older 
   const again = new Messenger({ dataDir: dir, broadcast: false });
   assert.strictEqual(again.settings.startWithWindows, false);
 });
+
+test('Mongolian is the default language, also once after updating from an older version', () => {
+  const fresh = new Messenger({ dataDir: tmpDir('mn1'), broadcast: false });
+  assert.strictEqual(fresh.settings.language, 'mn');
+  const dir = tmpDir('mn2');
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ id: 'y', name: 'Old', settings: { language: 'en' } }));
+  const upgraded = new Messenger({ dataDir: dir, broadcast: false });
+  assert.strictEqual(upgraded.settings.language, 'mn');
+  upgraded.setSettings({ language: 'en' });
+  upgraded.store.flush();
+  const again = new Messenger({ dataDir: dir, broadcast: false });
+  assert.strictEqual(again.settings.language, 'en', 'a later choice of English is kept');
+});

@@ -38,7 +38,7 @@ function defaultSettings(downloadDir) {
   return {
     theme: 'system',
     style: 'indigo',
-    language: 'en',
+    language: 'mn',
     downloadDir,
     autoAccept: true,
     autoAcceptMaxMB: 100,
@@ -133,6 +133,12 @@ class Messenger extends EventEmitter {
     if (!config.autostartDefaulted) {
       config.settings.startWithWindows = true;
       config.autostartDefaulted = true;
+    }
+    // Mongolian became the default language in 2.23: switch it on once for
+    // people who installed an earlier version (they can choose English again).
+    if (!config.mongolianDefaulted) {
+      config.settings.language = 'mn';
+      config.mongolianDefaulted = true;
     }
     if (!Array.isArray(config.manualPeers)) config.manualPeers = [];
     this.store.set('config', config);

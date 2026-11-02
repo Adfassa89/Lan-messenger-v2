@@ -1,4 +1,4 @@
-/* global S, api, t, esc, fmtSize, fmtWhen, extLabel, IMAGE_RE, convName, peerName, lightbox, jumpTo, openConv, call, el, toast */
+/* global isAtBottom, S, api, t, esc, fmtSize, fmtWhen, extLabel, IMAGE_RE, convName, peerName, lightbox, jumpTo, openConv, call, el, toast */
 // Slide-in panel on the right with two views:
 //  - Files: everything shared in the open chat (photos as a grid, other files as a list).
 //  - Downloads: every file received from anyone, like a browser's download list,
@@ -12,24 +12,41 @@ const FilesPanel = (() => {
   let reloadTimer = null;
   const panel = () => document.getElementById('sidePanel');
 
+  // The chat narrows or widens when the panel opens or closes; stay at the newest message.
+  function keepBottom(fn) {
+    const box = document.getElementById('messages');
+    const stick = box && isAtBottom(box);
+    fn();
+    if (stick) requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; });
+  }
+
   function open(m, c) {
+    keepBottom(() => openNow(m, c));
+  }
+
+  function openNow(m, c) {
     mode = m;
     conv = c || null;
     tab = 'all';
     query = '';
     const p = panel();
     p.classList.remove('hidden');
-    p.classList.remove('closing');
+    document.body.classList.add('panel-open');
     p.innerHTML = '';
     reload();
   }
 
   function close() {
     if (!mode) return;
+    keepBottom(closeNow);
+  }
+
+  function closeNow() {
     mode = null;
     const p = panel();
-    p.classList.add('closing');
-    setTimeout(() => { if (!mode) { p.classList.add('hidden'); p.classList.remove('closing'); p.innerHTML = ''; } }, 180);
+    p.classList.add('hidden');
+    p.innerHTML = '';
+    document.body.classList.remove('panel-open');
   }
 
   function toggle(m, c) {

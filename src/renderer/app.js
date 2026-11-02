@@ -2309,6 +2309,14 @@ function wire() {
   });
 
   window.addEventListener('focus', () => { markReadIfVisible(); });
+  // Resizing the window (or opening the Files / Downloads panel) narrows the
+  // chat; if you were at the newest message, stay there.
+  {
+    const mbox = $('#messages');
+    let atEnd = true;
+    mbox.addEventListener('scroll', () => { atEnd = isAtBottom(mbox); }, { passive: true });
+    new ResizeObserver(() => { if (atEnd) mbox.scrollTop = mbox.scrollHeight; }).observe(mbox);
+  }
   setInterval(() => { renderList(); if (S.active) renderHeader(); }, 60000);
 }
 
