@@ -32,6 +32,7 @@
   // Meat Hook (pudge_wars_custom_hook) and its four upgrades, 10 levels each,
   // one ability point per level gained.
   const HOOK = { damage: 250, range: 1500, speed: 800, radius: 100, cd: 3, cast: 0.3 };
+  const HOOK_SPEEDS = [800, 1200, 1450]; // Original, Fast, as fast as Dota's own Pudge
   const UPGRADES = { damage: 35, range: 175, speed: 70, radius: 15 };
   const UPGRADE_MAX = 10;
   // Butcher's Cleaver (pudge_wars_cleaver).
@@ -85,8 +86,10 @@
 
   class Sim {
     // players: [{ id, name, team }]; options: { target (score to win), seed }
-    constructor(players, { target = 50, seed = 1 } = {}) {
+    // hookSpeed: the hook's starting speed, a lobby setting (800 as in the original).
+    constructor(players, { target = 50, seed = 1, hookSpeed = HOOK.speed } = {}) {
       this.target = target;
+      this.hookBase = HOOK_SPEEDS.includes(hookSpeed) ? hookSpeed : HOOK.speed;
       this.rand = mulberry(seed);
       this.time = 0;
       this.phase = 'pre'; // pre | fight | over
@@ -135,7 +138,7 @@
       return s;
     }
     hookStats(p) {
-      let speed = HOOK.speed + UPGRADES.speed * p.up.speed;
+      let speed = this.hookBase + UPGRADES.speed * p.up.speed;
       if (p.mods.slowRune) speed -= 300;
       if (p.mods.haste) speed += 400;
       return {
@@ -973,7 +976,7 @@
       const r1 = (v) => Math.round(v * 10) / 10;
       const r0 = Math.round;
       const snap = {
-        t: r1(this.time), ph: this.phase, left: r1(Math.max(0, this.phaseLeft)), score: this.score, target: this.target,
+        t: r1(this.time), ph: this.phase, left: r1(Math.max(0, this.phaseLeft)), score: this.score, target: this.target, hs: this.hookBase,
         rune: r1(RUNE_EVERY - this.runeAcc),
         p: this.pawns.map((p) => ({
           id: p.id, tm: p.team, x: r1(p.x), y: r1(p.y), z: r0(p.z), f: Math.round(p.face * 100) / 100, hp: r0(p.hp), mx: this.maxHp(p),
@@ -1014,7 +1017,7 @@
   }
 
   const PudgeWars = {
-    Sim, TICK, HOOK, UPGRADES, TRAPS, PLATE, UPGRADE_MAX, CLEAVER, ITEMS, RUNES, TEAM_NAMES, COLORS, XP_TABLE,
+    Sim, TICK, HOOK, HOOK_SPEEDS, UPGRADES, TRAPS, PLATE, UPGRADE_MAX, CLEAVER, ITEMS, RUNES, TEAM_NAMES, COLORS, XP_TABLE,
     WALL_X, WALL_Y, WALK_X, WALK_Y, RIVER, CENTER, RADIUS, RESPAWN, lv,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = PudgeWars;

@@ -71,6 +71,7 @@ const CHANNELS = {
   createWarlock: 'create-warlock',
   openWarlock: 'open-warlock',
   warlockInfo: 'warlock-info',
+  arenaAvatars: 'arena-avatars',
   warlockResult: 'warlock-result',
   tetrisInfo: 'tetris-info',
   callInfo: 'call-info',

@@ -229,6 +229,14 @@ const Game = (() => {
 
   // ------------------------------------------------------------------ chat card
   function cardHtml(msg) {
+    if (msg.game.type === 'thirteen') {
+      const host = msg.from === S.me.id ? t('You') : esc(msg.fromName || peerName(msg.from));
+      return `<div class="game-card warlock-card thirteen-card">
+        <div class="wl-card-art"><span>🂡</span></div>
+        <div class="gc-head"><div><b>13</b><div class="gc-players">${esc(t('{name} opened a table of 13 (Big 2). 2 – 4 players.', { name: host }))}</div></div></div>
+        <button class="fbtn wl-join" data-act="game">${esc(t('Join the table'))}</button>
+      </div>`;
+    }
     if (msg.game.type === 'pudgewars') {
       const host = msg.from === S.me.id ? t('You') : esc(msg.fromName || peerName(msg.from));
       return `<div class="game-card warlock-card pudge-card">
@@ -261,7 +269,7 @@ const Game = (() => {
   // ------------------------------------------------------------------ game window
   function show(conv, id) {
     const m = (S.msgs.get(conv) || []).find((x) => x.id === id);
-    if (m && m.game && (m.game.type === 'warlock' || m.game.type === 'pudgewars')) {
+    if (m && m.game && ['warlock', 'pudgewars', 'thirteen'].includes(m.game.type)) {
       call(api.openWarlock(conv, id));
       return;
     }
@@ -870,7 +878,8 @@ const Game = (() => {
     const back = el('div', 'modal-back');
     back.innerHTML = `<div class="modal"><div class="modal-head"><h2>${esc(t('Play a game'))}</h2><button class="icon-btn" data-close>✕</button></div>
       <div class="modal-body"><div class="game-picker">${Games.TYPES.map((type) => `<button class="game-pick" data-type="${type}">
-        <span class="gp-icon">${ICONS[type]}</span><b>${esc(t(TITLES[type]))}</b><span>${esc(t(ABOUT[type]))}</span></button>`).join('')}</div>
+        <span class="gp-icon">${ICONS[type]}</span><b>${esc(t(TITLES[type]))}</b><span>${esc(t(ABOUT[type]))}</span></button>`).join('')}
+        <button class="game-pick" data-type="thirteen"><span class="gp-icon gp-cards">🂡</span><b>13</b><span>${esc(t('Big 2 card game for 2 – 4 players (also /13)'))}</span></button></div>
       <p class="modal-note" style="margin-top:12px">${esc(t('Moves are delivered like messages, so you can also play slowly across shifts.'))}</p></div></div>`;
     const done = () => leave(back);
     back.addEventListener('mousedown', (e) => { if (e.target === back) done(); });
@@ -879,6 +888,12 @@ const Game = (() => {
       const b = e.target.closest('[data-type]');
       if (!b) return;
       const type = b.dataset.type;
+      if (type === 'thirteen') {
+        done();
+        const g = await call(api.createWarlock(conv, 'thirteen'));
+        if (g) call(api.openWarlock(conv, g.id));
+        return undefined;
+      }
       if (type === 'chess' || type === 'checkers' || type === 'tetris') return setupView(back, conv, type, done);
       done();
       const g = await call(api.createGame(conv, type));

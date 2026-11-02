@@ -276,6 +276,7 @@ function notify(conv, msg) {
     const title = ARENAS[msg.game.type] ? ARENAS[msg.game.type].title : Games.RULES[msg.game.type].title;
     body = msg.game.type === 'warlock' ? `🔥 ${t('{name} opened a Warlock arena – join!', { name: msg.fromName || t('Someone') })}`
       : msg.game.type === 'pudgewars' ? `🪝 ${t('{name} opened a Pudge Wars game – join!', { name: msg.fromName || t('Someone') })}`
+      : msg.game.type === 'thirteen' ? `🃏 ${t('{name} opened a game of 13 – join!', { name: msg.fromName || t('Someone') })}`
         : `🎮 ${t('New game: {game}', { game: t(title) })}`;
   }
   showNotification({ title, body: body.slice(0, 200), silent: true }, () => openInWindow('open-conv', conv));
@@ -552,6 +553,7 @@ function openTetris(conv, id) {
 const ARENAS = {
   warlock: { title: 'Warlock', page: 'warlock.html', bg: '#120806' },
   pudgewars: { title: 'Pudge Wars', page: 'pudge.html', bg: '#0b1408' },
+  thirteen: { title: '13', page: 'thirteen.html', bg: '#0b2a1e' },
 };
 const isArena = (msg) => !!(msg && msg.game && ARENAS[msg.game.type]);
 const warlockWindows = new Map();
@@ -943,6 +945,11 @@ function registerIpc() {
   h('create-warlock', (conv, type) => messenger.createWarlock(conv, type || 'warlock'));
   h('open-warlock', (conv, id) => openWarlock(conv, id));
   h('warlock-info', (conv, id) => warlockInfo(conv, id));
+  // Profile pictures for the players around a card table.
+  h('arena-avatars', (ids) => {
+    const all = messenger.getState().avatars || {};
+    return Object.fromEntries((Array.isArray(ids) ? ids : []).slice(0, 10).map((id) => [id, all[id] || null]));
+  });
   // The arena's results, posted to the group by the PC that ran it.
   h('warlock-result', (conv, id, text) => {
     const msg = messenger.store.getMessage(conv, id);

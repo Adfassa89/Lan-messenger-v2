@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="mn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>13</title>
+  <link rel="stylesheet" href="thirteen.css">
+  <link rel="stylesheet" href="game-fx.css">
+</head>
+<body>
+  <div class="felt"></div>
+
+  <!-- Lobby: who sits at the table and the host's settings. -->
+  <section class="lobby" id="lobby">
+    <div class="lobby-card">
+      <div class="logo"><span class="logo-cards"><i>A♠</i><i>2♥</i></span>13</div>
+      <div class="lobby-sub" id="lobbySub"></div>
+      <div class="seats-list" id="lobbyList"></div>
+      <div class="opts hidden" id="lobbyOpts">
+        <div class="opt-row"><span data-t="Match ends"></span><div class="seg" id="endSeg"></div></div>
+        <div class="opt-row" id="limitRow"><span data-t="Point limit"></span><div class="seg" id="limitSeg"></div></div>
+        <div class="opt-row" id="timeRow"><span data-t="Play time"></span><div class="seg" id="timeSeg"></div></div>
+        <div class="opt-row"><span data-t="Tugrik per point"></span><div class="seg" id="rateSeg"></div></div>
+        <div class="opt-row"><span data-t="Time per turn"></span><div class="seg" id="turnSeg"></div></div>
+      </div>
+      <div class="lobby-rules" id="lobbyRules"></div>
+      <button class="big-btn hidden" id="btnStart"></button>
+      <details class="how"><summary data-t="How to play"></summary><div id="howText"></div></details>
+    </div>
+  </section>
+
+  <!-- The table -->
+  <main class="table hidden" id="table">
+    <header class="top">
+      <span class="tag" id="roundTag"></span>
+      <span class="tag" id="matchTag"></span>
+      <span class="tag gold hidden" id="rateTag"></span>
+      <span class="grow"></span>
+      <button class="tbtn" id="btnScores" data-t="Scores"></button>
+      <button class="tbtn" id="btnLeave" data-t="Leave"></button>
+    </header>
+    <div class="seat-layer" id="seats"></div>
+    <div class="pile" id="pile"><div class="pile-label" id="pileLabel"></div></div>
+    <div class="deck hidden" id="deck"></div>
+    <div class="hint" id="hint"></div>
+    <div class="hand" id="hand"></div>
+    <div class="me-bar" id="meBar"></div>
+    <div class="actions" id="actions">
+      <button class="act ghost" id="btnSort" data-t="Sort"></button>
+      <button class="act ghost" id="btnClear" data-t="Clear"></button>
+      <button class="act pass" id="btnPass" data-t="Pass"></button>
+      <button class="act play" id="btnPlay" data-t="Play cards"></button>
+    </div>
+    <div class="results hidden" id="results"></div>
+    <div class="toast hidden" id="toast"></div>
+  </main>
+
+  <div class="modal hidden" id="modal"><div class="modal-card" id="modalCard"></div></div>
+
+  <script src="../shared/i18n.js"></script>
+  <script src="../shared/thirteen.js"></script>
+  <script src="game-fx.js"></script>
+  <script src="thirteen.js"></script>
+</body>
+</html>

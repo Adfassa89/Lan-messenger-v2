@@ -25,6 +25,7 @@ let me = null;
 let players = []; // lobby: [{ id, name }]
 let teams = {}; // player id -> 0 Radiant / 1 Dire
 let target = 50;
+let hookSpeed = 800; // host's choice: Original 800, Fast 1200, Dota 1450
 let started = false;
 let sim = null;
 let snaps = [];
@@ -65,7 +66,9 @@ function renderLobby() {
   $('lobbyOpts').classList.toggle('hidden', !isHost);
   const seg = [10, 25, 50, 75, 100].map((n) => `<button data-n="${n}" class="${n === target ? 'on' : ''}">${n}</button>`).join('');
   if ($('targetSeg').dataset.html !== seg) { $('targetSeg').innerHTML = seg; $('targetSeg').dataset.html = seg; }
-  $('lobbyRules').textContent = t('Radiant against Dire. A kill is 1 point, a headshot 2, first blood +4. First team to {n} wins.', { n: target });
+  const hs = [[800, t('Original')], [1200, t('Fast')], [1450, t('Dota')]].map(([v, l]) => `<button data-hs="${v}" class="wide${v === hookSpeed ? ' on' : ''}" title="${v}">${esc(l)} · ${v}</button>`).join('');
+  if ($('hookSeg').dataset.html !== hs) { $('hookSeg').innerHTML = hs; $('hookSeg').dataset.html = hs; }
+  $('lobbyRules').textContent = `${t('Radiant against Dire. A kill is 1 point, a headshot 2, first blood +4. First team to {n} wins.', { n: target })} ${t('Hook speed at the start: {n} (each speed upgrade +70).', { n: hookSpeed })}`;
   const both = players.length >= 2 && [0, 1].every((tm) => players.some((p) => teams[p.id] === tm));
   $('btnStart').classList.toggle('hidden', !isHost);
   $('btnStart').disabled = !both;
@@ -77,7 +80,14 @@ function renderLobby() {
     ${t('Watch out for the trap plates: spikes, fire, venom and the pendulums over the river hurt everyone.')}`;
 }
 
-const lobbyMsg = () => ({ kind: 'pw-lobby', players, teams, target });
+const lobbyMsg = () => ({ kind: 'pw-lobby', players, teams, target, hookSpeed });
+$('hookSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-hs]');
+  if (!b || !isHost) return;
+  hookSpeed = Number(b.dataset.hs);
+  renderLobby();
+  toAll(lobbyMsg());
+});
 $('targetSeg').addEventListener('click', (e) => {
   const b = e.target.closest('[data-n]');
   if (!b || !isHost) return;
@@ -96,7 +106,7 @@ $('lobbyList').addEventListener('click', (e) => {
 $('btnStart').addEventListener('click', () => {
   if (!isHost || started || $('btnStart').disabled) return;
   started = true;
-  sim = new PudgeWars.Sim(players.map((p) => ({ ...p, team: teams[p.id] })), { target, seed: Math.floor(Math.random() * 2 ** 31) });
+  sim = new PudgeWars.Sim(players.map((p) => ({ ...p, team: teams[p.id] })), { target, hookSpeed, seed: Math.floor(Math.random() * 2 ** 31) });
   toAll({ kind: 'pw-start' });
   enterGame();
   hostLoop();
@@ -183,6 +193,7 @@ api.on(({ type, payload }) => {
       for (const p of players) names[p.id] = p.name;
       teams = d.teams || {};
       target = d.target || target;
+      hookSpeed = d.hookSpeed || hookSpeed;
       renderLobby();
       break;
     case 'pw-start':

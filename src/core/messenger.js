@@ -1,7 +1,7 @@
 'use strict';
 
 // Group arena games: one PC runs the game, everyone in the group can join.
-const ARENA_GAMES = ['warlock', 'pudgewars'];
+const ARENA_GAMES = ['warlock', 'pudgewars', 'thirteen'];
 // The heart of the app: keeps track of people on the network, delivers
 // messages reliably (queued until the other PC confirms it received them)
 // and stores history. It has no user interface and no Electron dependency,

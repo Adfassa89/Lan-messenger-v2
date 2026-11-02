@@ -263,3 +263,14 @@ test('the pendulum kills whoever is dragged through it', () => {
   for (let i = 0; i < 60 && !died; i++) { place(b, sim.bladeX(sim.traps[pend.id]), pend.py); run(sim, 0.05); died = b.dead; }
   assert.ok(died);
 });
+
+test('hook speed setting: the hook starts at the chosen speed, upgrades add to it', () => {
+  for (const hs of [800, 1200, 1450]) {
+    const sim = arena(2, { hookSpeed: hs });
+    const [a] = sim.pawns;
+    assert.strictEqual(sim.hookStats(a).speed, hs);
+    a.up.speed = 2;
+    assert.strictEqual(sim.hookStats(a).speed, hs + 140);
+  }
+  assert.strictEqual(arena(2, { hookSpeed: 99999 }).hookStats(arena().pawns[0]).speed, 800, 'unknown values fall back to the original');
+});

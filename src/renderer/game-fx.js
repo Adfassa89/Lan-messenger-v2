@@ -103,6 +103,13 @@ const Sfx = (() => {
     garbageRise: () => { tone(110, { len: 0.25, vol: 0.1, type: 'square', slide: 0.7 }); knock({ freq: 180, len: 0.1, vol: 0.4 }); },
     ko: () => { tone(220, { len: 0.6, vol: 0.12, type: 'sawtooth', slide: 0.25 }); knock({ freq: 120, len: 0.25, vol: 0.6, q: 0.6 }); },
     // Warlock
+    // Cards (13): a soft flick for each card dealt, a snap on the table, a pass tap.
+    cardDeal: () => knock({ freq: 3200, len: 0.035, vol: 0.12, q: 0.6 }),
+    cardPlay: () => { knock({ freq: 2400, len: 0.06, vol: 0.3, q: 0.5 }); knock({ at: 0.03, freq: 900, len: 0.05, vol: 0.2 }); },
+    cardSelect: () => knock({ freq: 4200, len: 0.02, vol: 0.08 }),
+    cardPass: () => tone(392, { len: 0.12, vol: 0.05, type: 'triangle', slide: 0.8 }),
+    cardSweep: () => knock({ freq: 1800, len: 0.22, vol: 0.18, q: 0.4 }),
+    cardTurn: () => notes([784, 1046], 0.06, { len: 0.1, vol: 0.05, type: 'triangle' }),
     wlFire: () => { tone(160, { len: 0.25, vol: 0.08, type: 'sawtooth', slide: 2.2 }); knock({ freq: 900, len: 0.12, vol: 0.25, q: 0.7 }); },
     wlWhoosh: () => knock({ freq: 1400, len: 0.18, vol: 0.25, q: 0.5 }),
     wlBoom: () => { knock({ freq: 220, len: 0.3, vol: 0.6, q: 0.6 }); tone(70, { len: 0.3, vol: 0.12, slide: 0.5 }); },
