@@ -8,13 +8,6 @@ const Game = (() => {
   const START_COUNT = { p: 8, n: 2, b: 2, r: 2, q: 1 };
   const TITLES = { chess: 'Chess', checkers: 'Checkers', ttt: 'Tic-tac-toe', c4: 'Connect Four', tetris: 'Tetris Battle' };
   const ICONS = { chess: '♞', checkers: '⛀', ttt: '#', c4: '●', tetris: '▦' };
-  const ABOUT = {
-    chess: 'Pick your side and a time control, like on chess.com',
-    checkers: 'Captures are compulsory, kings move both ways; clocks optional',
-    ttt: 'Three in a row wins',
-    c4: 'Four in a row wins',
-    tetris: 'Real-time battle: clear lines to send garbage',
-  };
   let open = null; // { conv, id, back, selected }
 
   // Game preferences, kept per PC: last time control and side chosen,
@@ -878,9 +871,9 @@ const Game = (() => {
     const back = el('div', 'modal-back');
     back.innerHTML = `<div class="modal"><div class="modal-head"><h2>${esc(t('Play a game'))}</h2><button class="icon-btn" data-close>✕</button></div>
       <div class="modal-body"><div class="game-picker">${Games.TYPES.map((type) => `<button class="game-pick" data-type="${type}">
-        <span class="gp-icon">${ICONS[type]}</span><b>${esc(t(TITLES[type]))}</b><span>${esc(t(ABOUT[type]))}</span></button>`).join('')}
-        <button class="game-pick" data-type="thirteen"><span class="gp-icon gp-cards">🂡</span><b>13</b><span>${esc(t('Big 2 card game for 2 – 4 players (also /13)'))}</span></button></div>
-      <p class="modal-note" style="margin-top:12px">${esc(t('Moves are delivered like messages, so you can also play slowly across shifts.'))}</p></div></div>`;
+        <span class="gp-icon">${ICONS[type]}</span><b>${esc(t(TITLES[type]))}</b></button>`).join('')}
+        <button class="game-pick" data-type="thirteen"><span class="gp-icon gp-cards">🂡</span><b>13</b></button></div>
+</div></div>`;
     const done = () => leave(back);
     back.addEventListener('mousedown', (e) => { if (e.target === back) done(); });
     back.querySelector('[data-close]').onclick = done;

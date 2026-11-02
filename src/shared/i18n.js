@@ -77,7 +77,7 @@
     "NEXT": "ДАРААГИЙН",
     "To move": "Нүүх ээлж",
     "Chess": "Шатар",
-    "Tic-tac-toe": "Икс-Нолик",
+    "Tic-tac-toe": "Икс-Окс",
     "Connect Four": "Дөрвийг холбох",
     "Classic chess, colors drawn at random": "Сонгодог шатар, өнгийг санамсаргүйгээр сонгоно",
     "Three in a row wins": "Гурвыг эгнүүлсэн нь хожно",

@@ -1210,10 +1210,10 @@ html[data-theme="dark"] .style-preview[data-style="emerald"] {
 .promo button { width: 60px; height: 60px; border-radius: 10px; background: #f0d9b5; }
 .promo button:hover { background: #e3c79a; }
 .game-picker { display: grid; gap: 10px; }
-.game-pick { display: grid; grid-template-columns: 48px 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 12px; border-radius: 12px; border: 1px solid var(--border); text-align: left; }
+.game-pick { display: grid; grid-template-columns: 48px 1fr; grid-template-rows: auto; column-gap: 12px; align-items: center; padding: 12px; border-radius: 12px; border: 1px solid var(--border); text-align: left; }
 .game-pick:hover { border-color: var(--accent); background: var(--hover); }
-.game-pick .gp-icon { grid-row: span 2; width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 26px; background: var(--accent-soft); color: var(--accent-text); }
-.game-pick span:last-child { font-size: 12.5px; color: var(--muted); }
+.game-pick .gp-icon { grid-row: span 1; width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 26px; background: var(--accent-soft); color: var(--accent-text); }
+.game-pick b { font-size: 15px; }
 
 /* ---------------------------------------------------------------- chess, styled after chess.com's default look */
 .pc { display: block; width: 100%; height: 100%; background-size: 100% 100%; background-repeat: no-repeat; }
