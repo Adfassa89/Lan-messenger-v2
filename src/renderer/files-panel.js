@@ -1,4 +1,4 @@
-/* global isAtBottom, S, api, t, esc, fmtSize, fmtWhen, extLabel, IMAGE_RE, convName, peerName, lightbox, jumpTo, openConv, call, el, toast */
+/* global fmtDay, fmtTime, isAtBottom, S, api, t, esc, fmtSize, fmtWhen, extLabel, IMAGE_RE, convName, peerName, lightbox, jumpTo, openConv, call, el, toast */
 // Slide-in panel on the right with two views:
 //  - Files: everything shared in the open chat (photos as a grid, other files as a list).
 //  - Downloads: every file received from anyone, like a browser's download list,
@@ -91,13 +91,7 @@ const FilesPanel = (() => {
 
   // ------------------------------------------------------------------ render
   function dayLabel(ts) {
-    const d = new Date(ts);
-    const today = new Date();
-    const y = new Date(Date.now() - 86400000);
-    const same = (a, b) => a.toDateString() === b.toDateString();
-    if (same(d, today)) return t('Today');
-    if (same(d, y)) return t('Yesterday');
-    return d.toLocaleDateString(undefined, { dateStyle: 'long' });
+    return fmtDay(ts);
   }
 
   function stateHtml(x) {
@@ -133,7 +127,7 @@ const FilesPanel = (() => {
     const f = x.file;
     const icon = f.folder ? '📁' : esc(extLabel(f.name));
     const who = mode === 'downloads' ? `${esc(x.fromName || peerName(x.from))}${x.conv.startsWith('g:') || x.conv === 'broadcast' ? ` · ${esc(convName(x.conv))}` : ''}` : esc(x.from === S.me.id ? t('You') : x.fromName || peerName(x.from));
-    const when = new Date(mode === 'downloads' ? x.at : x.ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const when = fmtTime(mode === 'downloads' ? x.at : x.ts);
     const size = f.folder ? t(f.count === 1 ? '{n} file · {size}' : '{n} files · {size}', { n: f.count, size: fmtSize(f.size) }) : fmtSize(f.size);
     const dead = f.path && !x.exists && (f.state === 'done' || x.from === S.me.id);
     return `<div class="dl-row${dead ? ' dead' : ''}" data-id="${esc(x.id)}" data-conv="${esc(x.conv)}">

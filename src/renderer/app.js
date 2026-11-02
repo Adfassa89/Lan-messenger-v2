@@ -123,7 +123,19 @@ function locale() {
   return S.settings.language === 'mn' ? 'mn-MN' : undefined;
 }
 
+// Mongolian dates written out by hand: Electron's date formatting has no
+// Mongolian, so it would fall back to English ("Saturday, October 31").
+const MN_DAYS = ['Ням', 'Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба'];
+const MN_DAYS_SHORT = ['Ня', 'Да', 'Мя', 'Лх', 'Пү', 'Ба', 'Бя'];
+const isMn = () => S.settings.language === 'mn';
+const pad2 = (n) => String(n).padStart(2, '0');
+function mnDate(d, { weekday = false, year = false } = {}) {
+  const s = `${year ? `${d.getFullYear()} оны ` : ''}${d.getMonth() + 1}-р сарын ${d.getDate()}`;
+  return weekday ? `${s}, ${MN_DAYS[d.getDay()]}` : s;
+}
+
 function fmtTime(ts) {
+  if (isMn()) { const d = new Date(ts); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
   return new Date(ts).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 }
 
@@ -139,17 +151,19 @@ function fmtDay(ts) {
   if (dayKey(ts) === dayKey(Date.now() - 864e5)) return t('Yesterday');
   const opts = { weekday: 'long', day: 'numeric', month: 'long' };
   if (d.getFullYear() !== today.getFullYear()) opts.year = 'numeric';
+  if (isMn()) return mnDate(d, { weekday: true, year: !!opts.year });
   return d.toLocaleDateString(locale(), opts);
 }
 
 function fmtListTime(ts) {
   if (!ts) return '';
   if (dayKey(ts) === dayKey(Date.now())) return fmtTime(ts);
-  if (Date.now() - ts < 6 * 864e5) return new Date(ts).toLocaleDateString(locale(), { weekday: 'short' });
-  return new Date(ts).toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
+  if (Date.now() - ts < 6 * 864e5) return isMn() ? MN_DAYS_SHORT[new Date(ts).getDay()] : new Date(ts).toLocaleDateString(locale(), { weekday: 'short' });
+  return isMn() ? `${new Date(ts).getMonth() + 1}/${new Date(ts).getDate()}` : new Date(ts).toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
 }
 
 function fmtWhen(ts) {
+  if (isMn()) { const d = new Date(ts); return `${mnDate(d, { year: d.getFullYear() !== new Date().getFullYear() })} ${fmtTime(ts)}`; }
   return new Date(ts).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' });
 }
 
@@ -160,7 +174,7 @@ function fmtAgo(ts) {
   if (m < 60) return t('last seen {n} min ago', { n: m });
   const h = Math.round(m / 60);
   if (h < 24) return t('last seen {n} h ago', { n: h });
-  return t('last seen {date}', { date: new Date(ts).toLocaleDateString(locale()) });
+  return t('last seen {date}', { date: isMn() ? mnDate(new Date(ts)) : new Date(ts).toLocaleDateString(locale()) });
 }
 
 const IMAGE_RE = /\.(png|jpe?g|gif|bmp|webp)$/i;
@@ -721,15 +735,21 @@ function renderMessages(scrollToEnd, keepOffset) {
       ? t('Send an announcement to everyone on the network.')
       : t('No messages yet. Say hello! 👋'))));
   }
+  // Each day's messages sit in their own group, so a day's sticky date label
+  // only stays at the top while that day is on screen; the next day's label
+  // then pushes it away instead of piling on top of it.
   let lastDay = null;
+  let group = inner;
   for (let i = 0; i < list.length; i++) {
     const m = list[i];
     const d = dayKey(m.ts);
     if (d !== lastDay) {
       lastDay = d;
-      inner.append(el('div', 'day', `<span>${esc(fmtDay(m.ts))}</span>`));
+      group = el('div', 'day-group');
+      group.append(el('div', 'day', `<span>${esc(fmtDay(m.ts))}</span>`));
+      inner.append(group);
     }
-    inner.append(msgNode(list, i));
+    group.append(msgNode(list, i));
   }
   box.innerHTML = '';
   box.append(inner);
