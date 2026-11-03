@@ -642,6 +642,7 @@ function callInfo(sid) {
     convTitle: convTitle(c.conv),
     isGroup: c.conv.startsWith('g:'),
     language: messenger.settings.language,
+    micBoost: messenger.settings.micBoost || 100,
     sound: messenger.settings.sound && messenger.config.status !== 'busy',
   };
 }

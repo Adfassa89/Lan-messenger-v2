@@ -38,6 +38,7 @@ Available in **English** and **Монгол**.
 | 👀 **Seen by** | Under your messages in a group you see who has read them; click to see who has seen it (and when), who has it but hasn't read it yet, and who hasn't received it. |
 | 🗂️ **Files tab** | The folder button in a chat's header lists every file and photo shared in that chat, with search, **Open**, **Show in folder** and **Go to message**. |
 | ⬇️ **Downloads** | Like a browser's download list (`Ctrl + J`, or the arrow button at the bottom left): every file you received, with progress, **Open**, **Show in folder** and **Open downloads folder**. |
+| 🎙️ **Microphone boost** | Settings → Microphone → Microphone boost (100 – 300 %), with a **Test** level meter, for quiet microphones such as wireless earbuds. Used for voice messages and calls; it can also be changed during a call (⚙ menu). A soft limiter keeps loud speech from distorting. |
 | 🔠 **Text size** | Settings → Appearance → Text size, or `Ctrl` + `+` / `-` / `0`. |
 | 📁 **Files and whole folders** | Drag & drop files or folders of any size. Progress and speed are shown, interrupted downloads resume, and either side can stop a transfer while it runs. |
 | 🖼️ **Profile photos** | Settings → Change photo. |

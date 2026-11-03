@@ -1,5 +1,5 @@
 'use strict';
-/* global api, I18N */
+/* global api, I18N, MicBoost */
 // Voice and video calls. Every participant connects directly to every other
 // participant over the LAN (WebRTC); the call setup messages travel over the
 // app's encrypted chat connections.
@@ -24,7 +24,9 @@ const RING_FOR = 50000;
 
 let info = null;
 let local = new MediaStream();
-let micTrack = null;
+let micTrack = null; // what is sent: the microphone after the boost
+let boost = null; // MicBoost for the current microphone
+let micBoost = 100;
 let camTrack = null;
 let micOn = true;
 let camOn = false;
@@ -451,8 +453,9 @@ async function setCamera(on, deviceId) {
 async function setMicrophone(deviceId) {
   try {
     const s = await navigator.mediaDevices.getUserMedia({ audio: { ...AUDIO, deviceId: { exact: deviceId } } });
-    if (micTrack) micTrack.stop();
-    micTrack = s.getAudioTracks()[0];
+    if (boost) boost.stop(); else if (micTrack) micTrack.stop();
+    boost = MicBoost.create(s.getAudioTracks()[0], micBoost);
+    micTrack = boost.track;
     micTrack.enabled = micOn;
     watchMyMic();
     await replaceForAll('audio', micTrack);
@@ -472,13 +475,25 @@ async function devicesMenu() {
     if (!list.length) return '';
     return `<h4>${title}</h4>${list.map((d, i) => `<button data-kind="${kind}" data-id="${d.deviceId}" class="${d.deviceId === current ? 'on' : ''}">${(d.label || `${title} ${i + 1}`).replace(/[<>&]/g, '')}</button>`).join('')}`;
   };
-  const micId = micTrack && micTrack.getSettings().deviceId;
+  const micId = (boost ? boost.raw : micTrack) && (boost ? boost.raw : micTrack).getSettings().deviceId;
   const camId = camTrack && camTrack.getSettings().deviceId;
   menu.innerHTML = section(t('Microphone'), 'audioinput', micId)
     + section(t('Camera'), 'videoinput', camId)
-    + section(t('Speaker'), 'audiooutput', speakerId || 'default');
+    + section(t('Speaker'), 'audiooutput', speakerId || 'default')
+    + `<h4>${t('Microphone boost')}</h4><div class="boost"><input type="range" id="boostRange" min="100" max="300" step="10" value="${micBoost}"><b id="boostVal">${micBoost}%</b></div>`;
   menu.classList.remove('hidden');
 }
+
+// Microphone boost, changed during the call; kept as the setting for next time.
+$('menu').addEventListener('input', (e) => {
+  if (e.target.id !== 'boostRange') return;
+  micBoost = MicBoost.clamp(e.target.value);
+  $('boostVal').textContent = `${micBoost}%`;
+  if (boost) boost.setGain(micBoost);
+  clearTimeout(boostSave);
+  boostSave = setTimeout(() => api.setSettings({ micBoost }).catch(() => {}), 400);
+});
+let boostSave = null;
 
 $('menu').addEventListener('click', async (e) => {
   const b = e.target.closest('button');
@@ -538,7 +553,7 @@ function hangup() {
   for (const { pc } of peers.values()) pc.close();
   for (const tr of local.getTracks()) tr.stop();
   if (camTrack) camTrack.stop();
-  if (micTrack) micTrack.stop();
+  if (boost) boost.stop(); else if (micTrack) micTrack.stop();
   api.callEnded(sid, { duration: connectedAt ? Date.now() - connectedAt : 0 });
 }
 
@@ -551,7 +566,12 @@ async function init() {
   $('title').textContent = info.convTitle;
   setStatus(role === 'caller' ? t('Calling…') : t('Connecting…'));
   local = await getMedia(info.video);
-  micTrack = local.getAudioTracks()[0] || null;
+  micBoost = MicBoost.clamp(info.micBoost);
+  const rawMic = local.getAudioTracks()[0] || null;
+  if (rawMic) {
+    boost = MicBoost.create(rawMic, micBoost);
+    micTrack = boost.track;
+  }
   camTrack = local.getVideoTracks()[0] || null;
   camOn = !!camTrack;
   showSelf();

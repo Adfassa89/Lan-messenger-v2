@@ -1,5 +1,5 @@
 'use strict';
-/* global api, $, esc, t, toast, call, replyOpts, fmtDuration, ICONS, S, refreshMsgDom */
+/* global api, $, esc, t, toast, call, replyOpts, fmtDuration, ICONS, S, refreshMsgDom, MicBoost */
 // Voice messages: recording with the microphone, and playback in the chat.
 
 const Voice = (() => {
@@ -40,19 +40,23 @@ const Voice = (() => {
       toast(t('No microphone found, or access to it was blocked'), 'error');
       return;
     }
+    // Microphone boost (Settings): record the boosted sound.
+    const boost = MicBoost.create(stream.getAudioTracks()[0], S.settings.micBoost || 100);
+    stream = new MediaStream([boost.track]);
     const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
     const mr = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
     const actx = new AudioContext();
     const analyser = actx.createAnalyser();
     analyser.fftSize = 256;
     actx.createMediaStreamSource(stream).connect(analyser);
-    rec = { mr, chunks: [], start: Date.now(), stream, conv, cancelled: false, actx, analyser, levels: [] };
+    rec = { mr, chunks: [], start: Date.now(), stream, boost, conv, cancelled: false, actx, analyser, levels: [] };
     mr.ondataavailable = (e) => { if (e.data.size) rec.chunks.push(e.data); };
     mr.onstop = async () => {
       const r = rec;
       rec = null;
       clearInterval(r.timer);
       r.stream.getTracks().forEach((tr) => tr.stop());
+      r.boost.stop();
       r.actx.close();
       hideRecorder();
       if (r.cancelled) return;

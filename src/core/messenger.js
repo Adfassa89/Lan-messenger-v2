@@ -53,6 +53,7 @@ function defaultSettings(downloadDir) {
     internetUpdates: true,
     updateEvery: 'day',
     textSize: 100,
+    micBoost: 100,
     downloadsClearedAt: 0,
   };
 }

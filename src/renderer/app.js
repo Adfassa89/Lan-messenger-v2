@@ -1875,6 +1875,12 @@ function settingsModal() {
     <div class="row-label" style="margin-top:12px">${esc(t('Text size'))} <small>${esc(t('Ctrl + plus / minus also changes it'))}</small></div>
     <div class="segmented" id="sTextSize">${TEXT_SIZES.map(([v, l]) => `<button data-v="${v}" class="${(S.settings.textSize || 100) === v ? 'on' : ''}" style="font-size:${Math.round(11 + (v - 100) / 10)}px">${esc(t(l))}</button>`).join('')}</div>
 
+    <div class="section-title">${esc(t('Microphone'))}</div>
+    <div class="row-label">${esc(t('Microphone boost'))} <small>${esc(t('For quiet microphones, e.g. wireless earbuds. Used for voice messages and calls.'))}</small></div>
+    <div class="mic-boost"><input type="range" id="sMicBoost" min="100" max="300" step="10" value="${MicBoost.clamp(S.settings.micBoost)}"><b id="sMicBoostVal">${MicBoost.clamp(S.settings.micBoost)}%</b>
+      <button class="btn" id="sMicTest">${esc(t('Test'))}</button></div>
+    <div class="mic-meter"><i id="sMicLevel"></i><span id="sMicHint">${esc(t('Click Test and speak: the bar shows how loud you will sound.'))}</span></div>
+
     <div class="section-title">${esc(t('Notifications'))}</div>
     ${toggleRow('notifications', t('Desktop notifications'), t('Show a pop-up when a message arrives'))}
     ${toggleRow('sound', t('Notification sound'))}
@@ -1926,7 +1932,18 @@ function settingsModal() {
         },
       },
     ],
+    onClose: () => stopMicTest(),
     onOpen: (m, close) => {
+      // Microphone boost: saved as you drag; Test shows your level with the boost.
+      let boostSave = null;
+      $('#sMicBoost', m).addEventListener('input', (e) => {
+        const v = MicBoost.clamp(e.target.value);
+        $('#sMicBoostVal', m).textContent = `${v}%`;
+        if (micTest) micTest.boost.setGain(v);
+        clearTimeout(boostSave);
+        boostSave = setTimeout(async () => { S.settings = await call(api.setSettings({ micBoost: v })) || S.settings; }, 300);
+      });
+      $('#sMicTest', m).addEventListener('click', () => (micTest ? stopMicTest() : startMicTest(m)));
       m.querySelectorAll('[data-set]').forEach((cb) => cb.addEventListener('change', async () => {
         let value = cb.value;
         if (cb.type === 'checkbox') value = cb.checked;
@@ -2353,6 +2370,49 @@ function stepTextSize(dir) {
   const next = dir === 0 ? 100 : list[Math.max(0, Math.min(list.length - 1, list[i] === cur ? i + dir : dir > 0 ? i : i - 1))];
   setTextSize(next);
   toast(t('Text size: {n}%', { n: next }));
+}
+
+// Settings → Microphone boost → Test: your microphone level with the boost.
+let micTest = null;
+async function startMicTest(m) {
+  let raw;
+  try {
+    raw = (await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })).getAudioTracks()[0];
+  } catch {
+    toast(t('No microphone found, or access to it was blocked'), 'error');
+    return;
+  }
+  const boost = MicBoost.create(raw, $('#sMicBoost', m).value);
+  const ctx = new AudioContext();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+  ctx.createMediaStreamSource(new MediaStream([boost.track])).connect(analyser);
+  const data = new Uint8Array(analyser.fftSize);
+  micTest = { boost, ctx, timer: 0 };
+  $('#sMicTest', m).textContent = t('Stop');
+  $('#sMicHint', m).textContent = t('Speak normally. Aim for the green zone; red means it is too loud.');
+  let peakHold = 0;
+  micTest.timer = setInterval(() => {
+    analyser.getByteTimeDomainData(data);
+    let peak = 0;
+    for (const v of data) peak = Math.max(peak, Math.abs(v - 128) / 128);
+    peakHold = Math.max(peak, peakHold * 0.9);
+    const bar = $('#sMicLevel', m);
+    if (!bar) return;
+    bar.style.width = `${Math.min(100, peakHold * 100)}%`;
+    bar.className = peakHold > 0.9 ? 'hot' : peakHold > 0.25 ? 'good' : '';
+  }, 60);
+}
+function stopMicTest() {
+  if (!micTest) return;
+  clearInterval(micTest.timer);
+  micTest.boost.stop();
+  micTest.ctx.close().catch(() => {});
+  micTest = null;
+  const b = document.getElementById('sMicTest');
+  if (b) b.textContent = t('Test');
+  const bar = document.getElementById('sMicLevel');
+  if (bar) bar.style.width = '0';
 }
 
 // A pulsing dot on the Downloads button while something is downloading.

@@ -1542,3 +1542,13 @@ body.panel-open.overlay-controls .chat-header, body.panel-open.overlay-controls 
 .thirteen-card .wl-card-art span { font-size: 64px; color: #fff; }
 .thirteen-card .wl-join { background: linear-gradient(180deg, #f2c94c, #c8901a) !important; color: #2a1a00 !important; }
 .gp-cards { font-size: 26px; }
+
+/* Settings → Microphone boost */
+.mic-boost { display: flex; align-items: center; gap: 12px; }
+.mic-boost input { flex: 1; accent-color: var(--accent); }
+.mic-boost b { min-width: 46px; text-align: right; font-variant-numeric: tabular-nums; }
+.mic-meter { position: relative; height: 22px; margin-top: 8px; border-radius: 6px; background: var(--panel-2); overflow: hidden; }
+.mic-meter i { position: absolute; inset: 0 auto 0 0; width: 0; background: #9aa3b5; transition: width .06s linear; }
+.mic-meter i.good { background: #3fb950; }
+.mic-meter i.hot { background: #e5484d; }
+.mic-meter span { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 10px; font-size: 11.5px; color: var(--muted); }
