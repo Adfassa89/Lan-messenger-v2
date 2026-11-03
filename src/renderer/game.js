@@ -880,8 +880,7 @@ const Game = (() => {
     back.innerHTML = `<div class="modal"><div class="modal-head"><h2>${esc(t('Play a game'))}</h2><button class="icon-btn" data-close>✕</button></div>
       <div class="modal-body"><div class="game-picker">${Games.TYPES.map((type) => `<button class="game-pick" data-type="${type}">
         <span class="gp-icon">${ICONS[type]}</span><b>${esc(t(TITLES[type]))}</b></button>`).join('')}
-        <button class="game-pick" data-type="thirteen"><span class="gp-icon gp-cards">🂡</span><b>13</b></button>
-        <button class="game-pick" data-type="tank"><span class="gp-icon">🪖</span><b>${esc(t('Tank'))}</b></button></div>
+        <button class="game-pick" data-type="thirteen"><span class="gp-icon gp-cards">🂡</span><b>13</b></button></div>
 </div></div>`;
     const done = () => leave(back);
     back.addEventListener('mousedown', (e) => { if (e.target === back) done(); });
@@ -890,7 +889,7 @@ const Game = (() => {
       const b = e.target.closest('[data-type]');
       if (!b) return;
       const type = b.dataset.type;
-      if (type === 'thirteen' || type === 'tank') {
+      if (type === 'thirteen') {
         done();
         const g = await call(api.createWarlock(conv, type));
         if (g) call(api.openWarlock(conv, g.id));
