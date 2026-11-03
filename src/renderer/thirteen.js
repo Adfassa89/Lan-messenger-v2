@@ -496,7 +496,7 @@ function animateDeal() {
       { transform: `translate(${center.x - r.left - r.width / 2}px, ${center.y - r.top - r.height / 2}px) rotateY(180deg) scale(.6)`, filter: 'brightness(.3)' },
       { transform: c.style.transform, filter: 'none' },
     ], { duration: 380, delay: i * 55, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'backwards' });
-    setTimeout(() => Sfx.play('cardDeal'), i * 55);
+    if (i % 2 === 0) setTimeout(() => Sfx.play('cardDeal'), i * 55);
   });
   for (const s of document.querySelectorAll('.seat .backs')) {
     const r = s.getBoundingClientRect();
@@ -544,7 +544,7 @@ function showError(err) {
   $('hand').classList.remove('shake');
   void $('hand').offsetWidth;
   $('hand').classList.add('shake');
-  Sfx.play('illegal');
+  Sfx.play('cardNo');
 }
 
 // ------------------------------------------------------------------ end of a game / the match
@@ -613,6 +613,14 @@ const cardAtX = (x) => {
   if (!lay.n || x < lay.x0 || x > lay.x0 + lay.step * (lay.n - 1) + lay.cw) return -1;
   return Math.max(0, Math.min(lay.n - 1, Math.floor((x - lay.x0) / lay.step)));
 };
+// At most one pick sound every 70 ms, so a fast sweep does not rattle.
+let lastPickSound = 0;
+function softSelect() {
+  const now = performance.now();
+  if (now - lastPickSound < 70) return;
+  lastPickSound = now;
+  Sfx.play('cardSelect');
+}
 function setPicked(n, on) {
   if (selected.has(n) === on) return false;
   if (on) selected.add(n); else selected.delete(n);
@@ -659,7 +667,7 @@ $('hand').addEventListener('pointermove', (e) => {
     let changed = false;
     for (let k = from; k <= to; k++) changed = setPicked(handOrder[k], drag.paintTo) || changed;
     drag.last = i;
-    if (changed) { Sfx.play('cardSelect'); layoutHand(); updateButtons(); }
+    if (changed) { softSelect(); layoutHand(); updateButtons(); }
   } else if (drag.mode === 'move') {
     const left = e.clientX - drag.grabDx;
     drag.el.style.left = `${left}px`;
@@ -756,7 +764,7 @@ setInterval(() => {
     secs.textContent = s;
     secs.classList.toggle('low', p < 0.25);
   }
-  if (g.turn === me && !g.winner && p > 0 && p < 0.2 && !updateButtons.warned) { updateButtons.warned = true; Sfx.play('lowtime'); }
+  if (g.turn === me && !g.winner && p > 0 && p < 0.2 && !updateButtons.warned) { updateButtons.warned = true; Sfx.play('cardTick'); }
   if (g.turn !== me) updateButtons.warned = false;
 }, 200);
 setInterval(() => {

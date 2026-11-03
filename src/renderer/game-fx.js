@@ -66,6 +66,54 @@ const Sfx = (() => {
     knock({ freq: 2400, len: 0.04, vol: 0.2 });
   };
 
+  // Filtered noise whose pitch glides: a card sliding, a swish.
+  function swish({ at = 0, from = 2000, to = 800, len = 0.1, vol = 0.08, q = 0.7 } = {}) {
+    const a = audio();
+    const t0 = a.currentTime + at;
+    const n = Math.floor(a.sampleRate * len);
+    const buf = a.createBuffer(1, n, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) { const k = i / n; d[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * k) * (1 - k * 0.5); }
+    const src = a.createBufferSource();
+    src.buffer = buf;
+    const f = a.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = q;
+    f.frequency.setValueAtTime(from, t0);
+    f.frequency.exponentialRampToValueAtTime(to, t0 + len);
+    const lp = a.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 4500;
+    const g = a.createGain();
+    g.gain.value = vol;
+    src.connect(f).connect(lp).connect(g).connect(a.destination);
+    src.start(t0);
+  }
+  // A soft, low tap on cloth (no click on top).
+  function felt({ at = 0, vol = 0.2, freq = 320, len = 0.08 } = {}) {
+    const a = audio();
+    const t0 = a.currentTime + at;
+    const n = Math.floor(a.sampleRate * len);
+    const buf = a.createBuffer(1, n, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) ** 4;
+    const src = a.createBufferSource();
+    src.buffer = buf;
+    const f = a.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = freq * 3;
+    const g = a.createGain();
+    g.gain.value = vol;
+    src.connect(f).connect(g).connect(a.destination);
+    src.start(t0);
+    tone(freq / 2, { at, len: len * 0.9, vol: vol * 0.25 });
+  }
+  // A warm marimba-like note: a sine and a quiet octave, fading fast.
+  function mallet(freq, { at = 0, vol = 0.04, len = 0.35 } = {}) {
+    tone(freq, { at, len, vol, type: 'sine' });
+    tone(freq * 4, { at, len: len * 0.2, vol: vol * 0.15, type: 'sine' });
+  }
+
   const SOUNDS = {
     move: () => { knock({ freq: 750 }); tone(170, { len: 0.07, vol: 0.08 }); },
     capture: () => { knock({ freq: 1300, vol: 0.45 }); knock({ at: 0.035, freq: 600, vol: 0.3 }); tone(140, { len: 0.08, vol: 0.08 }); },
@@ -103,13 +151,15 @@ const Sfx = (() => {
     garbageRise: () => { tone(110, { len: 0.25, vol: 0.1, type: 'square', slide: 0.7 }); knock({ freq: 180, len: 0.1, vol: 0.4 }); },
     ko: () => { tone(220, { len: 0.6, vol: 0.12, type: 'sawtooth', slide: 0.25 }); knock({ freq: 120, len: 0.25, vol: 0.6, q: 0.6 }); },
     // Warlock
-    // Cards (13): a soft flick for each card dealt, a snap on the table, a pass tap.
-    cardDeal: () => knock({ freq: 3200, len: 0.035, vol: 0.12, q: 0.6 }),
-    cardPlay: () => { knock({ freq: 2400, len: 0.06, vol: 0.3, q: 0.5 }); knock({ at: 0.03, freq: 900, len: 0.05, vol: 0.2 }); },
-    cardSelect: () => knock({ freq: 4200, len: 0.02, vol: 0.08 }),
-    cardPass: () => tone(392, { len: 0.12, vol: 0.05, type: 'triangle', slide: 0.8 }),
-    cardSweep: () => knock({ freq: 1800, len: 0.22, vol: 0.18, q: 0.4 }),
-    cardTurn: () => notes([784, 1046], 0.06, { len: 0.1, vol: 0.05, type: 'triangle' }),
+    // Cards (13): soft, natural sounds: paper sliding and tapping on felt.
+    cardDeal: () => swish({ from: 2600, to: 900, len: 0.09, vol: 0.07, q: 0.7 }),
+    cardPlay: () => { swish({ from: 1800, to: 500, len: 0.07, vol: 0.12, q: 0.6 }); felt({ at: 0.05, vol: 0.22 }); },
+    cardSelect: () => swish({ from: 1500, to: 1100, len: 0.035, vol: 0.035, q: 0.8 }),
+    cardPass: () => { felt({ vol: 0.16, freq: 260 }); felt({ at: 0.11, vol: 0.12, freq: 230 }); },
+    cardSweep: () => swish({ from: 900, to: 2400, len: 0.32, vol: 0.06, q: 0.5 }),
+    cardTurn: () => { mallet(587, { vol: 0.045 }); mallet(880, { at: 0.11, vol: 0.04 }); },
+    cardNo: () => felt({ vol: 0.2, freq: 140, len: 0.12 }),
+    cardTick: () => { mallet(1320, { vol: 0.02, len: 0.06 }); mallet(990, { at: 0.5, vol: 0.02, len: 0.06 }); },
     wlFire: () => { tone(160, { len: 0.25, vol: 0.08, type: 'sawtooth', slide: 2.2 }); knock({ freq: 900, len: 0.12, vol: 0.25, q: 0.7 }); },
     wlWhoosh: () => knock({ freq: 1400, len: 0.18, vol: 0.25, q: 0.5 }),
     wlBoom: () => { knock({ freq: 220, len: 0.3, vol: 0.6, q: 0.6 }); tone(70, { len: 0.3, vol: 0.12, slide: 0.5 }); },
