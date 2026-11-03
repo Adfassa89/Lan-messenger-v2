@@ -69,3 +69,20 @@ test('remote help turns mouse and key events into input commands and lets go of 
   assert.deepStrictEqual(vkFor('ArrowUp'), { vk: 0x26, ext: 1 });
   assert.deepStrictEqual(vkFor('F5'), { vk: 0x74, ext: 0 });
 });
+
+test('Tank can only be started and received in a private chat', async () => {
+  const [alice, bob] = makePair();
+  await alice.start();
+  await bob.start();
+  try {
+    await waitFor(() => alice.peers.get(bob.id)?.online && bob.peers.get(alice.id)?.online, 8000, 'discovery');
+    const group = alice.createGroup('Pit crew', [bob.id]);
+    assert.throws(() => alice.createWarlock(group, 'tank'), /private chat/);
+    const g = alice.createWarlock(bob.id, 'tank');
+    await waitFor(() => bob.loadMessages(alice.id).some((m) => m.id === g.id), 5000, 'invite arrived');
+    assert.strictEqual(bob.loadMessages(alice.id).find((m) => m.id === g.id).game.type, 'tank');
+  } finally {
+    await alice.stop();
+    await bob.stop();
+  }
+});

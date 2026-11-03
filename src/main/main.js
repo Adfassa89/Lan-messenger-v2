@@ -277,6 +277,7 @@ function notify(conv, msg) {
     body = msg.game.type === 'warlock' ? `🔥 ${t('{name} opened a Warlock arena – join!', { name: msg.fromName || t('Someone') })}`
       : msg.game.type === 'pudgewars' ? `🪝 ${t('{name} opened a Pudge Wars game – join!', { name: msg.fromName || t('Someone') })}`
       : msg.game.type === 'thirteen' ? `🃏 ${t('{name} opened a game of 13 – join!', { name: msg.fromName || t('Someone') })}`
+      : msg.game.type === 'tank' ? `🪖 ${t('{name} wants to play Tank – join!', { name: msg.fromName || t('Someone') })}`
         : `🎮 ${t('New game: {game}', { game: t(title) })}`;
   }
   showNotification({ title, body: body.slice(0, 200), silent: true }, () => openInWindow('open-conv', conv));
@@ -554,6 +555,7 @@ const ARENAS = {
   warlock: { title: 'Warlock', page: 'warlock.html', bg: '#120806' },
   pudgewars: { title: 'Pudge Wars', page: 'pudge.html', bg: '#0b1408' },
   thirteen: { title: '13', page: 'thirteen.html', bg: '#0b2a1e' },
+  tank: { title: 'Tank', page: 'tanks.html', bg: '#0b0f14' },
 };
 const isArena = (msg) => !!(msg && msg.game && ARENAS[msg.game.type]);
 const warlockWindows = new Map();

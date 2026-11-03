@@ -114,6 +114,32 @@ const Sfx = (() => {
     tone(freq * 4, { at, len: len * 0.2, vol: vol * 0.15, type: 'sine' });
   }
 
+  // Noise through a low-pass filter that closes over time: explosions, gunshots, crumbling.
+  function rumble({ at = 0, len = 0.5, vol = 0.5, from = 3000, to = 120, q = 0.7, decay = 2.2 } = {}) {
+    const a = audio();
+    const t0 = a.currentTime + at;
+    const n = Math.floor(a.sampleRate * len);
+    const buf = a.createBuffer(1, n, a.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < n; i++) { last = last * 0.55 + (Math.random() * 2 - 1) * 0.45; d[i] = last * (1 - i / n) ** decay; }
+    const src = a.createBufferSource();
+    src.buffer = buf;
+    const f = a.createBiquadFilter();
+    f.type = 'lowpass';
+    f.Q.value = q;
+    f.frequency.setValueAtTime(from, t0);
+    f.frequency.exponentialRampToValueAtTime(Math.max(40, to), t0 + len);
+    const g = a.createGain();
+    g.gain.value = vol;
+    src.connect(f).connect(g).connect(a.destination);
+    src.start(t0);
+  }
+  // A short metallic ring: a few inharmonic partials.
+  function clang(freq, { at = 0, vol = 0.05, len = 0.25 } = {}) {
+    [1, 2.76, 5.4].forEach((m, i) => tone(freq * m, { at, len: len / (i + 1), vol: vol / (i + 1), type: 'sine' }));
+  }
+
   const SOUNDS = {
     move: () => { knock({ freq: 750 }); tone(170, { len: 0.07, vol: 0.08 }); },
     capture: () => { knock({ freq: 1300, vol: 0.45 }); knock({ at: 0.035, freq: 600, vol: 0.3 }); tone(140, { len: 0.08, vol: 0.08 }); },
@@ -181,6 +207,33 @@ const Sfx = (() => {
     wlCoin: () => notes([1568, 2093], 0.05, { len: 0.1, vol: 0.05, type: 'square' }),
     roundWin: () => notes([659, 784, 1046], 0.09, { len: 0.22, vol: 0.06, type: 'triangle' }),
     roundLose: () => notes([440, 349, 294], 0.12, { len: 0.25, vol: 0.06, type: 'sine' }),
+    // Tanks: punchy cannon, crumbling bricks, steel pings, deep explosions.
+    tkFire: () => { rumble({ len: 0.16, vol: 0.55, from: 2600, to: 300, decay: 3 }); tone(150, { len: 0.12, vol: 0.14, slide: 0.4 }); },
+    tkFireEnemy: () => { rumble({ len: 0.12, vol: 0.28, from: 1800, to: 260, decay: 3 }); tone(120, { len: 0.1, vol: 0.07, slide: 0.45 }); },
+    tkRocket: () => { swish({ from: 600, to: 2400, len: 0.3, vol: 0.12, q: 0.6 }); rumble({ len: 0.2, vol: 0.3, from: 1200, to: 200 }); },
+    tkBrick: () => { rumble({ len: 0.22, vol: 0.4, from: 1600, to: 200, decay: 2.5 }); knock({ at: 0.03, freq: 380, len: 0.05, vol: 0.25 }); knock({ at: 0.08, freq: 300, len: 0.05, vol: 0.18 }); },
+    tkSteel: () => { clang(1250, { vol: 0.05, len: 0.3 }); knock({ freq: 3200, len: 0.03, vol: 0.18 }); },
+    tkArmor: () => { clang(520, { vol: 0.08, len: 0.35 }); knock({ freq: 900, len: 0.05, vol: 0.3 }); },
+    tkBoom: () => { rumble({ len: 0.9, vol: 0.85, from: 2400, to: 60, decay: 1.6 }); tone(70, { len: 0.7, vol: 0.2, slide: 0.45 }); knock({ freq: 180, len: 0.2, vol: 0.5, q: 0.5 }); },
+    tkBigBoom: () => { rumble({ len: 1.4, vol: 1, from: 3000, to: 40, decay: 1.3 }); tone(55, { len: 1.1, vol: 0.25, slide: 0.4 }); rumble({ at: 0.12, len: 0.8, vol: 0.4, from: 900, to: 60 }); },
+    tkSpawn: () => { notes([392, 523, 659, 784], 0.045, { len: 0.12, vol: 0.025, type: 'triangle' }); swish({ from: 400, to: 3000, len: 0.35, vol: 0.04 }); },
+    tkPowerup: () => notes([784, 988, 1175, 1568], 0.05, { len: 0.12, vol: 0.04, type: 'square' }),
+    tkPick: () => { notes([659, 880, 1109, 1319, 1760], 0.045, { len: 0.16, vol: 0.05, type: 'triangle' }); tone(2637, { at: 0.24, len: 0.3, vol: 0.025 }); },
+    tkShield: () => { tone(880, { len: 0.18, vol: 0.05, type: 'sine', slide: 1.6 }); clang(1700, { at: 0.02, vol: 0.03 }); },
+    tkFreeze: () => { notes([2093, 1760, 1568, 1319], 0.04, { len: 0.25, vol: 0.03, type: 'sine' }); swish({ from: 6000, to: 2500, len: 0.5, vol: 0.05, q: 2 }); },
+    tkAirstrike: () => { tone(1800, { len: 0.9, vol: 0.05, type: 'sine', slide: 0.35 }); rumble({ at: 0.85, len: 1.2, vol: 0.9, from: 2600, to: 50, decay: 1.4 }); },
+    tkFortify: () => { [0, 0.09, 0.18].forEach((at) => clang(700, { at, vol: 0.05 })); },
+    tkLife: () => notes([523, 659, 784, 1046, 784, 1046], 0.07, { len: 0.14, vol: 0.05, type: 'square' }),
+    tkTele: () => { swish({ from: 300, to: 4000, len: 0.25, vol: 0.07, q: 3 }); tone(440, { len: 0.25, vol: 0.04, type: 'sine', slide: 3 }); },
+    tkBuild: () => { knock({ freq: 420, len: 0.06, vol: 0.35 }); knock({ at: 0.07, freq: 380, len: 0.06, vol: 0.3 }); },
+    tkClash: () => { clang(1900, { vol: 0.04, len: 0.15 }); rumble({ len: 0.1, vol: 0.2, from: 3000, to: 800 }); },
+    tkBaseHit: () => { tone(660, { len: 0.18, vol: 0.06, type: 'square' }); tone(440, { at: 0.2, len: 0.22, vol: 0.06, type: 'square' }); },
+    tkBaseDown: () => { rumble({ len: 1.8, vol: 1, from: 2000, to: 30, decay: 1.1 }); notes([330, 262, 196, 131], 0.22, { len: 0.4, vol: 0.06, type: 'sawtooth' }); },
+    tkClear: () => { notes([523, 659, 784, 1046], 0.12, { len: 0.25, vol: 0.06, type: 'square' }); notes([784, 1046], 0.12, { at: 0, len: 0.6, vol: 0.04, type: 'triangle' }); },
+    tkStart: () => { notes([392, 392, 523, 659, 784], 0.11, { len: 0.16, vol: 0.05, type: 'square' }); tone(196, { len: 0.7, vol: 0.05, type: 'triangle' }); },
+    tkTally: () => knock({ freq: 2400, len: 0.02, vol: 0.12 }),
+    tkBounce: () => { clang(2200, { vol: 0.03, len: 0.12 }); },
+    tkSudden: () => notes([880, 880, 880], 0.24, { len: 0.1, vol: 0.06, type: 'square' }),
   };
 
   function play(name, arg) {
@@ -188,7 +241,9 @@ const Sfx = (() => {
     try { SOUNDS[name](arg); } catch { /* no audio device */ }
   }
 
-  return { play, enabled };
+  // The shared audio context, for sounds a game keeps running (an engine hum).
+  const context = () => { try { return enabled() ? audio() : null; } catch { return null; } };
+  return { play, enabled, context };
 })();
 
 // The end-of-game screen, the same for every game: a card with the result,

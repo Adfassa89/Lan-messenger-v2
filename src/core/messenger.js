@@ -1,7 +1,8 @@
 'use strict';
 
 // Group arena games: one PC runs the game, everyone in the group can join.
-const ARENA_GAMES = ['warlock', 'pudgewars', 'thirteen'];
+const ARENA_GAMES = ['warlock', 'pudgewars', 'thirteen', 'tank'];
+const DIRECT_ONLY = ['tank']; // two-player games: private chats only
 // The heart of the app: keeps track of people on the network, delivers
 // messages reliably (queued until the other PC confirms it received them)
 // and stores history. It has no user interface and no Electron dependency,
@@ -808,6 +809,7 @@ class Messenger extends EventEmitter {
     if (kind === 'game' && w.game && ARENA_GAMES.includes(w.game.type)) {
       // Warlock / Pudge Wars: an arena for a group or two people, run by the PC that opened it.
       if (type !== 'group' && type !== 'direct') return;
+      if (DIRECT_ONLY.includes(w.game.type) && type !== 'direct') return;
       msg.game = { type: w.game.type, host: peerId };
     } else if (kind === 'game') {
       // Games are only between the two people of a private chat.
@@ -1299,6 +1301,7 @@ class Messenger extends EventEmitter {
   createWarlock(conv, type = 'warlock') {
     if (this._convType(conv) === 'broadcast') throw new Error('Arena games can be played in group and private chats');
     if (!ARENA_GAMES.includes(type)) throw new Error('Unknown game');
+    if (DIRECT_ONLY.includes(type) && this._convType(conv) !== 'direct') throw new Error('This game is for two people: start it in a private chat');
     return this._sendMsg(conv, { kind: 'game', text: '', game: { type, host: this.id } });
   }
 

@@ -1541,6 +1541,9 @@ body.panel-open.overlay-controls .chat-header, body.panel-open.overlay-controls 
 .thirteen-card .gc-head b { color: #ffe08a; letter-spacing: 2px; font-size: 22px; text-shadow: 0 0 12px rgba(255, 210, 90, .5); }
 .thirteen-card .wl-card-art span { font-size: 64px; color: #fff; }
 .thirteen-card .wl-join { background: linear-gradient(180deg, #f2c94c, #c8901a) !important; color: #2a1a00 !important; }
+.tank-card { background: linear-gradient(160deg, #2a2e1c, #0e1008) !important; border-color: #6a6a3a !important; }
+.tank-card .gc-head b { color: #f2d06a; letter-spacing: 3px; font-size: 20px; text-shadow: 0 0 12px rgba(240, 190, 60, .5); }
+.tank-card .wl-join { background: linear-gradient(180deg, #d8b030, #8a6a10) !important; color: #1a1406 !important; }
 .gp-cards { font-size: 26px; }
 
 /* Settings → Microphone boost */

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="mn">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Tank</title>
+  <link rel="stylesheet" href="warlock.css">
+  <link rel="stylesheet" href="tanks.css">
+  <link rel="stylesheet" href="game-fx.css">
+</head>
+<body class="tanks">
+  <canvas id="view"></canvas>
+  <div class="labels" id="labels"></div>
+  <div class="freeze-tint hidden" id="freezeTint"></div>
+
+  <!-- Lobby: the two players, the mode, the look and the level. -->
+  <section class="lobby" id="lobby">
+    <div class="lobby-card">
+      <div class="logo">TANK</div>
+      <div class="lobby-sub" id="lobbySub"></div>
+      <ul class="lobby-list" id="lobbyList"></ul>
+      <div class="lobby-opts" id="lobbyOpts">
+        <div class="opt-row"><span data-t="Mode"></span><div class="seg" id="modeSeg"></div></div>
+        <div class="opt-row"><span data-t="Arena look"></span><div class="seg themes" id="themeSeg"></div></div>
+        <div class="opt-row" id="levelRow"><span data-t="Level"></span><div class="level-pick"><button class="lv-btn" id="lvDown">−</button><b id="lvNum">1</b><button class="lv-btn" id="lvUp">+</button></div><small id="lvBest"></small></div>
+        <div class="opt-row hidden" id="arenaRow"><span data-t="Arena"></span><div class="seg" id="arenaSeg"></div></div>
+        <div class="opt-row hidden" id="timeRow"><span data-t="Play time"></span><div class="seg" id="timeSeg"></div></div>
+      </div>
+      <div class="lobby-rules" id="lobbyRules"></div>
+      <button class="big-btn" id="btnStart"></button>
+      <div class="lobby-help" id="lobbyHelp"></div>
+    </div>
+  </section>
+
+  <!-- In-game HUD -->
+  <div class="hud hidden" id="hud">
+    <div class="top-bar" id="topBar"></div>
+    <div class="side left" id="sideP1"></div>
+    <div class="side right" id="sideP2"></div>
+    <div class="enemy-box" id="enemyBox"></div>
+    <div class="banner hidden" id="banner"></div>
+    <div class="tally hidden" id="tally"></div>
+  </div>
+
+  <!-- Esc menu -->
+  <section class="menu hidden" id="menu">
+    <div class="menu-card">
+      <div class="menu-title" data-t="Menu"></div>
+      <div class="menu-help" id="menuHelp"></div>
+      <div class="menu-btns">
+        <button class="big-btn small" id="btnResume" data-t="Resume"></button>
+        <button class="big-btn small leave" id="btnLeave" data-t="Leave game"></button>
+      </div>
+      <div class="menu-confirm hidden" id="menuConfirm">
+        <span data-t="Leave the match? You cannot come back in."></span>
+        <button class="big-btn small leave" id="btnLeaveYes" data-t="Leave"></button>
+        <button class="big-btn small" id="btnLeaveNo" data-t="Stay"></button>
+      </div>
+    </div>
+  </section>
+
+  <script src="../shared/i18n.js"></script>
+  <script src="../shared/tank-levels.js"></script>
+  <script src="../shared/tanks.js"></script>
+  <script src="game-fx.js"></script>
+  <script type="module" src="tanks.js"></script>
+</body>
+</html>

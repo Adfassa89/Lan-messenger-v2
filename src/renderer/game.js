@@ -230,6 +230,14 @@ const Game = (() => {
         <button class="fbtn wl-join" data-act="game">${esc(t('Join the table'))}</button>
       </div>`;
     }
+    if (msg.game.type === 'tank') {
+      const host = msg.from === S.me.id ? t('You') : esc(msg.fromName || peerName(msg.from));
+      return `<div class="game-card warlock-card tank-card">
+        <div class="wl-card-art"><span>🪖</span></div>
+        <div class="gc-head"><div><b>${esc(t('Tank'))}</b><div class="gc-players">${esc(t('{name} wants to play Tank: together against waves of tanks, or 1 v 1.', { name: host }))}</div></div></div>
+        <button class="fbtn wl-join" data-act="game">${esc(t('Join the game'))}</button>
+      </div>`;
+    }
     if (msg.game.type === 'pudgewars') {
       const host = msg.from === S.me.id ? t('You') : esc(msg.fromName || peerName(msg.from));
       return `<div class="game-card warlock-card pudge-card">
@@ -262,7 +270,7 @@ const Game = (() => {
   // ------------------------------------------------------------------ game window
   function show(conv, id) {
     const m = (S.msgs.get(conv) || []).find((x) => x.id === id);
-    if (m && m.game && ['warlock', 'pudgewars', 'thirteen'].includes(m.game.type)) {
+    if (m && m.game && ['warlock', 'pudgewars', 'thirteen', 'tank'].includes(m.game.type)) {
       call(api.openWarlock(conv, id));
       return;
     }
@@ -872,7 +880,8 @@ const Game = (() => {
     back.innerHTML = `<div class="modal"><div class="modal-head"><h2>${esc(t('Play a game'))}</h2><button class="icon-btn" data-close>✕</button></div>
       <div class="modal-body"><div class="game-picker">${Games.TYPES.map((type) => `<button class="game-pick" data-type="${type}">
         <span class="gp-icon">${ICONS[type]}</span><b>${esc(t(TITLES[type]))}</b></button>`).join('')}
-        <button class="game-pick" data-type="thirteen"><span class="gp-icon gp-cards">🂡</span><b>13</b></button></div>
+        <button class="game-pick" data-type="thirteen"><span class="gp-icon gp-cards">🂡</span><b>13</b></button>
+        <button class="game-pick" data-type="tank"><span class="gp-icon">🪖</span><b>${esc(t('Tank'))}</b></button></div>
 </div></div>`;
     const done = () => leave(back);
     back.addEventListener('mousedown', (e) => { if (e.target === back) done(); });
@@ -881,9 +890,9 @@ const Game = (() => {
       const b = e.target.closest('[data-type]');
       if (!b) return;
       const type = b.dataset.type;
-      if (type === 'thirteen') {
+      if (type === 'thirteen' || type === 'tank') {
         done();
-        const g = await call(api.createWarlock(conv, 'thirteen'));
+        const g = await call(api.createWarlock(conv, type));
         if (g) call(api.openWarlock(conv, g.id));
         return undefined;
       }

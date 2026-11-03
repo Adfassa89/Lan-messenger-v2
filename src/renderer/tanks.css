@@ -1,0 +1,63 @@
+/* Tank: the Warlock window styles (warlock.css) in olive and brass. */
+html, body.tanks { background: #0b0f14; }
+.tanks .lobby { background: radial-gradient(ellipse at center, rgba(20, 26, 16, .3), rgba(4, 6, 4, .8)); }
+.tanks .lobby-card { width: min(560px, calc(100vw - 32px)); background: linear-gradient(180deg, rgba(34, 38, 28, .96), rgba(14, 16, 12, .97)); border-color: #5a5a3a;
+  box-shadow: 0 0 0 1px rgba(230, 200, 90, .1), 0 30px 80px rgba(0, 0, 0, .7); }
+.tanks .logo { font-size: 48px; letter-spacing: 14px; color: #f2d06a; text-shadow: 0 0 18px rgba(240, 180, 40, .6), 0 4px 0 #5a4210; }
+.tanks .seg button { border-color: #5a5a3a; }
+.tanks .seg button.on { background: linear-gradient(180deg, #e8c040, #a8801a); border-color: #ffe28a; color: #1a1406; }
+.tanks .big-btn { background: linear-gradient(180deg, #d8b030, #8a6a10); color: #1a1406; box-shadow: 0 6px 20px rgba(220, 170, 30, .35), inset 0 1px 0 rgba(255, 255, 255, .4); }
+.tanks .big-btn.leave { background: linear-gradient(180deg, #7a3a3a, #4a1a1a); color: #fff; }
+.tanks .menu-card { background: linear-gradient(180deg, rgba(34, 38, 28, .97), rgba(14, 16, 12, .98)); border-color: #5a5a3a; }
+.tanks .menu-title, .tanks #phaseInfo { color: #f2d06a; }
+.tanks .lobby-sub, .tanks .lobby-opts, .tanks .lobby-rules { color: #cfc6a0; }
+.tanks .lobby-help { color: #a8a080; }
+.seg.themes button { padding: 0 12px; }
+.level-pick { display: flex; align-items: center; gap: 6px; }
+.level-pick b { min-width: 34px; font: 900 20px "Segoe UI", sans-serif; color: #f2d06a; }
+.lv-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #5a5a3a; background: rgba(0, 0, 0, .3); color: #f5e9dc; font-weight: 900; font-size: 16px; }
+.lv-btn:disabled { opacity: .35; cursor: default; }
+#lvBest { color: #a8a080; font-size: 11.5px; }
+.lobby-list .you { margin-left: auto; font-size: 11px; color: #a8a080; }
+
+.tanks .top-bar { background: rgba(6, 8, 4, .7); border-color: rgba(240, 210, 110, .25); align-items: center; gap: 18px; }
+.top-bar .lvl { color: #f2d06a; letter-spacing: 1px; }
+.top-bar .clock { font-variant-numeric: tabular-nums; color: #fff; }
+.top-bar .clock.low { color: #ff6a5a; animation: pulse .6s ease-in-out infinite alternate; }
+.top-bar .vs { display: flex; gap: 10px; align-items: center; font-size: 18px; font-weight: 900; }
+.top-bar .vs i { font-style: normal; color: #a8a080; font-size: 13px; }
+.side { position: absolute; top: 60px; min-width: 150px; padding: 10px 12px; border-radius: 12px; background: rgba(6, 8, 4, .66); border: 1px solid rgba(240, 210, 110, .18); display: grid; gap: 5px; }
+.side.left { left: 12px; }
+.side.right { right: 12px; }
+.side .nm { display: flex; align-items: center; gap: 8px; font-weight: 800; }
+.side .nm i { width: 12px; height: 12px; border-radius: 3px; box-shadow: 0 0 8px currentColor; }
+.side .row { display: flex; gap: 10px; font-size: 13px; color: #e8e0c0; }
+.side .row b { color: #fff; }
+.side .pw { letter-spacing: 1px; color: #ffd23a; }
+.side .wait { color: #ff9a6a; font-weight: 700; font-size: 12.5px; }
+.side.dead { opacity: .55; }
+.enemy-box { position: absolute; right: 12px; bottom: 12px; padding: 8px 10px; border-radius: 12px; background: rgba(6, 8, 4, .66); border: 1px solid rgba(240, 210, 110, .18);
+  display: grid; grid-template-columns: repeat(5, 14px); gap: 4px; }
+.enemy-box i { width: 14px; height: 14px; border-radius: 3px; background: linear-gradient(180deg, #d8d0b0, #8a8060); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .3); }
+.enemy-box i.heavy { background: linear-gradient(180deg, #9aa0a8, #50565e); }
+.enemy-box i.rocket { background: linear-gradient(180deg, #e8906a, #8a3a20); }
+.enemy-box i.scout { background: linear-gradient(180deg, #ffffff, #b0b0a0); }
+.enemy-box .base-hp { grid-column: 1 / -1; margin-top: 4px; display: flex; gap: 3px; align-items: center; font-size: 11px; color: #e8e0c0; }
+.enemy-box .base-hp u { width: 12px; height: 6px; border-radius: 2px; background: #3ae06a; text-decoration: none; }
+.enemy-box .base-hp u.off { background: rgba(255, 255, 255, .12); }
+.tanks .banner { color: #f2d06a; text-shadow: 0 0 30px rgba(240, 180, 40, .8), 0 4px 0 #5a4210; }
+.tally { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); min-width: 360px; padding: 22px 26px; border-radius: 16px;
+  background: rgba(8, 10, 6, .9); border: 1px solid #5a5a3a; box-shadow: 0 30px 80px rgba(0, 0, 0, .7); animation: rise .3s ease-out; }
+.tally h2 { margin: 0 0 12px; text-align: center; color: #f2d06a; letter-spacing: 3px; font: 900 26px "Segoe UI", sans-serif; }
+.tally table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.tally th, .tally td { padding: 4px 8px; text-align: center; }
+.tally th { color: #a8a080; font-size: 12px; font-weight: 700; }
+.tally td:first-child { text-align: left; color: #e8e0c0; }
+.tally tr.total td { border-top: 1px solid rgba(255, 255, 255, .15); font-weight: 900; color: #fff; }
+.tally .next { margin-top: 12px; text-align: center; color: #cfc6a0; font-size: 13px; }
+.tag-name { position: absolute; left: 0; top: 0; padding: 1px 8px; border-radius: 8px; border: 2px solid #fff; background: rgba(0, 0, 0, .55);
+  font: 700 11.5px "Segoe UI", sans-serif; color: #fff; white-space: nowrap; will-change: transform; }
+.freeze-tint { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 140px rgba(120, 200, 255, .55); animation: pulse 1s ease-in-out infinite alternate; }
+.menu-help { font-size: 13px; color: #cfc6a0; line-height: 1.7; margin-bottom: 14px; }
+.menu-help kbd, .lobby-help kbd { display: inline-block; min-width: 16px; padding: 0 5px; border-radius: 4px; background: rgba(255, 255, 255, .12); border-bottom: 2px solid rgba(0, 0, 0, .4); font: 700 11px "Segoe UI", sans-serif; color: #fff; }
+@keyframes pulse { from { opacity: .7; } to { opacity: 1; } }

@@ -1234,11 +1234,12 @@ async function sendCurrent() {
   }
   if (!text) return;
   // Secret: "/warlock" or "/pudge" in a group or private chat opens an arena game.
-  const arena = { '/warlock': 'warlock', '/pudge': 'pudgewars', '/pudgewars': 'pudgewars', '/13': 'thirteen', '/thirteen': 'thirteen' }[text.toLowerCase()];
+  const arena = { '/warlock': 'warlock', '/pudge': 'pudgewars', '/pudgewars': 'pudgewars', '/13': 'thirteen', '/thirteen': 'thirteen', '/tank': 'tank', '/tanks': 'tank' }[text.toLowerCase()];
   if (arena) {
     input.value = '';
     autoGrow();
     if (S.active === 'broadcast') return toast(t('This game can be played in group and private chats'), 'error');
+    if (arena === 'tank' && (S.active === 'broadcast' || S.active.startsWith('g:'))) return toast(t('Tank is for two people: start it in a private chat'), 'error');
     const g = await call(api.createWarlock(S.active, arena));
     if (g) call(api.openWarlock(S.active, g.id));
     return undefined;

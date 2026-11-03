@@ -7,7 +7,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', 'src');
 const FILES = [
   'renderer/app.js', 'renderer/editor.js', 'renderer/voice.js', 'renderer/share.js',
-  'renderer/viewer.js', 'renderer/alert.js', 'renderer/call.js', 'renderer/ring.js', 'renderer/game.js', 'renderer/files-panel.js', 'renderer/tetris-game.js', 'renderer/tetris-controls.js', 'renderer/warlock.js', 'renderer/warlock.html', 'renderer/pudge.js', 'renderer/pudge.html', 'renderer/thirteen.js', 'renderer/thirteen.html', 'renderer/index.html', 'main/main.js',
+  'renderer/viewer.js', 'renderer/alert.js', 'renderer/call.js', 'renderer/ring.js', 'renderer/game.js', 'renderer/files-panel.js', 'renderer/tetris-game.js', 'renderer/tetris-controls.js', 'renderer/warlock.js', 'renderer/warlock.html', 'renderer/pudge.js', 'renderer/pudge.html', 'renderer/thirteen.js', 'renderer/thirteen.html', 'renderer/tanks.js', 'renderer/tanks.html', 'renderer/index.html', 'main/main.js',
 ];
 // Texts translated through a variable, e.g. t(label).
 const EXTRA = ['Smileys', 'Gestures', 'Work', 'Things', 'Indigo', 'Office', 'Ocean', 'Minimal', 'Mine Site', 'Emerald', 'Chess', 'Tic-tac-toe', 'Connect Four',
@@ -22,7 +22,11 @@ const EXTRA = ['Smileys', 'Gestures', 'Work', 'Things', 'Indigo', 'Office', 'Oce
   'Ricochet Turbine', 'Earthshaker Totem', 'Tome of Wisdom', 'Tome of Damage', 'Tome of Health', 'Instant Greater Salve',
   'Haste', 'Gold', 'Shield', 'Fire', 'Dynamite', 'Lightning',
   // 13: combination names (translated through a variable).
-  'Single', 'Pair', 'Three of a kind', 'Straight', 'Flush', 'Full house', 'Four of a kind', 'Straight flush'];
+  'Single', 'Pair', 'Three of a kind', 'Straight', 'Flush', 'Full house', 'Four of a kind', 'Straight flush',
+  // Tank: looks, arenas, power-ups and enemy kinds (translated through a variable).
+  'Classic', 'Mine site', 'Toy tanks', 'Crossroads', 'Islands', 'Fortress',
+  'Power shell', 'Rapid fire', 'Ricochet', 'Freeze', 'Fortify', 'Airstrike', 'Extra life',
+  'Scout', 'Trooper', 'Heavy', 'Rocket', 'Drone'];
 
 function decode(s) {
   return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
