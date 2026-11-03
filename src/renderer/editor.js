@@ -7,13 +7,13 @@ function openEditor(src, { title, crop = false, onSend }) {
   const COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#ffffff', '#111827'];
   const TOOLS = [
     ['crop', t('Crop'), '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>'],
+    ['pen', t('Pen'), '<path d="M4 20c4-1 6-3 8-6s4-6 8-10"/>'],
     ['arrow', t('Arrow'), '<path d="M5 19 19 5M10 5h9v9"/>'],
     ['rect', t('Box'), '<rect x="4" y="5" width="16" height="14" rx="1.5"/>'],
-    ['pen', t('Pen'), '<path d="M4 20c4-1 6-3 8-6s4-6 8-10"/>'],
     ['hl', t('Highlighter'), '<path d="m9 11-5 5v4h4l5-5M14 6l4 4M9 11l4-4 4 4-4 4z"/>'],
     ['text', t('Text'), '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>'],
   ];
-  let tool = crop ? 'crop' : 'arrow';
+  let tool = crop ? 'crop' : 'pen'; // the pen is ready at once: just draw
   let color = COLORS[0];
   const ops = [];
   let current = null;
@@ -234,7 +234,7 @@ function openEditor(src, { title, crop = false, onSend }) {
     if (current.type === 'crop') {
       const r = norm(current);
       cropRect = r.w > 10 && r.h > 10 ? r : null;
-      if (cropRect) tool = 'arrow';
+      if (cropRect) tool = 'pen';
       syncToolbar();
     } else if (current.points ? current.points.length > 1 : Math.hypot(current.x1 - current.x0, current.y1 - current.y0) > 4) {
       ops.push(current);
