@@ -73,7 +73,8 @@ button { font: inherit; cursor: pointer; }
 .seat .info small { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .seat .info small em { color: var(--gold); font-style: normal; font-weight: 700; }
 .seat.turn .who { box-shadow: 0 0 0 2px var(--gold), 0 0 26px rgba(242, 201, 76, .55); }
-.seat .ring { position: absolute; inset: -5px; border-radius: 50%; background: conic-gradient(var(--gold) var(--p, 0%), transparent 0); -webkit-mask: radial-gradient(circle, transparent 60%, #000 62%); mask: radial-gradient(circle, transparent 60%, #000 62%); }
+.av-wrap { position: relative; display: inline-flex; flex: none; }
+.ring { position: absolute; inset: -5px; border-radius: 50%; background: conic-gradient(var(--gold) var(--p, 0%), transparent 0); -webkit-mask: radial-gradient(circle, transparent 60%, #000 62%); mask: radial-gradient(circle, transparent 60%, #000 62%); }
 .seat .bubble { position: absolute; top: -30px; padding: 4px 12px; border-radius: 14px; background: #fff; color: var(--black); font-weight: 800; font-size: 12.5px; animation: pop .35s cubic-bezier(.3, 1.6, .5, 1); box-shadow: 0 4px 12px rgba(0, 0, 0, .35); }
 .seat .crown { position: absolute; top: -22px; font-size: 22px; animation: pop .5s cubic-bezier(.3, 1.6, .5, 1); }
 .backs { position: relative; height: 54px; }
@@ -129,7 +130,12 @@ button { font: inherit; cursor: pointer; }
 .me-bar .info { display: grid; }
 .me-bar .info small { color: var(--muted); }
 .me-bar .info small em { color: var(--gold); font-style: normal; font-weight: 700; }
-.actions { position: absolute; right: 18px; bottom: 16px; display: flex; gap: 8px; z-index: 5; }
+/* Play on top, Pass below it, in the bottom-right corner; Sort and Clear above them. */
+.actions { position: absolute; right: 18px; bottom: 16px; display: flex; flex-direction: column; align-items: stretch; gap: 8px; width: 190px; z-index: 5; }
+.actions .tools { display: flex; gap: 6px; }
+.actions .tools .act { flex: 1; height: 34px; font-size: 12.5px; }
+.act.play { height: 58px; font-size: 18px; border-radius: 14px; }
+.act.pass { height: 48px; font-size: 16px; border-radius: 14px; }
 .act { height: 42px; min-width: 84px; padding: 0 16px; border-radius: 12px; border: 0; font-weight: 800; font-size: 14px; color: var(--text); background: rgba(0, 0, 0, .35); transition: transform .1s, filter .15s, opacity .15s; }
 .act:hover { filter: brightness(1.15); }
 .act:active { transform: scale(.95); }
@@ -176,3 +182,9 @@ button { font: inherit; cursor: pointer; }
 @media (max-height: 640px) { :root { --card-w: 62px; --card-h: 88px; } .pile { height: 150px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 .results .pays .tg { color: var(--gold); font-weight: 800; }
+
+.secs { position: absolute; right: -8px; bottom: -6px; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 13px; display: grid; place-items: center;
+  background: var(--gold); color: #2a1a00; font-weight: 900; font-size: 13px; box-shadow: 0 2px 8px rgba(0, 0, 0, .4); font-variant-numeric: tabular-nums; }
+.secs.low { background: #ff5a4a; color: #fff; animation: pulse .5s ease-in-out infinite alternate; }
+.hand { touch-action: none; }
+.hand .card.grab { transition: none !important; cursor: grabbing; box-shadow: 0 0 0 2px rgba(255, 255, 255, .8), 0 18px 34px rgba(0, 0, 0, .55); }

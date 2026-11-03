@@ -341,7 +341,7 @@ function render(fresh) {
     const turn = g && !g.winner && g.turn === id;
     const out = v.out.includes(id) || v.gone.includes(id) || (g && !inGame);
     return `<div class="seat ${spot}${turn ? ' turn' : ''}${out ? ' out' : ''}" data-id="${esc(id)}" style="${seatStyle(spot)}">
-      <div class="who"><span style="position:relative">${avatarHtml(id)}${turn && v.turnTime ? '<span class="ring"></span>' : ''}</span>
+      <div class="who"><span class="av-wrap">${avatarHtml(id)}${turn && v.turnTime ? '<span class="ring"></span>' : ''}</span>
         <div class="info"><b>${esc(names[id] || '?')}</b><small><em>${v.totals[id] ?? 0}</em> ${esc(t('pts'))} · ${v.wins[id] ?? 0} ${esc(t('wins'))}${v.gone.includes(id) ? ` · ${esc(t('left'))}` : v.out.includes(id) ? ` · ${esc(t('out'))}` : ''}</small></div></div>
       ${backs}${shown}${g && g.winner === id ? '<span class="crown">👑</span>' : ''}</div>`;
   }).join('');
@@ -349,7 +349,7 @@ function render(fresh) {
   // You.
   const myTurn = g && !g.winner && g.turn === me;
   $('meBar').className = `me-bar${myTurn ? ' turn' : ''}`;
-  $('meBar').innerHTML = `<span style="position:relative">${avatarHtml(me, 'lg')}${myTurn && v.turnTime ? '<span class="ring" style="position:absolute;inset:-5px"></span>' : ''}</span>
+  $('meBar').innerHTML = `<span class="av-wrap">${avatarHtml(me, 'lg')}${myTurn && v.turnTime ? '<span class="ring"></span><span class="secs" id="mySecs"></span>' : ''}</span>
     <div class="info"><b>${esc(names[me] || '')}</b><small><em>${v.totals[me] ?? 0}</em> ${esc(t('pts'))} · ${v.wins[me] ?? 0} ${esc(t('wins'))}</small></div>${g && g.winner === me ? '<span style="font-size:26px">👑</span>' : ''}`;
   renderHand(fresh);
   updateButtons();
@@ -360,7 +360,12 @@ function sortCards(list) {
   return list.slice().sort(sortMode === 'rank' ? (a, b) => a - b : (a, b) => suit(a) - suit(b) || a - b);
 }
 
+let handStale = false;
 function renderHand(fresh) {
+  // Not while you are dragging a card: catch up when you let go.
+  if (drag && !fresh) { handStale = true; return; }
+  if (drag) { clearTimeout(drag.timer); drag = null; }
+  handStale = false;
   const g = view && view.game;
   const hand = g && g.hand ? g.hand : [];
   // Keep your own order; new cards (a fresh deal) are sorted.
@@ -373,17 +378,21 @@ function renderHand(fresh) {
   el.classList.toggle('wait', !(g && !g.winner && g.turn === me));
 }
 
+let lay = { x0: 0, step: 1, cw: 76, n: 0 }; // where the hand's cards are, for dragging
 function layoutHand() {
   const el = $('hand');
   const cards = [...el.children];
   const n = cards.length;
   if (!n) return;
   const cw = cards[0].offsetWidth || 76;
-  const room = Math.min(innerWidth - 420, 1000);
-  const step = Math.min(cw * 0.72, (room - cw) / Math.max(1, n - 1));
+  // Leave room for your name on the left and the buttons on the right.
+  const room = Math.min(innerWidth - 2 * 250, 1000);
+  const step = Math.max(14, Math.min(cw * 0.72, (room - cw) / Math.max(1, n - 1)));
   const total = cw + step * (n - 1);
   const x0 = (innerWidth - total) / 2;
+  lay = { x0, step, cw, n };
   cards.forEach((c, i) => {
+    if (drag && drag.mode === 'move' && Number(c.dataset.c) === drag.n) { c.style.zIndex = '100'; return; }
     const k = n > 1 ? i / (n - 1) - 0.5 : 0;
     const lift = selected.has(Number(c.dataset.c)) ? -28 : 0;
     const arc = Math.abs(k) * Math.abs(k) * 26;
@@ -585,16 +594,98 @@ function matchOver(e) {
 }
 
 // ------------------------------------------------------------------ input
-$('hand').addEventListener('click', (e) => {
+// Your cards with the mouse:
+//  - click a card to pick it (click again to put it back);
+//  - press and drag sideways across cards to pick (or un-pick) a whole run;
+//  - press and hold a card until it lifts, then drag it to a new place in your hand.
+let drag = null; // { mode: 'press' | 'paint' | 'move', n, el, x, y, last, paintTo, grabDx }
+const cardAtX = (x) => {
+  if (!lay.n || x < lay.x0 || x > lay.x0 + lay.step * (lay.n - 1) + lay.cw) return -1;
+  return Math.max(0, Math.min(lay.n - 1, Math.floor((x - lay.x0) / lay.step)));
+};
+function setPicked(n, on) {
+  if (selected.has(n) === on) return false;
+  if (on) selected.add(n); else selected.delete(n);
+  const el = $('hand').querySelector(`[data-c="${n}"]`);
+  if (el) el.classList.toggle('sel', on);
+  return true;
+}
+$('hand').addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
   const c = e.target.closest('.card');
   if (!c) return;
+  e.preventDefault();
   const n = Number(c.dataset.c);
-  if (selected.has(n)) selected.delete(n); else selected.add(n);
-  c.classList.toggle('sel', selected.has(n));
-  Sfx.play('cardSelect');
-  layoutHand();
-  updateButtons();
+  drag = { mode: 'press', n, el: c, x: e.clientX, y: e.clientY, last: handOrder.indexOf(n), pid: e.pointerId };
+  $('hand').setPointerCapture(e.pointerId);
+  // Held still: pick the card up to move it.
+  drag.timer = setTimeout(() => {
+    if (!drag || drag.mode !== 'press') return;
+    drag.mode = 'move';
+    const r = drag.el.getBoundingClientRect();
+    drag.grabDx = drag.x - r.left;
+    drag.el.classList.add('grab');
+    Sfx.play('cardDeal');
+  }, 260);
 });
+$('hand').addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x;
+  const dy = e.clientY - drag.y;
+  if (drag.mode === 'press' && Math.hypot(dx, dy) > 7) {
+    // Moved before the hold: sweep-select across the cards.
+    clearTimeout(drag.timer);
+    drag.mode = 'paint';
+    drag.paintTo = !selected.has(drag.n);
+    setPicked(drag.n, drag.paintTo);
+    Sfx.play('cardSelect');
+  }
+  if (drag.mode === 'paint') {
+    const i = cardAtX(e.clientX);
+    if (i < 0) return;
+    // Fill in every card between the last one and this one (fast flicks skip cards).
+    const from = Math.min(drag.last, i);
+    const to = Math.max(drag.last, i);
+    let changed = false;
+    for (let k = from; k <= to; k++) changed = setPicked(handOrder[k], drag.paintTo) || changed;
+    drag.last = i;
+    if (changed) { Sfx.play('cardSelect'); layoutHand(); updateButtons(); }
+  } else if (drag.mode === 'move') {
+    const left = e.clientX - drag.grabDx;
+    drag.el.style.left = `${left}px`;
+    drag.el.style.transform = `translateY(-40px) rotate(${Math.max(-12, Math.min(12, dx / 20))}deg) scale(1.08)`;
+    const want = Math.max(0, Math.min(lay.n - 1, Math.round((left - lay.x0) / lay.step)));
+    const cur = handOrder.indexOf(drag.n);
+    if (want !== cur) {
+      handOrder.splice(cur, 1);
+      handOrder.splice(want, 0, drag.n);
+      // Keep the elements in the new order so later layouts match.
+      const el = $('hand');
+      for (const x of handOrder) { const node = el.querySelector(`[data-c="${x}"]`); if (node) el.append(node); }
+      layoutHand();
+    }
+  }
+});
+function endDrag(e) {
+  if (!drag) return;
+  clearTimeout(drag.timer);
+  const d = drag;
+  drag = null;
+  try { $('hand').releasePointerCapture(d.pid); } catch { /* already released */ }
+  if (d.mode === 'press' && e && e.type === 'pointerup') {
+    setPicked(d.n, !selected.has(d.n));
+    Sfx.play('cardSelect');
+  } else if (d.mode === 'move') {
+    d.el.classList.remove('grab');
+    Sfx.play('cardPlay');
+  }
+  if (handStale) renderHand(false);
+  else layoutHand();
+  updateButtons();
+}
+$('hand').addEventListener('pointerup', endDrag);
+$('hand').addEventListener('pointercancel', endDrag);
+$('hand').addEventListener('lostpointercapture', () => { if (drag) endDrag(null); });
 // Right-click (or double-click) a card picks all cards of that rank.
 $('hand').addEventListener('contextmenu', (e) => {
   e.preventDefault();
@@ -648,6 +739,12 @@ setInterval(() => {
   const now = Date.now() + clockSkew;
   const p = Math.max(0, 1 - (now - g.turnStart) / (view.turnTime * 1000));
   for (const r of document.querySelectorAll('.ring')) r.style.setProperty('--p', `${p * 100}%`);
+  const secs = document.getElementById('mySecs');
+  if (secs) {
+    const s = Math.max(0, Math.ceil((view.turnTime * 1000 - (now - g.turnStart)) / 1000));
+    secs.textContent = s;
+    secs.classList.toggle('low', p < 0.25);
+  }
   if (g.turn === me && !g.winner && p > 0 && p < 0.2 && !updateButtons.warned) { updateButtons.warned = true; Sfx.play('lowtime'); }
   if (g.turn !== me) updateButtons.warned = false;
 }, 200);
