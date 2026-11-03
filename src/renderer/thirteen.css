@@ -130,12 +130,14 @@ button { font: inherit; cursor: pointer; }
 .me-bar .info { display: grid; }
 .me-bar .info small { color: var(--muted); }
 .me-bar .info small em { color: var(--gold); font-style: normal; font-weight: 700; }
-/* Play on top, Pass below it, in the bottom-right corner; Sort and Clear above them. */
-.actions { position: absolute; right: 18px; bottom: 16px; display: flex; flex-direction: column; align-items: stretch; gap: 8px; width: 190px; z-index: 5; }
-.actions .tools { display: flex; gap: 6px; }
-.actions .tools .act { flex: 1; height: 34px; font-size: 12.5px; }
-.act.play { height: 58px; font-size: 18px; border-radius: 14px; }
-.act.pass { height: 48px; font-size: 16px; border-radius: 14px; }
+/* The buttons always sit in the bottom-right corner: a wide Play in the
+   corner, a smaller Pass to its left, Sort and Clear (smallest) above Pass. */
+.actions { position: absolute; right: 18px; bottom: 16px; z-index: 5; display: grid; gap: 8px;
+  grid-template-areas: "tools play" "pass play"; grid-template-columns: 112px 220px; align-items: end; }
+.actions .tools { grid-area: tools; display: flex; flex-direction: column; gap: 5px; }
+.actions .tools .act { height: 26px; min-width: 0; padding: 0 10px; font-size: 11.5px; border-radius: 8px; }
+.actions .play { grid-area: play; height: 78px; font-size: 23px; border-radius: 14px; }
+.actions .pass { grid-area: pass; height: 46px; font-size: 14px; border-radius: 12px; min-width: 0; }
 .act { height: 42px; min-width: 84px; padding: 0 16px; border-radius: 12px; border: 0; font-weight: 800; font-size: 14px; color: var(--text); background: rgba(0, 0, 0, .35); transition: transform .1s, filter .15s, opacity .15s; }
 .act:hover { filter: brightness(1.15); }
 .act:active { transform: scale(.95); }
@@ -188,3 +190,5 @@ button { font: inherit; cursor: pointer; }
 .secs.low { background: #ff5a4a; color: #fff; animation: pulse .5s ease-in-out infinite alternate; }
 .hand { touch-action: none; }
 .hand .card.grab { transition: none !important; cursor: grabbing; box-shadow: 0 0 0 2px rgba(255, 255, 255, .8), 0 18px 34px rgba(0, 0, 0, .55); }
+.how ul { margin: 4px 0 0; padding-left: 18px; }
+.how li { margin: 3px 0; }

@@ -103,7 +103,14 @@ function renderLobby() {
     t('Beat the cards on the table with the same number of cards, higher – or pass. When everyone passes, the last player starts again with anything.'),
     t('Whoever holds 3♦ (or the lowest card) starts the first game and must play it. The winner of a game starts the next.'),
     t('The first to play all their cards wins the game. The others get 1 point per card left, double with 10 or more, triple with all 13. Being dealt 13 different ranks wins at once.'),
-  ].map((x) => `<p>${esc(x)}</p>`).join('');
+  ].map((x) => `<p>${esc(x)}</p>`).join('') + `<p><b>${esc(t('Controls'))}</b></p><ul>${[
+    t('Left click a card: pick it (click again to put it back).'),
+    t('Hold the left button and drag across your cards: pick a whole run at once (start on a picked card to un-pick).'),
+    t('Double-click a card: pick every card of that number.'),
+    t('Hold the right button on a card and drag: move it to a new place in your hand.'),
+    t('Play (or Enter) plays the picked cards; Pass (or P) skips your turn; Esc clears your picks; Sort orders your hand by number or by suit.'),
+    t('The gold ring around a player\'s picture shows whose turn it is and how much time is left.'),
+  ].map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
 }
 
 $('lobbyOpts').addEventListener('click', (e) => {
@@ -386,7 +393,8 @@ function layoutHand() {
   if (!n) return;
   const cw = cards[0].offsetWidth || 76;
   // Leave room for your name on the left and the buttons on the right.
-  const room = Math.min(innerWidth - 2 * 250, 1000);
+  const side = Math.max(250, ($('actions').offsetWidth || 230) + 40);
+  const room = Math.min(innerWidth - 2 * side, 1000);
   const step = Math.max(14, Math.min(cw * 0.72, (room - cw) / Math.max(1, n - 1)));
   const total = cw + step * (n - 1);
   const x0 = (innerWidth - total) / 2;
@@ -410,7 +418,8 @@ function updateButtons() {
   $('btnPlay').disabled = !myTurn || !check.ok;
   $('btnPass').disabled = !myTurn || !g.table;
   $('btnClear').disabled = !sel.length;
-  $('btnSort').textContent = sortMode === 'rank' ? t('Sort by suit') : t('Sort by rank');
+  $('btnSort').textContent = t('Sort');
+  $('btnSort').title = sortMode === 'rank' ? t('Sort by suit') : t('Sort by rank');
   const hint = $('hint');
   hint.className = 'hint';
   if (!g || g.winner || view.over) hint.textContent = '';
@@ -595,10 +604,11 @@ function matchOver(e) {
 
 // ------------------------------------------------------------------ input
 // Your cards with the mouse:
-//  - click a card to pick it (click again to put it back);
-//  - press and drag sideways across cards to pick (or un-pick) a whole run;
-//  - press and hold a card until it lifts, then drag it to a new place in your hand.
-let drag = null; // { mode: 'press' | 'paint' | 'move', n, el, x, y, last, paintTo, grabDx }
+//  - left click: pick a card (click again to put it back);
+//  - left button + drag sideways: pick (or un-pick) a whole run of cards;
+//  - right button + drag: move a card to a new place in your hand (at once);
+//  - double-click: pick every card of that number.
+let drag = null; // { mode: 'press' | 'paint' | 'move', n, el, x, y, last, paintTo, grabDx, pid }
 const cardAtX = (x) => {
   if (!lay.n || x < lay.x0 || x > lay.x0 + lay.step * (lay.n - 1) + lay.cw) return -1;
   return Math.max(0, Math.min(lay.n - 1, Math.floor((x - lay.x0) / lay.step)));
@@ -611,30 +621,30 @@ function setPicked(n, on) {
   return true;
 }
 $('hand').addEventListener('pointerdown', (e) => {
-  if (e.button !== 0) return;
+  if (e.button !== 0 && e.button !== 2) return;
   const c = e.target.closest('.card');
   if (!c) return;
   e.preventDefault();
+  if (drag) return;
   const n = Number(c.dataset.c);
-  drag = { mode: 'press', n, el: c, x: e.clientX, y: e.clientY, last: handOrder.indexOf(n), pid: e.pointerId };
+  drag = { mode: e.button === 2 ? 'move' : 'press', n, el: c, x: e.clientX, y: e.clientY, last: handOrder.indexOf(n), pid: e.pointerId, button: e.button };
   $('hand').setPointerCapture(e.pointerId);
-  // Held still: pick the card up to move it.
-  drag.timer = setTimeout(() => {
-    if (!drag || drag.mode !== 'press') return;
-    drag.mode = 'move';
-    const r = drag.el.getBoundingClientRect();
-    drag.grabDx = drag.x - r.left;
-    drag.el.classList.add('grab');
+  if (drag.mode === 'move') {
+    // Right button: the card lifts and follows the mouse straight away.
+    const r = c.getBoundingClientRect();
+    drag.grabDx = e.clientX - r.left;
+    c.classList.add('grab');
+    c.style.zIndex = '100';
+    c.style.transform = 'translateY(-40px) scale(1.08)';
     Sfx.play('cardDeal');
-  }, 260);
+  }
 });
 $('hand').addEventListener('pointermove', (e) => {
   if (!drag) return;
   const dx = e.clientX - drag.x;
   const dy = e.clientY - drag.y;
-  if (drag.mode === 'press' && Math.hypot(dx, dy) > 7) {
-    // Moved before the hold: sweep-select across the cards.
-    clearTimeout(drag.timer);
+  if (drag.mode === 'press' && Math.hypot(dx, dy) > 6) {
+    // Left button moved: sweep-select across the cards.
     drag.mode = 'paint';
     drag.paintTo = !selected.has(drag.n);
     setPicked(drag.n, drag.paintTo);
@@ -668,7 +678,6 @@ $('hand').addEventListener('pointermove', (e) => {
 });
 function endDrag(e) {
   if (!drag) return;
-  clearTimeout(drag.timer);
   const d = drag;
   drag = null;
   try { $('hand').releasePointerCapture(d.pid); } catch { /* already released */ }
@@ -686,16 +695,17 @@ function endDrag(e) {
 $('hand').addEventListener('pointerup', endDrag);
 $('hand').addEventListener('pointercancel', endDrag);
 $('hand').addEventListener('lostpointercapture', () => { if (drag) endDrag(null); });
-// Right-click (or double-click) a card picks all cards of that rank.
-$('hand').addEventListener('contextmenu', (e) => {
-  e.preventDefault();
+// The right button moves cards, so no menu on the cards.
+$('hand').addEventListener('contextmenu', (e) => e.preventDefault());
+// Double-click a card: pick every card of that number (or put them all back).
+$('hand').addEventListener('dblclick', (e) => {
   const c = e.target.closest('.card');
   if (!c) return;
   const r = rank(Number(c.dataset.c));
   const same = handOrder.filter((x) => rank(x) === r);
   const all = same.every((x) => selected.has(x));
-  for (const x of same) if (all) selected.delete(x); else selected.add(x);
-  renderHand(false);
+  for (const x of same) setPicked(x, !all);
+  layoutHand();
   updateButtons();
 });
 $('btnPlay').onclick = () => {
@@ -731,6 +741,7 @@ $('btnLeave').onclick = () => {
   window.close();
 };
 window.addEventListener('resize', () => { if (started) render(false); });
+
 
 // Turn timer ring and the time limit clock.
 setInterval(() => {
