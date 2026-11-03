@@ -1,5 +1,5 @@
 'use strict';
-/* global Games, api, el, esc, t, call, S, peerName, confirmModal, avatarHtml, $ */
+/* global Games, api, el, esc, t, call, S, peerName, confirmModal, avatarHtml, $, toast */
 // Games inside private chats: the card shown in the chat, and the game
 // window with the interactive board.
 
@@ -275,6 +275,7 @@ const Game = (() => {
       return;
     }
     if (m && m.game && m.game.type === 'tetris') {
+      if (!m.game.players.includes(S.me.id)) { toast(t('Only the two players can open this match')); return; }
       call(api.openTetris(conv, id));
       return;
     }
@@ -406,8 +407,8 @@ const Game = (() => {
           ${offerFromOther ? `<div class="cc-offer"><span>½ ${esc(t('Accept the draw?'))}</span><button class="cc-btn green" data-draw="accept">${esc(t('Accept'))}</button><button class="cc-btn" data-draw="decline">${esc(t('Decline'))}</button></div>` : ''}
           <div class="cc-moves">${movesHtml(r)}</div>
           <div class="cc-actions">
-            ${!over && r.drawOffer === null ? `<button class="cc-btn" data-action="draw" title="${esc(t('Offer draw'))}">½ ${esc(t('Draw'))}</button>` : ''}
-            ${!over ? `<button class="cc-btn" data-action="resign" title="${esc(t('Resign'))}">⚑ ${esc(t('Resign'))}</button>` : `<button class="cc-btn green" data-action="rematch">${esc(t('New game'))}</button>`}
+            ${me < 0 ? '' : !over && r.drawOffer === null ? `<button class="cc-btn" data-action="draw" title="${esc(t('Offer draw'))}">½ ${esc(t('Draw'))}</button>` : ''}
+            ${me < 0 ? '' : !over ? `<button class="cc-btn" data-action="resign" title="${esc(t('Resign'))}">⚑ ${esc(t('Resign'))}</button>` : `<button class="cc-btn green" data-action="rematch">${esc(t('New game'))}</button>`}
           </div>
         </div>
       </div></div>`;
@@ -525,6 +526,7 @@ const Game = (() => {
     board.addEventListener('contextmenu', (e) => e.preventDefault());
     board.addEventListener('pointerdown', (e) => {
       const s = sqAt(e.clientX, e.clientY);
+      if (e.button === 0 && current() && myIndex(current()) < 0) return; // watching a group game
       if (e.button === 2) {
         right = s;
         return;
@@ -678,8 +680,8 @@ const Game = (() => {
           ${offerFromOther ? `<div class="cc-offer"><span>½ ${esc(t('Accept the draw?'))}</span><button class="cc-btn green" data-draw="accept">${esc(t('Accept'))}</button><button class="cc-btn" data-draw="decline">${esc(t('Decline'))}</button></div>` : ''}
           <div class="cc-moves">${moves || `<div class="cc-empty">${esc(t('No moves yet'))}</div>`}</div>
           <div class="cc-actions">
-            ${!over && r.drawOffer === null ? `<button class="cc-btn" data-action="draw">½ ${esc(t('Draw'))}</button>` : ''}
-            ${!over ? `<button class="cc-btn" data-action="resign">⚑ ${esc(t('Resign'))}</button>` : `<button class="cc-btn green" data-action="rematch">${esc(t('New game'))}</button>`}
+            ${me < 0 ? '' : !over && r.drawOffer === null ? `<button class="cc-btn" data-action="draw">½ ${esc(t('Draw'))}</button>` : ''}
+            ${me < 0 ? '' : !over ? `<button class="cc-btn" data-action="resign">⚑ ${esc(t('Resign'))}</button>` : `<button class="cc-btn green" data-action="rematch">${esc(t('New game'))}</button>`}
           </div>
         </div>
       </div></div>`;
@@ -783,7 +785,8 @@ const Game = (() => {
     const conv = open ? open.conv : null;
     if (!conv) return;
     const me = myIndex(msg);
-    const options = { side: me === 0 ? 'second' : 'first', clock: msg.game.clock || null };
+    if (me < 0) return;
+    const options = { side: me === 0 ? 'second' : 'first', clock: msg.game.clock || null, opponent: msg.game.players[1 - me] };
     call(api.createGame(conv, msg.game.type, options)).then((g) => { if (g) show(conv, g.id); });
   }
 
@@ -822,8 +825,8 @@ const Game = (() => {
           ${offerFromOther ? `<div class="draw-offer"><span>${esc(t('Accept the draw?'))}</span><button class="btn primary" data-draw="accept">${esc(t('Accept'))}</button><button class="btn" data-draw="decline">${esc(t('Decline'))}</button></div>` : ''}
           ${type === 'chess' ? `<ol class="move-list">${moves || `<li class="empty">${esc(t('No moves yet'))}</li>`}</ol>` : ''}
           <div class="game-actions">
-            ${!over && type === 'chess' && r.drawOffer === null ? `<button class="btn" data-action="draw">${esc(t('Offer draw'))}</button>` : ''}
-            ${!over ? `<button class="btn danger" data-action="resign">${esc(t('Resign'))}</button>` : `<button class="btn primary" data-action="rematch">${esc(t('New game'))}</button>`}
+            ${me < 0 ? '' : !over && type === 'chess' && r.drawOffer === null ? `<button class="btn" data-action="draw">${esc(t('Offer draw'))}</button>` : ''}
+            ${me < 0 ? '' : !over ? `<button class="btn danger" data-action="resign">${esc(t('Resign'))}</button>` : `<button class="btn primary" data-action="rematch">${esc(t('New game'))}</button>`}
           </div>
         </div>
       </div></div>`;
@@ -837,6 +840,8 @@ const Game = (() => {
   }
 
   function move(m) {
+    const cm = current();
+    if (cm && myIndex(cm) < 0) return undefined; // watching a group game
     const { conv, id } = open;
     open.selected = null;
     open.promo = null;
@@ -875,7 +880,31 @@ const Game = (() => {
     if (open && open.id === msg.id) render();
   }
 
+  // In a group: who to play against (two-player games). The rest of the group can watch.
+  let opponent = null;
+  function pickOpponent(back, conv, type, done, next) {
+    const m = back.querySelector('.modal');
+    const g = S.groups.get(conv.slice(2));
+    const members = (g ? g.members : []).filter((id) => id !== S.me.id);
+    const online = (id) => !!S.peers.get(id)?.online;
+    members.sort((a, b) => Number(online(b)) - Number(online(a)) || peerName(a).localeCompare(peerName(b)));
+    m.innerHTML = `<div class="modal-head"><h2>${ICONS[type]} ${esc(t(TITLES[type]))}</h2><button class="icon-btn" data-close>✕</button></div>
+      <div class="modal-body game-setup"><div class="gs-label">${esc(t('Play against'))}</div>
+        <div class="gs-people">${members.map((id) => `<button class="gs-person${online(id) ? ' on' : ''}" data-opp="${esc(id)}"><span class="dot"></span>${esc(peerName(id))}</button>`).join('') || `<div class="hint">${esc(t('Nobody else is in this group'))}</div>`}</div>
+        <div class="gs-note">${esc(t('The rest of the group can watch the game.'))}</div></div>
+      <div class="modal-foot"><button class="btn" data-back>${esc(t('Back'))}</button></div>`;
+    m.querySelector('[data-close]').onclick = done;
+    m.onclick = (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.back !== undefined) { done(); newGameModal(conv); return; }
+      if (b.dataset.opp) { opponent = b.dataset.opp; next(); }
+    };
+  }
+
   async function newGameModal(conv) {
+    opponent = null;
+    const isGroup = conv.startsWith('g:');
     const back = el('div', 'modal-back');
     back.innerHTML = `<div class="modal"><div class="modal-head"><h2>${esc(t('Play a game'))}</h2><button class="icon-btn" data-close>✕</button></div>
       <div class="modal-body"><div class="game-picker">${Games.TYPES.map((type) => `<button class="game-pick" data-type="${type}">
@@ -895,11 +924,15 @@ const Game = (() => {
         if (g) call(api.openWarlock(conv, g.id));
         return undefined;
       }
-      if (type === 'chess' || type === 'checkers' || type === 'tetris') return setupView(back, conv, type, done);
-      done();
-      const g = await call(api.createGame(conv, type));
-      if (g) setTimeout(() => show(conv, g.id), 50);
-      return undefined;
+      const go = async () => {
+        if (type === 'chess' || type === 'checkers' || type === 'tetris') return setupView(back, conv, type, done);
+        done();
+        const g = await call(api.createGame(conv, type, { opponent }));
+        if (g) setTimeout(() => show(conv, g.id), 50);
+        return undefined;
+      };
+      if (isGroup) return pickOpponent(back, conv, type, done, go);
+      return go();
     };
     $('#modalRoot').append(back);
   }
@@ -941,7 +974,7 @@ const Game = (() => {
         newGameModal(conv);
       } else if (b.dataset.go !== undefined) {
         done();
-        const options = { side: prefs.side, clock: clockFromKey(prefs[clockPref(type)]) };
+        const options = { side: prefs.side, clock: clockFromKey(prefs[clockPref(type)]), opponent };
         const g = await call(api.createGame(conv, type, options));
         if (g) setTimeout(() => show(conv, g.id), 50);
       }
@@ -972,7 +1005,7 @@ const Game = (() => {
         newGameModal(conv);
       } else if (b.dataset.go !== undefined) {
         done();
-        const g = await call(api.createGame(conv, 'tetris', { bestOf: prefs.bestOf }));
+        const g = await call(api.createGame(conv, 'tetris', { bestOf: prefs.bestOf, opponent }));
         if (g) setTimeout(() => show(conv, g.id), 50);
       }
     };

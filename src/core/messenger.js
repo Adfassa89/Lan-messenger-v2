@@ -812,11 +812,16 @@ class Messenger extends EventEmitter {
       if (DIRECT_ONLY.includes(w.game.type) && type !== 'direct') return;
       msg.game = { type: w.game.type, host: peerId };
     } else if (kind === 'game') {
-      // Games are only between the two people of a private chat.
+      // Two-player games: between the two people of a private chat, or two
+      // members of a group (everyone else in the group watches).
       const g = w.game || {};
       const players = Array.isArray(g.players) ? g.players : [];
-      if (type !== 'direct' || !Games.TYPES.includes(g.type) || players.length !== 2
-        || !players.includes(this.id) || !players.includes(peerId)) return;
+      if (!Games.TYPES.includes(g.type) || players.length !== 2 || players[0] === players[1] || !players.includes(peerId)) return;
+      if (type === 'direct' && !players.includes(this.id)) return;
+      if (type === 'group') {
+        const grp = this.groups[conv.slice(2)];
+        if (!grp || !players.every((p) => p === this.id || grp.members.includes(p))) return;
+      } else if (type !== 'direct') return;
       msg.game = { type: g.type, players: [players[0], players[1]], moves: [], at: Date.now() };
       const clock = Games.cleanClock(g.clock);
       if (g.type === 'tetris' && Games.bestOf(g) > 1) msg.game.bestOf = Games.bestOf(g);
@@ -1277,12 +1282,21 @@ class Messenger extends EventEmitter {
   // side: 'first' (white / dark pieces), 'second' or 'random'. In chess and
   // checkers the inviter chooses (random by default); otherwise the inviter starts.
   // clock: { base, inc } in ms for timed chess or checkers, or nothing for no time limit.
-  createGame(conv, type, { side = 'random', clock, bestOf } = {}) {
-    if (this._convType(conv) !== 'direct') throw new Error('Games can be played in private chats');
+  // A two-player game in a private chat, or in a group against a chosen member
+  // (the rest of the group can watch).
+  createGame(conv, type, { side = 'random', clock, bestOf, opponent } = {}) {
+    const kind = this._convType(conv);
+    if (kind === 'broadcast') throw new Error('Games can be played in group and private chats');
     if (!Games.TYPES.includes(type)) throw new Error('Unknown game');
+    let other = conv;
+    if (kind === 'group') {
+      const g = this.groups[conv.slice(2)];
+      if (!g || !opponent || opponent === this.id || !g.members.includes(opponent)) throw new Error('Choose who to play with');
+      other = opponent;
+    }
     const choose = type === 'chess' || type === 'checkers';
     const first = !choose || side === 'first' || (side !== 'second' && Math.random() < 0.5);
-    const players = first ? [this.id, conv] : [conv, this.id];
+    const players = first ? [this.id, other] : [other, this.id];
     const game = { type, players, moves: [] };
     const c = Games.CLOCKED.includes(type) ? Games.cleanClock(clock) : null;
     if (c) game.clock = c;
@@ -1320,7 +1334,7 @@ class Messenger extends EventEmitter {
       if (r.clock.running === null) continue;
       const left = r.clock.left[r.clock.running] - (now - (g.at || msg.ts));
       const me = g.players.indexOf(this.id);
-      if (left <= 0 && (r.clock.running === me || left <= -3000)) {
+      if (me >= 0 && left <= 0 && (r.clock.running === me || left <= -3000)) {
         try { this.gameMove(conv, id, { timeout: true }); } catch { /* someone else was faster */ }
       }
     }
@@ -1355,7 +1369,8 @@ class Messenger extends EventEmitter {
     g.at = Date.now(); // when this position started, for the clocks
     this.store.updateMessage(conv, msg.id, {});
     this.emit('message', { conv, msg, isNew: false });
-    if (who !== this.id) {
+    // Only the players hear about each move; the rest of a group just sees the board change.
+    if (who !== this.id && g.players.includes(this.id)) {
       const c = this.convs[conv];
       if (c) {
         c.lastTs = Date.now();

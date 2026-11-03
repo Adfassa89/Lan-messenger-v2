@@ -1391,6 +1391,12 @@ html.theme-anim, html.theme-anim * {
 .gs-opt.on, .gs-side.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); box-shadow: inset 0 0 0 1px var(--accent); }
 .gs-opt.wide { width: 100%; }
 .gs-sides { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.gs-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; max-height: 320px; overflow: auto; }
+.gs-person { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border, #333); background: var(--panel2, rgba(255,255,255,.04)); color: inherit; font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.gs-person:hover { border-color: var(--accent, #6b6bff); }
+.gs-person .dot { width: 9px; height: 9px; border-radius: 50%; background: #777; flex: none; }
+.gs-person.on .dot { background: #3fbf6a; box-shadow: 0 0 6px #3fbf6a; }
+.gs-note { margin-top: 10px; font-size: 12px; opacity: .7; }
 .gs-side {
   display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 12px;
   border: 1px solid var(--border); background: var(--panel-2); font-weight: 600;

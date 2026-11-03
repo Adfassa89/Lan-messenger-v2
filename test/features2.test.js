@@ -86,3 +86,24 @@ test('Tank can only be started and received in a private chat', async () => {
     await bob.stop();
   }
 });
+
+test('two members of a group can play a game; the others watch', async () => {
+  const [alice, bob] = makePair();
+  await alice.start();
+  await bob.start();
+  try {
+    await waitFor(() => alice.peers.get(bob.id)?.online && bob.peers.get(alice.id)?.online, 8000, 'discovery');
+    const group = alice.createGroup('Pit crew', [bob.id]);
+    await waitFor(() => bob.groups[group.slice(2)], 5000, 'group arrived');
+    assert.throws(() => alice.createGame(group, 'ttt'), /Choose who/);
+    const g = alice.createGame(group, 'ttt', { opponent: bob.id });
+    await waitFor(() => bob.loadMessages(group).some((m) => m.id === g.id), 5000, 'invite arrived');
+    const first = g.game.players[0] === alice.id ? alice : bob;
+    first.gameMove(group, g.id, { cell: 4 });
+    const other = first === alice ? bob : alice;
+    await waitFor(() => other.loadMessages(group).find((m) => m.id === g.id).game.moves.length === 1, 5000, 'move arrived');
+  } finally {
+    await alice.stop();
+    await bob.stop();
+  }
+});

@@ -1028,7 +1028,7 @@ function wireEvents() {
     if (focused && activeConv === conv) return;
     if (win && !focused) win.flashFrame(true);
     if (!messenger.settings.notifications || messenger.config.status === 'busy' || !Notification.isSupported()) return;
-    const who = messenger.peers.get(conv)?.name || t('Someone');
+    const who = messenger.peers.get(msg.game.players.find((p) => p !== messenger.id))?.name || t('Someone');
     let over = false;
     try { over = Games.replay(msg.game.type, msg.game.moves, msg.game).status.over; } catch { /* ignore */ }
     showNotification({

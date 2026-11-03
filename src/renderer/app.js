@@ -1289,7 +1289,7 @@ function plusMenu() {
     { icon: ic('<path d="M6 3v12a3 3 0 0 0 3 3h12"/><path d="M3 6h12a3 3 0 0 1 3 3v12"/>'), label: t('Screenshot with drawing'), hint: 'Ctrl+Shift+S', action: screenshot },
     { icon: ic('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'), label: t('Share your screen'), action: () => Share.start(S.active) },
     { icon: ic('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'), label: t('Create a poll'), action: pollModal },
-    ...(convKind(S.active) === 'direct' ? [{ icon: ic('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>'), label: t('Play a game'), action: () => Game.newGameModal(S.active) }] : []),
+    ...(convKind(S.active) === 'direct' || convKind(S.active) === 'group' ? [{ icon: ic('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>'), label: t('Play a game'), action: () => Game.newGameModal(S.active) }] : []),
     { icon: ic('<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>'), label: t('Urgent alert'), danger: true, action: urgentModal },
     { icon: ICONS.clock, label: t('Schedule a message'), action: () => scheduleModal() },
   ], r.left, r.top - 370);
