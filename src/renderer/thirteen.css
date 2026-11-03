@@ -136,7 +136,8 @@ button { font: inherit; cursor: pointer; }
   grid-template-areas: "tools play" "pass play"; grid-template-columns: 112px 170px; align-items: end; }
 .actions .tools { grid-area: tools; display: flex; flex-direction: column; gap: 5px; }
 .actions .tools .act { height: 26px; min-width: 0; padding: 0 10px; font-size: 11.5px; border-radius: 8px; }
-.actions .play { grid-area: play; height: 96px; font-size: 23px; border-radius: 14px; }
+/* Play spans the full height of the column beside it: its top lines up with Sort, its bottom with Pass. */
+.actions .play { grid-area: play; align-self: stretch; height: auto; min-height: 96px; font-size: 23px; border-radius: 14px; }
 .actions .pass { grid-area: pass; height: 46px; font-size: 14px; border-radius: 12px; min-width: 0; }
 .act { height: 42px; min-width: 84px; padding: 0 16px; border-radius: 12px; border: 0; font-weight: 800; font-size: 14px; color: var(--text); background: rgba(0, 0, 0, .35); transition: transform .1s, filter .15s, opacity .15s; }
 .act:hover { filter: brightness(1.15); }
