@@ -26,7 +26,9 @@ const EXTRA = ['Smileys', 'Gestures', 'Work', 'Things', 'Indigo', 'Office', 'Oce
   // Tank: looks, arenas, power-ups and enemy kinds (translated through a variable).
   'Classic', 'Mine site', 'Toy tanks', 'Crossroads', 'Islands', 'Fortress',
   'Power shell', 'Rapid fire', 'Ricochet', 'Freeze', 'Fortify', 'Airstrike', 'Extra life',
-  'Scout', 'Trooper', 'Heavy', 'Rocket', 'Drone'];
+  'Scout', 'Trooper', 'Heavy', 'Rocket', 'Drone',
+  // Connection quality (calls and voice rooms).
+  'Good', 'Fair', 'Poor'];
 
 function decode(s) {
   return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');

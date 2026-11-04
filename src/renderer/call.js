@@ -1,5 +1,5 @@
 'use strict';
-/* global api, I18N, MicBoost */
+/* global api, I18N, MicBoost, RtcTune */
 // Voice and video calls. Every participant connects directly to every other
 // participant over the LAN (WebRTC); the call setup messages travel over the
 // app's encrypted chat connections.
@@ -92,6 +92,7 @@ function tileFor(id) {
   tile.innerHTML = `<video autoplay playsinline></video>
     <div class="avatar-wrap"><div class="avatar" style="background:${color(id)}">${avatar}</div></div>
     <div class="tile-state"></div>
+    <div class="tile-q hidden"><i></i><span></span></div>
     <div class="tile-label"><span></span></div>`;
   tile.querySelector('.tile-label span').textContent = nameOf(id);
   $('stage').append(tile);
@@ -187,6 +188,24 @@ function levelLoop() {
   }
 }
 
+// ------------------------------------------------------------------ connection quality
+// Every 2 s: delay, packet loss and jitter for each person, shown on their tile.
+async function qualityLoop() {
+  for (const [id, entry] of peers) {
+    if (!entry.connected) continue;
+    const q = await RtcTune.measure(entry.pc, entry.q || {});
+    if (!q) continue;
+    entry.q = q;
+    const box = entry.tile.querySelector('.tile-q');
+    if (!box) continue;
+    box.classList.remove('hidden', 'good', 'fair', 'poor');
+    box.classList.add(q.level);
+    box.querySelector('span').textContent = q.rtt !== null ? `${q.rtt} ms` : '';
+    box.title = `${t('Connection')}: ${t({ good: 'Good', fair: 'Fair', poor: 'Poor' }[q.level])}\n${t('Delay')}: ${q.rtt ?? '?'} ms · ${t('Lost')}: ${q.loss}% · ${t('Jitter')}: ${q.jitter} ms`;
+    void id;
+  }
+}
+
 // ------------------------------------------------------------------ connections
 function myState() {
   return { kind: 'call-state', mic: micOn && !!micTrack, cam: camOn && !!camTrack };
@@ -222,6 +241,8 @@ function newPeer(id) {
       clearTimeout(entry.dropTimer);
       setTileState(id, '');
       onConnected(id);
+      tuneVideo();
+      send(id, { kind: 'call-watch', on: !document.hidden });
     } else if (s === 'disconnected') {
       setTileState(id, t('Reconnecting…'));
       entry.dropTimer = setTimeout(() => dropPeer(id, t('Connection lost')), 10000);
@@ -237,11 +258,19 @@ async function attachLocal(pc) {
     const kind = tr.receiver.track.kind;
     tr.direction = 'sendrecv';
     await tr.sender.replaceTrack(kind === 'audio' ? micTrack : (camOn ? camTrack : null));
-    if (kind === 'video') {
-      const p = tr.sender.getParameters();
-      p.encodings = p.encodings && p.encodings.length ? p.encodings : [{}];
-      p.encodings[0].maxBitrate = 2_500_000;
-      tr.sender.setParameters(p).catch(() => {});
+    if (kind === 'audio') RtcTune.tuneAudio(tr.sender);
+  }
+  tuneVideo();
+}
+
+// Video quality for the number of people in the call, and no video at all to
+// someone whose call window is hidden (minimised or behind other windows).
+function tuneVideo() {
+  const lim = RtcTune.videoLimits(Math.max(1, peers.size));
+  for (const entry of peers.values()) {
+    for (const tr of entry.pc.getTransceivers()) {
+      if (tr.receiver.track.kind !== 'video' || !tr.sender) continue;
+      RtcTune.setEncoding(tr.sender, { ...lim, active: entry.watching !== false }, { degradationPreference: 'balanced' });
     }
   }
 }
@@ -252,9 +281,9 @@ async function offerTo(id) {
   // Always negotiate audio and video, so the camera can be switched on
   // later without renegotiating.
   pc.addTransceiver('audio', { direction: 'sendrecv' });
-  pc.addTransceiver('video', { direction: 'sendrecv' });
+  RtcTune.preferCodecs(pc.addTransceiver('video', { direction: 'sendrecv' }));
   await attachLocal(pc);
-  await pc.setLocalDescription(await pc.createOffer());
+  await pc.setLocalDescription(RtcTune.sdp(await pc.createOffer()));
   send(id, { kind: 'call-offer', sdp: pc.localDescription.toJSON() });
   send(id, myState());
 }
@@ -263,8 +292,9 @@ async function onOffer(id, sdp) {
   const entry = newPeer(id);
   const { pc } = entry;
   await pc.setRemoteDescription(sdp);
+  for (const tr of pc.getTransceivers()) if (tr.receiver.track.kind === 'video') RtcTune.preferCodecs(tr);
   await attachLocal(pc);
-  await pc.setLocalDescription(await pc.createAnswer());
+  await pc.setLocalDescription(RtcTune.sdp(await pc.createAnswer()));
   send(id, { kind: 'call-answer', sdp: pc.localDescription.toJSON() });
   send(id, myState());
   await flushIce(entry);
@@ -310,6 +340,7 @@ function dropPeer(id, reason) {
   clearTimeout(entry.dropTimer);
   entry.pc.close();
   peers.delete(id);
+  tuneVideo();
   setTileState(id, reason);
   removeTile(id, 2500);
   checkEnd();
@@ -345,6 +376,12 @@ async function handle({ type, payload }) {
         if (!entry) break;
         if (entry.pc.remoteDescription) await entry.pc.addIceCandidate(data.candidate).catch(() => {});
         else entry.ice.push(data.candidate);
+        break;
+      }
+      case 'call-watch': {
+        // They hid or showed their call window: stop or resume sending them video.
+        const entry = peers.get(id);
+        if (entry) { entry.watching = data.on !== false; tuneVideo(); }
         break;
       }
       case 'call-state': {
@@ -587,6 +624,10 @@ async function init() {
   api.on(handle);
   watchMyMic();
   const levelTimer = setInterval(() => (ended ? clearInterval(levelTimer) : levelLoop()), 80);
+  const qTimer = setInterval(() => (ended ? clearInterval(qTimer) : qualityLoop()), 2000);
+  document.addEventListener('visibilitychange', () => {
+    for (const id of peers.keys()) send(id, { kind: 'call-watch', on: !document.hidden });
+  });
 
   if (role === 'caller') {
     // Only the caller hears about declines, so only the caller tracks who is still ringing.

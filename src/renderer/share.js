@@ -1,5 +1,5 @@
 'use strict';
-/* global api, $, el, esc, t, toast, call, modal, S, convRecipients, convName, peerName, avatarHtml, playSound */
+/* global api, $, el, esc, t, toast, call, modal, S, convRecipients, convName, peerName, avatarHtml, playSound, RtcTune */
 // Screen sharing. The picture goes directly from PC to PC over the LAN
 // (WebRTC); the invitation and connection details travel over the
 // existing encrypted chat connection.
@@ -109,7 +109,12 @@ const Share = (() => {
     const pc = newPc(peerId, session.sid);
     session.pcs.set(peerId, pc);
     for (const track of session.stream.getTracks()) {
-      pc.addTransceiver(track, { direction: 'sendonly', streams: [session.stream], sendEncodings: [{ maxBitrate: 8_000_000 }] });
+      const tr = pc.addTransceiver(track, { direction: 'sendonly', streams: [session.stream], sendEncodings: [{ maxBitrate: 8_000_000 }] });
+      if (track.kind === 'video') {
+        RtcTune.preferCodecs(tr);
+        // On a shared screen, text must stay sharp: drop frames before resolution.
+        RtcTune.setEncoding(tr.sender, {}, { degradationPreference: 'maintain-resolution' });
+      }
     }
     pc.onconnectionstatechange = () => {
       if (!session) return;

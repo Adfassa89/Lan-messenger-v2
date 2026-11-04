@@ -1643,3 +1643,9 @@ body.panel-open.overlay-controls .chat-header, body.panel-open.overlay-controls 
 .vr-btn.off { color: var(--busy); }
 .vr-btn.leave:hover { color: var(--busy); }
 .vr-badge { color: var(--online); font-weight: 700; }
+
+.vr-q { margin-left: auto; padding: 0 5px; border-radius: 6px; font-style: normal; font-size: 10.5px; font-weight: 700; color: #fff; background: var(--online); }
+.vr-q.fair { background: var(--away); }
+.vr-q.poor { background: var(--busy); }
+.vr-q + .vr-flag { margin-left: 4px; }
+.vr-q:empty { width: 8px; height: 8px; padding: 0; border-radius: 50%; }

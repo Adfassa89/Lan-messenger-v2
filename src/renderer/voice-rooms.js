@@ -1,5 +1,5 @@
 'use strict';
-/* global api, S, t, esc, avatarHtml, peerName, call, toast, modal, MicBoost, $ */
+/* global api, S, t, esc, avatarHtml, peerName, call, toast, modal, MicBoost, RtcTune, $ */
 // Voice rooms in group chats, like Discord's voice channels. A group has one
 // or more rooms; anyone can walk in or out at any time and nobody is rung.
 // People in the same room hear each other (each PC connects directly to the
@@ -34,6 +34,7 @@ const VoiceRooms = (() => {
   let rooms = {}; // groupId -> { roomId: { name, at, del } }
   let timer = null;
   let levelTimer = null;
+  let qTimer = null;
   let speakingMe = false;
 
   try { rooms = JSON.parse(localStorage.getItem(ROOMS_KEY) || '{}') || {}; } catch { rooms = {}; }
@@ -167,6 +168,7 @@ const VoiceRooms = (() => {
       chime('join');
       if (!timer) timer = setInterval(tick, STATE_EVERY);
       if (!levelTimer) levelTimer = setInterval(levels, 120);
+      if (!qTimer) qTimer = setInterval(quality, 2000);
       render();
     } finally {
       joining = false;
@@ -180,6 +182,8 @@ const VoiceRooms = (() => {
     closeAll();
     clearInterval(timer);
     clearInterval(levelTimer);
+    clearInterval(qTimer);
+    qTimer = null;
     timer = null;
     levelTimer = null;
     if (boost) boost.stop();
@@ -243,7 +247,7 @@ const VoiceRooms = (() => {
     const pc = new RTCPeerConnection({ iceServers: [] });
     const link = { pc, audio: null, level: null, speaking: false };
     links.set(id, link);
-    pc.addTrack(sendTrack, new MediaStream([sendTrack]));
+    RtcTune.tuneAudio(pc.addTrack(sendTrack, new MediaStream([sendTrack])));
     pc.onicecandidate = (e) => { if (e.candidate) api.rtcSend(id, SID, { g: here.group, kind: 'vr-ice', c: e.candidate.toJSON() }); };
     pc.ontrack = (e) => {
       const s = e.streams[0] || new MediaStream([e.track]);
@@ -266,7 +270,7 @@ const VoiceRooms = (() => {
     const link = newLink(id);
     try {
       const offer = await link.pc.createOffer();
-      await link.pc.setLocalDescription(offer);
+      await link.pc.setLocalDescription(RtcTune.sdp(offer));
       api.rtcSend(id, SID, { g: here.group, kind: 'vr-offer', room: here.room, sdp: link.pc.localDescription.toJSON() });
     } catch {
       dropLink(id);
@@ -317,7 +321,7 @@ const VoiceRooms = (() => {
         try {
           await link.pc.setRemoteDescription(data.sdp);
           const answer = await link.pc.createAnswer();
-          await link.pc.setLocalDescription(answer);
+          await link.pc.setLocalDescription(RtcTune.sdp(answer));
           api.rtcSend(peerId, SID, { g: group, kind: 'vr-answer', sdp: link.pc.localDescription.toJSON() });
           for (const c of link.pending || []) link.pc.addIceCandidate(c).catch(() => {});
         } catch {
@@ -428,9 +432,29 @@ const VoiceRooms = (() => {
     more: '<svg class="ico" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>',
   };
 
+  // Connection quality to each person in my room, every 2 s.
+  async function quality() {
+    let changed = false;
+    for (const l of links.values()) {
+      if (l.pc.connectionState !== 'connected') continue;
+      const q = await RtcTune.measure(l.pc, l.q || {});
+      if (!q) continue;
+      if (!l.q || l.q.level !== q.level || Math.abs((l.q.rtt || 0) - (q.rtt || 0)) >= 5) changed = true;
+      l.q = q;
+    }
+    if (changed) render();
+  }
+  function qualityHtml(id) {
+    const l = links.get(id);
+    if (!l || !l.q) return '';
+    const q = l.q;
+    const tip = `${t('Connection')}: ${t({ good: 'Good', fair: 'Fair', poor: 'Poor' }[q.level])} · ${t('Delay')}: ${q.rtt ?? '?'} ms · ${t('Lost')}: ${q.loss}% · ${t('Jitter')}: ${q.jitter} ms`;
+    return `<i class="vr-q ${q.level}" title="${esc(tip)}">${q.rtt !== null ? q.rtt : ''}</i>`;
+  }
+
   function personHtml(p) {
     const icons = `${p.deaf ? `<i class="vr-flag" title="${esc(t('Deafened'))}">${IC.headOff}</i>` : p.muted ? `<i class="vr-flag" title="${esc(t('Muted'))}">${IC.micOff}</i>` : ''}`;
-    return `<div class="vr-person${isSpeaking(p.id) ? ' speaking' : ''}" data-vr-person="${esc(p.id)}">${avatarHtml('direct', p.id, p.me ? S.me.name : peerName(p.id), null, 'sm')}<span>${esc(p.me ? S.me.name : peerName(p.id))}</span>${icons}</div>`;
+    return `<div class="vr-person${isSpeaking(p.id) ? ' speaking' : ''}" data-vr-person="${esc(p.id)}">${avatarHtml('direct', p.id, p.me ? S.me.name : peerName(p.id), null, 'sm')}<span>${esc(p.me ? S.me.name : peerName(p.id))}</span>${p.me ? '' : qualityHtml(p.id)}${icons}</div>`;
   }
 
   // The strip under a group chat's header: its rooms, who is in each, join.
