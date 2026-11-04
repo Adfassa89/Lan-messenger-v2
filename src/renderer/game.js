@@ -880,6 +880,23 @@ const Game = (() => {
     if (open && open.id === msg.id) render();
   }
 
+  // Secret games, started only by typing a command: /tetris here, /13 in app.js.
+  const SECRET = ['tetris'];
+  let secretFlow = false;
+  // "/tetris": in a private chat straight to the match length; in a group, pick the opponent first.
+  function tetrisCommand(conv) {
+    opponent = null;
+    secretFlow = true;
+    const back = el('div', 'modal-back');
+    back.innerHTML = '<div class="modal"></div>';
+    const done = () => leave(back);
+    back.addEventListener('mousedown', (e) => { if (e.target === back) done(); });
+    $('#modalRoot').append(back);
+    const m = back.querySelector('.modal');
+    if (conv.startsWith('g:')) pickOpponent(back, conv, 'tetris', done, () => tetrisSetup(m, conv, done));
+    else tetrisSetup(m, conv, done);
+  }
+
   // In a group: who to play against (two-player games). The rest of the group can watch.
   let opponent = null;
   function pickOpponent(back, conv, type, done, next) {
@@ -897,19 +914,19 @@ const Game = (() => {
     m.onclick = (e) => {
       const b = e.target.closest('button');
       if (!b) return;
-      if (b.dataset.back !== undefined) { done(); newGameModal(conv); return; }
+      if (b.dataset.back !== undefined) { done(); if (!secretFlow) newGameModal(conv); return; }
       if (b.dataset.opp) { opponent = b.dataset.opp; next(); }
     };
   }
 
   async function newGameModal(conv) {
     opponent = null;
+    secretFlow = false;
     const isGroup = conv.startsWith('g:');
     const back = el('div', 'modal-back');
     back.innerHTML = `<div class="modal"><div class="modal-head"><h2>${esc(t('Play a game'))}</h2><button class="icon-btn" data-close>✕</button></div>
-      <div class="modal-body"><div class="game-picker">${Games.TYPES.map((type) => `<button class="game-pick" data-type="${type}">
-        <span class="gp-icon">${ICONS[type]}</span><b>${esc(t(TITLES[type]))}</b></button>`).join('')}
-        <button class="game-pick" data-type="thirteen"><span class="gp-icon gp-cards">🂡</span><b>13</b></button></div>
+      <div class="modal-body"><div class="game-picker">${Games.TYPES.filter((type) => !SECRET.includes(type)).map((type) => `<button class="game-pick" data-type="${type}">
+        <span class="gp-icon">${ICONS[type]}</span><b>${esc(t(TITLES[type]))}</b></button>`).join('')}</div>
 </div></div>`;
     const done = () => leave(back);
     back.addEventListener('mousedown', (e) => { if (e.target === back) done(); });
@@ -971,7 +988,7 @@ const Game = (() => {
         draw();
       } else if (b.dataset.back !== undefined) {
         done();
-        newGameModal(conv);
+        if (!secretFlow) newGameModal(conv);
       } else if (b.dataset.go !== undefined) {
         done();
         const options = { side: prefs.side, clock: clockFromKey(prefs[clockPref(type)]), opponent };
@@ -1002,7 +1019,7 @@ const Game = (() => {
         draw();
       } else if (b.dataset.back !== undefined) {
         done();
-        newGameModal(conv);
+        if (!secretFlow) newGameModal(conv);
       } else if (b.dataset.go !== undefined) {
         done();
         const g = await call(api.createGame(conv, 'tetris', { bestOf: prefs.bestOf, opponent }));
@@ -1011,5 +1028,5 @@ const Game = (() => {
     };
   }
 
-  return { cardHtml, show, close, onMessage, newGameModal, isOpen: (id) => open && open.id === id };
+  return { cardHtml, show, close, onMessage, newGameModal, tetrisCommand, isOpen: (id) => open && open.id === id };
 })();

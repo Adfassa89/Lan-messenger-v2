@@ -1234,6 +1234,14 @@ async function sendCurrent() {
   }
   if (!text) return;
   // Secret: "/warlock" or "/pudge" in a group or private chat opens an arena game.
+  // Secret: "/tetris" starts a Tetris Battle (in a group, against a member you pick).
+  if (text.toLowerCase() === '/tetris') {
+    input.value = '';
+    autoGrow();
+    if (S.active === 'broadcast') return toast(t('This game can be played in group and private chats'), 'error');
+    Game.tetrisCommand(S.active);
+    return undefined;
+  }
   const arena = { '/warlock': 'warlock', '/pudge': 'pudgewars', '/pudgewars': 'pudgewars', '/13': 'thirteen', '/thirteen': 'thirteen', '/tank': 'tank', '/tanks': 'tank' }[text.toLowerCase()];
   if (arena) {
     input.value = '';
