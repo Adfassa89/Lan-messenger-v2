@@ -1,14 +1,18 @@
 'use strict';
 // Local storage for settings, contacts and chat history.
-// Everything is plain JSON on disk, written atomically (write to a temp file,
-// then rename) so a crash or power cut never leaves a half-written file.
+// Everything is JSON on disk, written atomically (write to a temp file, then
+// rename) so a crash or power cut never leaves a half-written file. With an
+// account's cipher every file is encrypted (see core/accounts.js); files that
+// are still plain (from before accounts) are read as they are and encrypted the
+// next time they are saved.
 
 const fs = require('fs');
 const path = require('path');
 
 const SAVE_DELAY = 400;
 
-function writeAtomic(file, data) {
+function writeAtomic(file, data, cipher) {
+  if (cipher) data = cipher.encrypt(String(data));
   const tmp = `${file}.tmp`;
   fs.writeFileSync(tmp, data);
   try {
@@ -21,10 +25,12 @@ function writeAtomic(file, data) {
   }
 }
 
-function readJson(file, fallback) {
+function readJson(file, fallback, cipher) {
   for (const f of [file, `${file}.tmp`]) {
     try {
-      return JSON.parse(fs.readFileSync(f, 'utf8'));
+      const buf = fs.readFileSync(f);
+      if (cipher && cipher.isEncrypted(buf)) return JSON.parse(cipher.decrypt(buf));
+      return JSON.parse(buf.toString('utf8'));
     } catch { /* try next */ }
   }
   return fallback;
@@ -35,8 +41,9 @@ function safeName(id) {
 }
 
 class Store {
-  constructor(dir) {
+  constructor(dir, { cipher = null } = {}) {
     this.dir = dir;
+    this.cipher = cipher;
     this.historyDir = path.join(dir, 'history');
     fs.mkdirSync(this.historyDir, { recursive: true });
     this.docs = new Map(); // name -> data
@@ -47,7 +54,7 @@ class Store {
 
   // ---- generic documents (config, contacts, outbox, ...) ----
   get(name, fallback) {
-    if (!this.docs.has(name)) this.docs.set(name, readJson(path.join(this.dir, `${name}.json`), fallback));
+    if (!this.docs.has(name)) this.docs.set(name, readJson(path.join(this.dir, `${name}.json`), fallback, this.cipher));
     return this.docs.get(name);
   }
 
@@ -69,9 +76,9 @@ class Store {
         if (key.startsWith('h:')) {
           const conv = key.slice(2);
           const h = this.histories.get(conv);
-          if (h) writeAtomic(path.join(this.historyDir, `${safeName(conv)}.json`), JSON.stringify(h.list));
+          if (h) writeAtomic(path.join(this.historyDir, `${safeName(conv)}.json`), JSON.stringify(h.list), this.cipher);
         } else {
-          writeAtomic(path.join(this.dir, `${key}.json`), JSON.stringify(this.docs.get(key), null, 1));
+          writeAtomic(path.join(this.dir, `${key}.json`), JSON.stringify(this.docs.get(key), null, 1), this.cipher);
         }
       } catch (err) {
         console.error('Failed to save', key, err);
@@ -84,7 +91,7 @@ class Store {
   _history(conv) {
     let h = this.histories.get(conv);
     if (!h) {
-      const list = readJson(path.join(this.historyDir, `${safeName(conv)}.json`), []);
+      const list = readJson(path.join(this.historyDir, `${safeName(conv)}.json`), [], this.cipher);
       h = { list, index: new Map(list.map((m) => [m.id, m])) };
       this.histories.set(conv, h);
     }

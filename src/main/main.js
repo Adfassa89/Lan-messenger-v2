@@ -11,6 +11,8 @@ const {
   globalShortcut,
 } = require('electron');
 const { Messenger, preview } = require('../core/messenger');
+const { cipherFor } = require('../core/accounts');
+const { Session } = require('./session');
 const { Updater } = require('./updater');
 const { Firewall } = require('./firewall');
 const { RemoteInput } = require('./remote-input');
@@ -230,6 +232,8 @@ function updateTray() {
     : `${APP_NAME} – ${statusLabel(status)}`);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: t('Open LAN Messenger 2'), click: showWindow },
+    { label: t('Lock'), click: () => setLocked(true) },
+    { label: t('Switch account'), click: () => account.signOut() },
     ...(updateReady ? [{ label: t('Restart to update to {v}', { v: updateReady }), click: restartForUpdate }] : []),
     { type: 'separator' },
     ...['online', 'away', 'busy'].map((s) => ({
@@ -269,6 +273,11 @@ function notify(conv, msg) {
   if (win && !focused) win.flashFrame(true);
   if (!messenger.settings.notifications || messenger.config.status === 'busy') return;
   if (!Notification.isSupported()) return;
+  if (locked) {
+    showNotification({ title: APP_NAME, body: t('New message'), silent: true }, () => showWindow());
+    if (messenger.settings.sound) send('play-sound');
+    return;
+  }
   const title = conv.startsWith('g:') || conv === 'broadcast' ? `${msg.fromName} · ${convTitle(conv)}` : msg.fromName;
   let body = preview(msg);
   if (msg.kind === 'file') body = msg.file.voice ? `🎤 ${t('Voice message')}` : `${msg.file.folder ? '📁' : '📎'} ${msg.file.name}`;
@@ -701,7 +710,7 @@ function isImage(p) {
 }
 
 function attachmentPath(prefix, ext) {
-  const dir = path.join(app.getPath('userData'), 'attachments');
+  const dir = path.join(messenger.dataDir || app.getPath('userData'), 'attachments');
   fs.mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', ' ').slice(0, 19);
   return path.join(dir, `${prefix} ${stamp}.${ext}`);
@@ -795,8 +804,14 @@ function registerIpc() {
   const h = (name, fn) => ipcMain.handle(name, async (_e, ...args) => fn(...args));
 
   h('init', () => ({
-    ...messenger.getState(), platform: process.platform, version: VERSION, updateReady,
+    ...messenger.getState(), platform: process.platform, version: VERSION, updateReady, locked,
   }));
+  h('lock-now', () => setLocked(true));
+  h('unlock', (pin) => {
+    try { account.accounts.check(account.current.id, pin); } catch (err) { return { ok: false, error: err.message, waitUntil: err.waitUntil || 0 }; }
+    setLocked(false);
+    return { ok: true };
+  });
   h('load-messages', (conv, opts) => messenger.loadMessages(conv, opts));
   h('get-message', (conv, id) => {
     const msg = messenger.store.getMessage(conv, id);
@@ -1059,14 +1074,43 @@ function wireEvents() {
   });
 }
 
-app.on('second-instance', showWindow);
+app.on('second-instance', () => (messenger ? showWindow() : account && account.showPicker()));
 
-app.whenReady().then(async () => {
+let account = null;
+let locked = false; // the window shows the lock screen; notifications hide their text
+let lastActive = Date.now();
+
+app.whenReady().then(() => {
+  account = new Session({
+    legacyDir: app.getPath('userData'),
+    preload: PRELOAD,
+    renderer: RENDERER,
+    icon: appIcon(),
+    onStart: startAccount,
+  });
+  account.beforeBackup = () => messenger && messenger.store.flush();
+  return account.begin();
+}).catch((err) => {
+  console.error(err);
+  dialog.showErrorBox(APP_NAME, String((err && err.stack) || err));
+  app.exit(1);
+});
+
+// Signed in: the messenger runs as this account, from its own encrypted folder.
+async function startAccount({ id, key, name, locked: startLocked, dataDir }) {
+  locked = !!startLocked;
   messenger = new Messenger({
-    dataDir: app.getPath('userData'),
+    dataDir,
+    cipher: cipherFor(key),
     downloadDir: path.join(app.getPath('downloads'), APP_NAME),
     appVersion: VERSION,
+    defaultName: name,
   });
+  // The sign-in screen shows each account's name and photo.
+  const syncCard = () => { try { account.accounts.update(id, { name: messenger.config.name, avatar: messenger.config.avatar || null }); } catch { /* removed */ } };
+  syncCard();
+  messenger.on('me', syncCard);
+  account.remember(id, key, messenger.settings.language);
   nativeTheme.themeSource = messenger.settings.theme;
   setupMediaPermissions();
   registerIpc();
@@ -1106,12 +1150,27 @@ app.whenReady().then(async () => {
     dialog.showErrorBox(APP_NAME, `${t('Could not start networking')}: ${err.message}`);
   }
   createWindow();
+  account.closePicker();
   for (const ev of ['display-removed', 'display-metrics-changed']) screen.on(ev, () => setTimeout(keepWindowsOnScreen, 300));
   createTray();
   applyLoginItem();
   setInterval(checkIdle, 30000);
+  setInterval(checkAutoLock, 15000);
   powerMonitor.on('resume', () => messenger.discovery && messenger.discovery.query());
-});
+}
+
+// ------------------------------------------------------------------ lock
+function setLocked(on) {
+  locked = !!on;
+  send('locked', locked);
+  updateTray();
+}
+// Settings → Auto-lock after this many minutes without mouse or keyboard (0 = off).
+function checkAutoLock() {
+  const min = Number(messenger.settings.autoLockMinutes) || 0;
+  if (!min || locked) return;
+  if (powerMonitor.getSystemIdleTime() >= min * 60) setLocked(true);
+}
 
 app.on('before-quit', () => { quitting = true; remoteStop(null); });
 
@@ -1119,13 +1178,13 @@ app.on('will-quit', (e) => {
   if (!messenger || !messenger.started) return;
   e.preventDefault();
   if (updater) updater.stop();
-  const done = () => { messenger.started = false; app.exit(0); };
+  const done = () => { messenger.started = false; if (account && account.current) account.accounts.release(account.current.id); app.exit(0); };
   messenger.stop().then(done, done);
   setTimeout(done, 1500);
 });
 
 app.on('window-all-closed', () => {
-  if (quitting || !messenger.settings.minimizeToTray) app.quit();
+  if (quitting || !messenger || !messenger.settings.minimizeToTray) app.quit();
 });
 
-app.on('activate', showWindow);
+app.on('activate', () => messenger && showWindow());

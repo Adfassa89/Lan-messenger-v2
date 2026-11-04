@@ -64,6 +64,7 @@ function defaultSettings(downloadDir) {
     updateEvery: 'day',
     textSize: 100,
     micBoost: 100,
+    autoLockMinutes: 0, // lock the window after this many idle minutes (0 = never)
     downloadsClearedAt: 0,
   };
 }
@@ -120,6 +121,7 @@ function walkFolder(root) {
 class Messenger extends EventEmitter {
   constructor({
     dataDir,
+    cipher = null,
     downloadDir = path.join(os.homedir(), 'Downloads', 'LAN Messenger 2'),
     tcpPort = 50101,
     udpPort = 50100,
@@ -128,7 +130,8 @@ class Messenger extends EventEmitter {
     defaultName = os.userInfo().username || os.hostname(),
   }) {
     super();
-    this.store = new Store(dataDir);
+    this.store = new Store(dataDir, { cipher });
+    this.dataDir = dataDir;
     this.tcpPort = tcpPort;
     this.udpPort = udpPort;
     this.appVersion = appVersion;

@@ -2009,6 +2009,78 @@ function toggleRow(key, title, sub) {
     <span class="switch"><input type="checkbox" data-set="${key}" ${S.settings[key] ? 'checked' : ''}><span></span></span></label>`;
 }
 
+// ------------------------------------------------------------------ PIN, lock screen, backup
+const pinBox = (id, ph = '••••') => `<input class="input pin-in" id="${id}" type="password" inputmode="numeric" autocomplete="off" maxlength="6" placeholder="${ph}">`;
+const onlyDigits = (root) => { for (const i of root.querySelectorAll('.pin-in')) i.addEventListener('input', () => { i.value = i.value.replace(/\D/g, '').slice(0, 6); }); };
+const pinProblem = (r) => (r.waitUntil && r.waitUntil > Date.now()
+  ? t('Too many wrong PINs. Try again in {n} s.', { n: Math.ceil((r.waitUntil - Date.now()) / 1000) }) : t(r.error || 'Wrong PIN'));
+
+function changePinModal() {
+  modal({
+    title: t('Change PIN'),
+    body: `<div class="field"><label>${esc(t('Current PIN'))}</label>${pinBox('pOld')}</div>
+      <div class="field"><label>${esc(t('New PIN (4 to 6 digits)'))}</label>${pinBox('pNew')}</div>
+      <div class="field"><label>${esc(t('Type the new PIN again'))}</label>${pinBox('pNew2')}</div>`,
+    onOpen: (m) => onlyDigits(m),
+    buttons: [{ label: t('Cancel') }, {
+      label: t('Change PIN'), cls: 'primary', action: async (m) => {
+        const a = $('#pNew', m).value;
+        if (!/^\d{4,6}$/.test(a)) { toast(t('The PIN must be 4 to 6 digits'), 'error'); return false; }
+        if (a !== $('#pNew2', m).value) { toast(t('The two PINs are not the same'), 'error'); return false; }
+        const r = await api.accChangePin($('#pOld', m).value, a);
+        if (!r.ok) { toast(pinProblem(r), 'error'); return false; }
+        toast(t('PIN changed'));
+        return true;
+      },
+    }],
+  });
+}
+
+function backupModal() {
+  modal({
+    title: t('Back up this account'),
+    body: `<p class="modal-text">${esc(t('All chats, groups and settings of this account go into one file, locked with your PIN. Keep it somewhere safe (a USB stick or a network drive): it is the only way to get the chats back on a new PC or if this one breaks.'))}</p>
+      <div class="field"><label>${esc(t('Your PIN'))}</label>${pinBox('bPin')}</div>`,
+    onOpen: (m) => onlyDigits(m),
+    buttons: [{ label: t('Cancel') }, {
+      label: t('Save the backup…'), cls: 'primary', action: async (m) => {
+        const r = await api.accBackup($('#bPin', m).value);
+        if (!r.ok) { toast(pinProblem(r), 'error'); return false; }
+        if (r.value) toast(t('Backup saved: {file}', { file: r.value }));
+        return true;
+      },
+    }],
+  });
+}
+
+// The lock screen covers the whole window; messages keep arriving behind it.
+function showLock(on) {
+  const box = $('#lockScreen');
+  if (!on) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  hidePopover();
+  box.innerHTML = `<div class="lock-card">
+      ${avatarHtml('direct', S.me.id, S.me.name, null, 'xl')}
+      <div class="lock-name">${esc(S.me.name)}</div>
+      <div class="lock-sub">${esc(t('LAN Messenger is locked'))}</div>
+      ${pinBox('lockPin')}
+      <div class="lock-err" id="lockErr"></div>
+      <button class="btn primary lock-go" id="lockGo">${esc(t('Unlock'))}</button>
+      <button class="lock-switch" id="lockSwitch">${esc(t('Switch account'))}</button>
+    </div>`;
+  box.classList.remove('hidden');
+  onlyDigits(box);
+  const go = async () => {
+    const pin = $('#lockPin').value;
+    if (!/^\d{4,6}$/.test(pin)) { $('#lockErr').textContent = t('The PIN must be 4 to 6 digits'); return; }
+    const r = await api.unlock(pin);
+    if (!r.ok) { $('#lockErr').textContent = pinProblem(r); $('#lockPin').value = ''; $('#lockPin').focus(); }
+  };
+  $('#lockPin').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  $('#lockGo').addEventListener('click', go);
+  $('#lockSwitch').addEventListener('click', () => api.accSignout());
+  setTimeout(() => $('#lockPin') && $('#lockPin').focus(), 50);
+}
+
 function settingsModal() {
   const me = S.me;
   const themes = [['system', t('Automatic')], ['light', t('Light')], ['dark', t('Dark')]];
@@ -2021,6 +2093,13 @@ function settingsModal() {
     </div>
     <div class="field"><label>${esc(t('Display name'))}</label><input class="input" id="sName" maxlength="60" value="${esc(me.name)}"></div>
     <div class="field"><label>${esc(t('Department or job title (optional)'))}</label><input class="input" id="sDept" maxlength="60" value="${esc(me.dept)}" placeholder="${esc(t('e.g. Mine Planning'))}"></div>
+
+    <div class="section-title">${esc(t('Account and PIN'))}</div>
+    <div class="row-label">${esc(t('This account is protected by your PIN. Ctrl + L locks the app.'))}</div>
+    <div class="row-inline acc-btns"><button class="btn" id="sLock">🔒 ${esc(t('Lock now'))}</button><button class="btn" id="sPin">${esc(t('Change PIN…'))}</button>
+      <button class="btn" id="sBackup">${esc(t('Back up this account…'))}</button><button class="btn" id="sSwitch">${esc(t('Switch account'))}</button></div>
+    <div class="field" style="margin-top:12px"><label>${esc(t('Lock automatically after this many minutes without use (0 = never)'))}</label>
+      <input class="input" id="sAutoLock" type="number" min="0" max="1440" step="1" style="max-width:140px" value="${Number(S.settings.autoLockMinutes) || 0}"></div>
 
     <div class="section-title">${esc(t('Language'))}</div>
     <div class="segmented" id="sLang">${I18N.LANGUAGES.map(([v, l]) => `<button data-v="${v}" class="${(S.settings.language || 'en') === v ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
@@ -2149,6 +2228,16 @@ function settingsModal() {
         S.avatars.set(S.me.id, data);
         drawAvatar();
         renderMe();
+      });
+      $('#sLock', m).addEventListener('click', () => { close(); api.lockNow(); });
+      $('#sSwitch', m).addEventListener('click', () => confirmModal(t('Switch account?'), t('The app restarts on the sign-in screen. Your chats stay saved in this account.'), t('Switch account'), () => api.accSignout()));
+      $('#sPin', m).addEventListener('click', () => changePinModal());
+      $('#sBackup', m).addEventListener('click', () => backupModal());
+      $('#sAutoLock', m).addEventListener('change', async (e) => {
+        const v = Math.max(0, Math.min(1440, Math.round(Number(e.target.value) || 0)));
+        e.target.value = v;
+        S.settings = await call(api.setSettings({ autoLockMinutes: v })) || S.settings;
+        toast(v ? t('The app locks after {n} min without use', { n: v }) : t('Auto-lock is off'));
       });
       $('#sPhotoRm', m).addEventListener('click', async () => {
         await call(api.removeAvatar());
@@ -2358,6 +2447,9 @@ function handleEvent({ type, payload }) {
       S.scheduled = payload;
       renderScheduledStrip();
       break;
+    case 'locked':
+      showLock(!!payload);
+      break;
     case 'me':
       S.me = { ...S.me, ...payload };
       renderMe();
@@ -2491,6 +2583,11 @@ function wire() {
 
   document.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && k === 'l') {
+      e.preventDefault();
+      api.lockNow();
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && k === 's') {
       e.preventDefault();
       screenshot();
@@ -2613,6 +2710,7 @@ async function boot() {
   renderList();
   renderUpdateBanner();
   VoiceRooms.bind();
+  if (st.locked) showLock(true);
 }
 
 window.addEventListener('DOMContentLoaded', boot);

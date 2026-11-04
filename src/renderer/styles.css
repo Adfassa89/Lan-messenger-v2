@@ -1649,3 +1649,16 @@ body.panel-open.overlay-controls .chat-header, body.panel-open.overlay-controls 
 .vr-q.poor { background: var(--busy); }
 .vr-q + .vr-flag { margin-left: 4px; }
 .vr-q:empty { width: 8px; height: 8px; padding: 0; border-radius: 50%; }
+
+/* ---------------------------------------------------------------- lock screen */
+.lock-screen { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(22px) saturate(1.1); -webkit-app-region: no-drag; }
+.lock-card { display: flex; flex-direction: column; align-items: center; gap: 10px; width: min(340px, calc(100vw - 32px)); padding: 30px 26px; border-radius: 20px; background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow-lg); animation: pop .2s ease-out; }
+.lock-name { font-size: 18px; font-weight: 700; }
+.lock-sub { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+.pin-in { font-size: 24px !important; letter-spacing: 10px; text-align: center; font-weight: 700; }
+.lock-card .pin-in { width: 100%; height: 50px; }
+.lock-err { min-height: 18px; color: var(--busy); font-size: 12.5px; text-align: center; }
+.lock-go { width: 100%; height: 42px; }
+.lock-switch { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; text-decoration: underline; }
+.lock-switch:hover { color: var(--text); }
+.acc-btns { flex-wrap: wrap; gap: 8px; }
