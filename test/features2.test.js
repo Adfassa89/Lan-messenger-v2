@@ -263,3 +263,28 @@ test('storage: old received files and voice messages can be removed, own files n
   assert.ok(fs.existsSync(mine), 'your own file stays');
   assert.strictEqual(alice.store.getMessage('peer1', 'r1').file.state, 'removed');
 });
+
+test('deleting all chat history empties every chat but keeps people and groups', async () => {
+  const [alice, bob] = makePair();
+  await alice.start();
+  await bob.start();
+  try {
+    await waitFor(() => alice.peers.get(bob.id)?.online && bob.peers.get(alice.id)?.online, 8000, 'discovery');
+    const group = alice.createGroup('Pit crew', [bob.id]);
+    const m = alice.sendText(bob.id, 'private note');
+    alice.sendText(group, 'group note');
+    alice.sendText('broadcast', 'to all');
+    alice.toggleSaved(bob.id, m.id);
+    await waitFor(() => bob.loadMessages(alice.id).some((x) => x.id === m.id), 5000, 'arrived');
+    const n = alice.clearAllHistory();
+    assert.ok(n >= 3);
+    for (const conv of [bob.id, group, 'broadcast']) assert.strictEqual(alice.loadMessages(conv).length, 0, conv);
+    assert.strictEqual(alice.savedMessages().length, 0);
+    assert.ok(alice.groups[group.slice(2)], 'group kept');
+    assert.ok(alice.peers.has(bob.id), 'contact kept');
+    assert.ok(bob.loadMessages(alice.id).some((x) => x.id === m.id), "Bob's copy stays");
+  } finally {
+    await alice.stop();
+    await bob.stop();
+  }
+});

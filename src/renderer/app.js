@@ -2349,6 +2349,26 @@ const onlyDigits = (root) => { for (const i of root.querySelectorAll('.pin-in'))
 const pinProblem = (r) => (r.waitUntil && r.waitUntil > Date.now()
   ? t('Too many wrong PINs. Try again in {n} s.', { n: Math.ceil((r.waitUntil - Date.now()) / 1000) }) : t(r.error || 'Wrong PIN'));
 
+// Settings → Delete all chat history (with the PIN).
+function wipeModal(closeSettings) {
+  modal({
+    title: t('Delete all chat history?'),
+    body: `<p class="modal-text">${esc(t('All messages of every chat are deleted from this PC for good: private chats, groups, Everyone, and saved messages. People, groups and your settings stay. Other people keep their own copies. Received files stay in your download folder.'))}</p>
+      <p class="modal-text">${esc(t('Tip: make a backup first if you might want the chats back.'))}</p>
+      <div class="field"><label>${esc(t('Type your PIN to confirm'))}</label>${pinBox('wPin')}</div>`,
+    onOpen: (m) => onlyDigits(m),
+    buttons: [{ label: t('Cancel') }, {
+      label: t('Delete all chat history'), cls: 'danger', action: async (m) => {
+        const r = await api.clearAllHistory($('#wPin', m).value);
+        if (!r.ok) { toast(pinProblem(r), 'error'); return false; }
+        if (closeSettings) closeSettings();
+        toast(t('{n} messages deleted', { n: r.count }));
+        return true;
+      },
+    }],
+  });
+}
+
 function changePinModal() {
   modal({
     title: t('Change PIN'),
@@ -2432,6 +2452,7 @@ function settingsModal() {
     <div class="row-label">${esc(t('This account is protected by your PIN. Ctrl + L locks the app.'))}</div>
     <div class="row-inline acc-btns"><button class="btn" id="sLock">🔒 ${esc(t('Lock now'))}</button><button class="btn" id="sPin">${esc(t('Change PIN…'))}</button>
       <button class="btn" id="sBackup">${esc(t('Back up this account…'))}</button><button class="btn" id="sSwitch">${esc(t('Switch account'))}</button></div>
+    <div class="row-inline acc-btns" style="margin-top:8px"><button class="btn danger" id="sWipe">🗑 ${esc(t('Delete all chat history…'))}</button></div>
     <div class="field" style="margin-top:12px"><label>${esc(t('Lock automatically after this many minutes without use (0 = never)'))}</label>
       <input class="input" id="sAutoLock" type="number" min="0" max="1440" step="1" style="max-width:140px" value="${Number(S.settings.autoLockMinutes) || 0}"></div>
 
@@ -2566,6 +2587,7 @@ function settingsModal() {
       });
       $('#sLock', m).addEventListener('click', () => { close(); api.lockNow(); });
       $('#sStorage', m).addEventListener('click', () => storageModal());
+      $('#sWipe', m).addEventListener('click', () => wipeModal(close));
       $('#sSwitch', m).addEventListener('click', () => confirmModal(t('Switch account?'), t('The app restarts on the sign-in screen. Your chats stay saved in this account.'), t('Switch account'), () => api.accSignout()));
       $('#sPin', m).addEventListener('click', () => changePinModal());
       $('#sBackup', m).addEventListener('click', () => backupModal());
@@ -2721,6 +2743,14 @@ function handleEvent({ type, payload }) {
       S.groups = new Map(payload.map((g) => [g.id, g]));
       renderList();
       if (S.active && convKind(S.active) === 'group') renderHeader();
+      break;
+    case 'purged-all':
+      // Every chat was emptied: forget what is loaded and show the empty chat.
+      S.msgs.clear();
+      S.saved.clear();
+      S.unreadMark = null;
+      if (S.active) openConv(S.active);
+      renderList();
       break;
     case 'purged':
       // Old game messages were cleared: drop them from the open chats too.

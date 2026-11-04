@@ -46,6 +46,7 @@ const CHANNELS = {
   forgetContact: 'forget-contact',
   deleteMessage: 'delete-message',
   muteConv: 'mute-conv',
+  clearAllHistory: 'clear-all-history',
   storageReport: 'storage-report',
   cleanStorage: 'clean-storage',
   sendAnnouncement: 'send-announcement',

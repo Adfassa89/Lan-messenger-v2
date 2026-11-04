@@ -934,6 +934,11 @@ function registerIpc() {
   h('forget-contact', (id) => messenger.forgetContact(id));
   h('delete-message', (conv, id) => messenger.deleteMessage(conv, id));
   h('mute-conv', (conv, until) => messenger.muteConv(conv, until));
+  // Needs the account's PIN, like deleting the account.
+  h('clear-all-history', (pin) => {
+    try { account.accounts.check(account.current.id, pin); } catch (err) { return { ok: false, error: err.message, waitUntil: err.waitUntil || 0 }; }
+    return { ok: true, count: messenger.clearAllHistory() };
+  });
   h('storage-report', () => messenger.storageReport().map((r) => ({ ...r, title: convTitle(r.conv) })));
   h('clean-storage', (opts) => messenger.cleanStorage(opts || {}));
   h('send-announcement', (conv, opts) => messenger.sendAnnouncement(conv, opts || {}));
@@ -1048,6 +1053,7 @@ function wireEvents() {
   messenger.on('groups', (groups) => send('groups', groups));
   messenger.on('conv', (c) => send('conv', c));
   messenger.on('purged', (list) => send('purged', list));
+  messenger.on('purged-all', () => send('purged-all'));
   messenger.gameInUse = (id) => {
     const w = warlockWindows.get(id) || tetrisWindows.get(id);
     return !!(w && !w.isDestroyed());

@@ -1421,6 +1421,24 @@ class Messenger extends EventEmitter {
     }
   }
 
+  // Settings → Delete all chat history: every chat's messages on this PC go;
+  // people, groups and settings stay. Other people's copies are not touched.
+  clearAllHistory() {
+    let n = 0;
+    for (const conv of this.store.allConversationIds()) {
+      n += (this.store.messages(conv, { limit: Infinity }) || []).length;
+      this.clearConversation(conv);
+      const c = this.convs[conv];
+      if (c) { c.mention = false; c.lastTs = c.lastTs || 0; }
+    }
+    this.clockGames.clear();
+    this.store.set('saved', []);
+    this.store.touch('conversations');
+    this.store.flush();
+    this.emit('purged-all');
+    return n;
+  }
+
   // ------------------------------------------------------------------ reactions, edits, pins, polls, alerts
   _applyReaction(conv, msg, who, emoji, on) {
     const e = String(emoji || '');
