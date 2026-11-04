@@ -184,3 +184,40 @@ test('a new version of the app clears all game history at start', async () => {
     await bob.stop();
   }
 });
+
+test('@mentions, muting, forwarding and saved messages', async () => {
+  const [alice, bob] = makePair();
+  await alice.start();
+  await bob.start();
+  try {
+    await waitFor(() => alice.peers.get(bob.id)?.online && bob.peers.get(alice.id)?.online, 8000, 'discovery');
+    const group = alice.createGroup('Pit crew', [bob.id]);
+    await waitFor(() => bob.groups[group.slice(2)], 5000, 'group arrived');
+    const m = alice.sendText(group, `@Bob please check pump 3`, { mentions: [bob.id, 'stranger'] });
+    assert.deepStrictEqual(m.mentions, [bob.id], 'only members can be mentioned');
+    await waitFor(() => bob.loadMessages(group).some((x) => x.id === m.id), 5000, 'mention arrived');
+    assert.deepStrictEqual(bob.loadMessages(group).find((x) => x.id === m.id).mentions, [bob.id]);
+    assert.strictEqual(bob.convs[group].mention, true);
+    bob.markRead(group);
+    assert.strictEqual(bob.convs[group].mention, false);
+    // Mute for an hour, then always, then unmute.
+    bob.muteConv(group, Date.now() + 3600000);
+    assert.ok(bob.isMuted(group));
+    bob.muteConv(group, -1);
+    assert.ok(bob.isMuted(group));
+    bob.muteConv(group, 0);
+    assert.ok(!bob.isMuted(group));
+    // Forward Alice's message to Alice in private: it says who wrote it.
+    const f = bob.forward(group, m.id, alice.id);
+    assert.deepStrictEqual(f.fwd, { name: alice.config.name });
+    await waitFor(() => alice.loadMessages(bob.id).some((x) => x.id === f.id && x.fwd && x.fwd.name === alice.config.name), 5000, 'forward arrived');
+    // Save and unsave.
+    assert.strictEqual(bob.toggleSaved(group, m.id), true);
+    assert.strictEqual(bob.savedMessages()[0].msg.id, m.id);
+    assert.strictEqual(bob.toggleSaved(group, m.id), false);
+    assert.strictEqual(bob.savedMessages().length, 0);
+  } finally {
+    await alice.stop();
+    await bob.stop();
+  }
+});

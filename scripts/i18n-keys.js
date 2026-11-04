@@ -31,7 +31,8 @@ const EXTRA = ['Smileys', 'Gestures', 'Work', 'Things', 'Indigo', 'Office', 'Oce
   'Good', 'Fair', 'Poor',
   // Accounts: errors from the main process, shown through a variable.
   'Wrong PIN', 'Too many wrong PINs. Try again later.', 'This PC already has 4 accounts', 'The PIN must be 4 to 6 digits', 'Account not found',
-  'This account is signed in on this PC right now', 'This account is already signed in on another Windows user of this PC', 'This is not a LAN Messenger backup', 'Something went wrong'];
+  'This account is signed in on this PC right now', 'This account is already signed in on another Windows user of this PC', 'This is not a LAN Messenger backup', 'Something went wrong',
+  'Message not found', 'Download the file first', 'This message cannot be forwarded'];
 
 function decode(s) {
   return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');

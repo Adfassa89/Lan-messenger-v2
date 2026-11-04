@@ -865,6 +865,8 @@ class Messenger extends EventEmitter {
     if (reply) msg.replyTo = reply;
     if (w.urgent && kind === 'text') msg.urgent = true;
     if (w.gameResult && kind === 'text') msg.gameResult = true;
+    if (Array.isArray(w.mentions) && type === 'group') msg.mentions = w.mentions.filter((x) => typeof x === 'string').slice(0, 50);
+    if (w.fwd && typeof w.fwd.name === 'string') msg.fwd = { name: w.fwd.name.slice(0, 80) };
     if (kind === 'file') {
       if (!w.file || typeof w.file.tid !== 'string') return;
       msg.file = { tid: w.file.tid, name: String(w.file.name || 'file'), size: Number(w.file.size) || 0, state: 'offered' };
@@ -988,6 +990,7 @@ class Messenger extends EventEmitter {
     c.lastText = preview(msg);
     c.lastFrom = msg.from;
     if (countUnread && msg.from !== this.id) c.unread = (c.unread || 0) + 1;
+    if (countUnread && msg.from !== this.id && (msg.mentions || []).includes(this.id)) c.mention = true;
     this.convs[conv] = c;
     this.store.touch('conversations');
     this.emit('conv', c);
@@ -1023,6 +1026,8 @@ class Messenger extends EventEmitter {
     if (msg.replyTo) wire.replyTo = msg.replyTo;
     if (msg.urgent) wire.urgent = true;
     if (msg.gameResult) wire.gameResult = true;
+    if (msg.mentions) wire.mentions = msg.mentions;
+    if (msg.fwd) wire.fwd = msg.fwd;
     if (msg.poll) wire.poll = { question: msg.poll.question, options: msg.poll.options, multi: msg.poll.multi };
     if (msg.game) {
       wire.game = { type: msg.game.type, players: msg.game.players };
@@ -1078,11 +1083,18 @@ class Messenger extends EventEmitter {
     return { id: r.id, from: r.from, fromName: r.from === this.id ? this.config.name : r.fromName, preview: preview(r).slice(0, 160) };
   }
 
-  sendText(conv, text, { replyTo, urgent } = {}) {
+  sendText(conv, text, { replyTo, urgent, mentions, fwd } = {}) {
     const t = String(text || '').trim();
     if (!t) return null;
     if (t.length > MAX_TEXT) throw new Error(`Message is too long (max ${MAX_TEXT} characters)`);
     const fields = { kind: 'text', text: t };
+    // @mentions: only members of this group.
+    if (Array.isArray(mentions) && this._convType(conv) === 'group') {
+      const g = this.groups[conv.slice(2)];
+      const ok = [...new Set(mentions)].filter((id) => g && g.members.includes(id) && id !== this.id).slice(0, 50);
+      if (ok.length) fields.mentions = ok;
+    }
+    if (fwd && typeof fwd.name === 'string') fields.fwd = { name: fwd.name.slice(0, 80) };
     const reply = this._replyRef(conv, replyTo);
     if (reply) fields.replyTo = reply;
     if (urgent) {
@@ -1092,7 +1104,7 @@ class Messenger extends EventEmitter {
     return this._sendMsg(conv, fields);
   }
 
-  sendFiles(conv, paths, { replyTo, voice, duration } = {}) {
+  sendFiles(conv, paths, { replyTo, voice, duration, fwd } = {}) {
     const sent = [];
     for (const p of paths) {
       let stat;
@@ -1112,6 +1124,7 @@ class Messenger extends EventEmitter {
       const file = { tid, name, size: stat.size, path: p, state: 'sent' };
       if (voice) Object.assign(file, { voice: true, duration: Number(duration) || 0 });
       const fields = { kind: 'file', file };
+      if (fwd && typeof fwd.name === 'string') fields.fwd = { name: fwd.name.slice(0, 80) };
       const reply = this._replyRef(conv, replyTo);
       if (reply) fields.replyTo = reply;
       const msg = this._sendMsg(conv, fields, recipients);
@@ -1184,8 +1197,9 @@ class Messenger extends EventEmitter {
 
   markRead(conv) {
     const c = this.convs[conv];
-    if (c && c.unread) {
+    if (c && (c.unread || c.mention)) {
       c.unread = 0;
+      c.mention = false;
       this.store.touch('conversations');
       this.emit('conv', c);
     }
@@ -1227,6 +1241,59 @@ class Messenger extends EventEmitter {
   deleteMessage(conv, id) {
     this.store.deleteMessage(conv, id);
     this._refreshPreview(conv);
+  }
+
+  // Mute a chat: no sound or pop-up (an @mention still comes through).
+  // until: a time, -1 for always, 0 to unmute.
+  muteConv(conv, until) {
+    const c = this.convs[conv] || { id: conv, type: this._convType(conv), unread: 0 };
+    const u = Number(until);
+    c.muteUntil = u === -1 ? -1 : u > Date.now() ? u : 0;
+    this.convs[conv] = c;
+    this.store.touch('conversations');
+    this.emit('conv', c);
+    return c;
+  }
+
+  isMuted(conv) {
+    const c = this.convs[conv];
+    return !!c && (c.muteUntil === -1 || (c.muteUntil || 0) > Date.now());
+  }
+
+  // Forward a message (text or a file this PC has) to another chat.
+  forward(fromConv, msgId, toConv) {
+    const m = this.store.getMessage(fromConv, msgId);
+    if (!m || m.deleted) throw new Error('Message not found');
+    const name = m.fwd ? m.fwd.name : (m.from === this.id ? this.config.name : m.fromName || 'Someone');
+    if (m.kind === 'text' && !m.urgent) return this.sendText(toConv, m.text, { fwd: { name } });
+    if (m.kind === 'file') {
+      if (!m.file.path || !fs.existsSync(m.file.path)) throw new Error('Download the file first');
+      return this.sendFiles(toConv, [m.file.path], { fwd: { name } })[0] || null;
+    }
+    throw new Error('This message cannot be forwarded');
+  }
+
+  // Saved messages (bookmarks), only on this PC.
+  toggleSaved(conv, msgId) {
+    const list = this.store.get('saved', []);
+    const i = list.findIndex((x) => x.conv === conv && x.id === msgId);
+    if (i >= 0) list.splice(i, 1);
+    else list.unshift({ conv, id: msgId, at: Date.now() });
+    this.store.set('saved', list);
+    return i < 0;
+  }
+
+  savedMessages() {
+    const out = [];
+    for (const s of this.store.get('saved', [])) {
+      const msg = this.store.getMessage(s.conv, s.id);
+      if (msg) out.push({ conv: s.conv, at: s.at, msg });
+    }
+    return out;
+  }
+
+  savedIds() {
+    return this.store.get('saved', []).map((x) => `${x.conv}|${x.id}`);
   }
 
   // The results an arena game posts to its chat (removed with the other game messages).

@@ -462,7 +462,7 @@ const VoiceRooms = (() => {
     const box = $('#voiceRooms');
     if (!box) return;
     const conv = S.active;
-    if (!conv || !conv.startsWith('g:') || !S.groups.has(conv.slice(2))) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+    if (!conv || !conv.startsWith('g:') || !S.groups.has(conv.slice(2))) { box.classList.add('hidden'); box.innerHTML = ''; box.dataset.html = ''; return; }
     const group = conv.slice(2);
     const open = !(box.dataset.folded === group);
     const list = roomList(group);
@@ -488,7 +488,7 @@ const VoiceRooms = (() => {
   function renderBar() {
     const bar = $('#vrBar');
     if (!bar) return;
-    if (!here || !S.groups.has(here.group)) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
+    if (!here || !S.groups.has(here.group)) { bar.classList.add('hidden'); bar.innerHTML = ''; bar.dataset.html = ''; return; }
     const g = S.groups.get(here.group);
     const n = peopleIn(here.group, here.room).length;
     const html = `<button class="vr-where" data-goto title="${esc(t('Open the group'))}"><span class="vr-live">${esc(t('Voice connected'))}</span><small>${esc(roomName(here.group, here.room))} · ${esc(g.name)} · ${n}</small></button>

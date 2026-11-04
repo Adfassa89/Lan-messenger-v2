@@ -357,7 +357,7 @@ body.overlay-controls .chat-header { padding-right: 150px; }
 .offline-hint:empty { display: none; }
 
 .composer {
-  flex: none; display: flex; align-items: flex-end; gap: 8px;
+  position: relative; flex: none; display: flex; align-items: flex-end; gap: 8px;
   padding: 10px 16px 16px;
 }
 .input-wrap {
@@ -1662,3 +1662,35 @@ body.panel-open.overlay-controls .chat-header, body.panel-open.overlay-controls 
 .lock-switch { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; text-decoration: underline; }
 .lock-switch:hover { color: var(--text); }
 .acc-btns { flex-wrap: wrap; gap: 8px; }
+
+/* ---------------------------------------------------------------- mentions, mute, forward, saved, drafts, unread */
+.mention { padding: 0 3px; border-radius: 5px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-text); font-weight: 600; }
+.msg.out .mention { background: rgba(255, 255, 255, .22); color: inherit; }
+.mention.me { background: color-mix(in srgb, var(--away) 30%, transparent); color: inherit; }
+.msg.mentioned .bubble { box-shadow: inset 3px 0 0 var(--away); }
+.fwd { margin-bottom: 3px; font-size: 12px; font-style: italic; opacity: .75; }
+.saved-star { margin-right: 4px; color: var(--away); }
+.draft-label { color: var(--busy); font-weight: 600; }
+.muted-ico { margin-left: auto; font-size: 11px; opacity: .6; }
+.muted-ico + .badge, .muted-ico + .badge.at { margin-left: 4px; }
+.badge.at { background: var(--away); margin-left: 4px; }
+.badge.quiet { background: var(--faint); }
+.unread-divider { display: flex; align-items: center; gap: 10px; margin: 10px 0; color: var(--busy); font-size: 12px; font-weight: 700; }
+.unread-divider::before, .unread-divider::after { content: ''; flex: 1; height: 1px; background: color-mix(in srgb, var(--busy) 45%, transparent); }
+.jump-new { position: absolute; right: 22px; bottom: 96px; z-index: 6; display: flex; align-items: center; gap: 5px; height: 38px; min-width: 38px; padding: 0 12px; border-radius: 19px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; font-size: 16px; box-shadow: var(--shadow-lg); cursor: pointer; animation: pop .15s ease-out; }
+.jump-new b { font-size: 12px; padding: 1px 7px; border-radius: 9px; background: var(--accent); color: #fff; }
+.jump-new.has-new { border-color: var(--accent); }
+.mention-box { position: absolute; left: 70px; bottom: calc(100% + 4px); z-index: 30; min-width: 240px; max-width: 360px; padding: 5px; border-radius: 12px; background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow-lg); }
+.mention-opt { display: flex; align-items: center; gap: 9px; width: 100%; padding: 6px 9px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.mention-opt.on, .mention-opt:hover { background: var(--hover); }
+.fw-preview { margin-bottom: 10px; padding: 8px 12px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--panel-2); color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fw-list { margin-top: 8px; }
+.fw-row { width: 100%; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
+.fw-row:hover { background: var(--hover); }
+.saved-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
+.saved-row { padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--border); cursor: pointer; }
+.saved-row:hover { border-color: var(--accent); }
+.saved-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.saved-head span { color: var(--muted); }
+.saved-head .icon-btn { margin-left: auto; width: 26px; height: 26px; }
+.saved-text { margin-top: 4px; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }

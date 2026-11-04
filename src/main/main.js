@@ -270,6 +270,8 @@ function convTitle(conv) {
 function notify(conv, msg) {
   const focused = win && win.isVisible() && win.isFocused();
   if (focused && activeConv === conv) return;
+  const mentioned = (msg.mentions || []).includes(messenger.id);
+  if (messenger.isMuted(conv) && !mentioned) return;
   if (win && !focused) win.flashFrame(true);
   if (!messenger.settings.notifications || messenger.config.status === 'busy') return;
   if (!Notification.isSupported()) return;
@@ -278,7 +280,8 @@ function notify(conv, msg) {
     if (messenger.settings.sound) send('play-sound');
     return;
   }
-  const title = conv.startsWith('g:') || conv === 'broadcast' ? `${msg.fromName} · ${convTitle(conv)}` : msg.fromName;
+  let title = conv.startsWith('g:') || conv === 'broadcast' ? `${msg.fromName} · ${convTitle(conv)}` : msg.fromName;
+  if (mentioned) title = `@ ${t('{name} mentioned you', { name: msg.fromName || t('Someone') })} · ${convTitle(conv)}`;
   let body = preview(msg);
   if (msg.kind === 'file') body = msg.file.voice ? `🎤 ${t('Voice message')}` : `${msg.file.folder ? '📁' : '📎'} ${msg.file.name}`;
   if (msg.kind === 'game') {
@@ -929,6 +932,11 @@ function registerIpc() {
   h('remove-peer', (entry) => messenger.removeManualPeer(entry));
   h('forget-contact', (id) => messenger.forgetContact(id));
   h('delete-message', (conv, id) => messenger.deleteMessage(conv, id));
+  h('mute-conv', (conv, until) => messenger.muteConv(conv, until));
+  h('forward-message', (from, id, to) => messenger.forward(from, id, to));
+  h('toggle-saved', (conv, id) => messenger.toggleSaved(conv, id));
+  h('saved-messages', () => messenger.savedMessages().map((s) => ({ ...s, convTitle: convTitle(s.conv) })));
+  h('saved-ids', () => messenger.savedIds());
   h('clear-conversation', (conv) => messenger.clearConversation(conv));
   h('react', (conv, id, emoji) => messenger.react(conv, id, emoji));
   h('edit-message', (conv, id, text) => messenger.editMessage(conv, id, text));

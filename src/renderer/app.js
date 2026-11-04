@@ -22,6 +22,10 @@ const S = {
   replyTo: null, // message being replied to
   editing: null, // message being edited
   updateReady: null,
+  saved: new Set(), // "conv|msgId" of saved messages
+  drafts: {}, // conv -> unsent text
+  unreadMark: null, // { conv, id, n }: where "new messages" starts in the open chat
+  newBelow: 0, // messages that arrived while scrolled up
 };
 const PAGE = 150;
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '✅'];
@@ -623,6 +627,9 @@ function convItem(i) {
     const p = i.peer;
     prev = p.online ? esc(`${statusText(p.status)}${p.dept ? ` · ${p.dept}` : ''}`) : esc(fmtAgo(p.lastSeen));
   }
+  // An unsent draft shows instead of the last message.
+  const draft = i.conv !== S.active && S.drafts[i.conv];
+  if (draft) prev = `<span class="draft-label">${esc(t('Draft:'))}</span> ${esc(draft.replace(/\s+/g, ' ').slice(0, 80))}`;
   // People talking in a group's voice rooms show in its preview.
   const talking = i.kind === 'group' ? VoiceRooms.busyCount(i.conv.slice(2)) : 0;
   if (talking) prev = `<span class="vr-badge">🔊 ${esc(t('{n} in voice', { n: talking }))}</span> ${prev}`;
@@ -631,7 +638,7 @@ function convItem(i) {
     ${avatarHtml(i.kind, i.conv, i.name, status)}
     <div class="body">
       <div class="row"><span class="title">${esc(i.name)}</span><span class="time">${fmtListTime(i.meta?.lastTs)}</span></div>
-      <div class="row"><span class="preview">${prev}</span>${i.meta?.unread ? `<span class="badge">${i.meta.unread > 99 ? '99+' : i.meta.unread}</span>` : ''}</div>
+      <div class="row"><span class="preview">${prev}</span>${convMuted(i.conv) ? `<span class="muted-ico" title="${esc(t('Muted'))}">🔕</span>` : ''}${i.meta?.mention ? '<span class="badge at">@</span>' : ''}${i.meta?.unread ? `<span class="badge${convMuted(i.conv) ? ' quiet' : ''}">${i.meta.unread > 99 ? '99+' : i.meta.unread}</span>` : ''}</div>
     </div>`;
   b.addEventListener('click', () => openConv(i.conv));
   b.addEventListener('contextmenu', (e) => {
@@ -661,6 +668,7 @@ function convItem(i) {
 function convMenu(i, x, y) {
   const items = [{ label: t('Open chat'), action: () => openConv(i.conv) }];
   items.push({ label: t('Export chat…'), action: () => exportModal(i.conv) });
+  items.push(...muteItems(i.conv));
   items.push('-');
   items.push({ label: t('Clear chat history'), danger: true, action: () => confirmClear(i.conv) });
   if (i.kind === 'group') items.push({ label: t('Leave group'), danger: true, action: () => confirmLeave(i.conv.slice(2)) });
@@ -678,7 +686,7 @@ function convMenu(i, x, y) {
 let badgeLast = -1;
 function updateBadge() {
   let n = 0;
-  for (const c of S.convs.values()) n += c.unread || 0;
+  for (const c of S.convs.values()) if (!convMuted(c.id) || c.mention) n += c.unread || 0;
   if (n === badgeLast) return;
   badgeLast = n;
   let url = null;
@@ -705,8 +713,11 @@ function updateBadge() {
 async function openConv(conv) {
   hidePopover();
   if (S.active !== conv) {
+    saveDraft();
     cancelReply();
     cancelEdit();
+    S.unreadMark = null;
+    S.newBelow = 0;
   }
   S.active = conv;
   api.setActiveConv(conv);
@@ -722,7 +733,24 @@ async function openConv(conv) {
   renderHeader();
   VoiceRooms.render();
   if (switched && conv.startsWith('g:')) VoiceRooms.lookAround(conv.slice(2));
+  if (switched) {
+    // Where the unread messages start: a divider there, and the chat opens at it.
+    const list = S.msgs.get(conv) || [];
+    const unread = list.filter((m) => m.from !== S.me.id && m.read === false && m.kind !== 'system');
+    S.unreadMark = unread.length ? { conv, id: unread[0].id, n: unread.length } : null;
+    $('#input').value = S.drafts[conv] || '';
+    autoGrow();
+  }
   renderMessages(true);
+  if (switched && S.unreadMark) {
+    const d = $('#messages .unread-divider');
+    const box = $('#messages');
+    // Opens at the first unread message when there is more than a screenful of them.
+    if (d && box.scrollHeight - (d.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop) > box.clientHeight) {
+      box.scrollTop = d.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 48;
+    }
+  }
+  updateJumpButton();
   if (switched) replayAnim($('#messages'), 'conv-enter');
   renderComposerState();
   renderList();
@@ -803,6 +831,7 @@ function renderHeader() {
     items.push({ label: t('Scheduled messages'), action: () => scheduledModal(conv) });
     items.push({ label: t('Find in messages…'), action: () => searchModal() });
     items.push({ label: t('Export chat…'), action: () => exportModal(conv) });
+    items.push(...muteItems(conv));
     items.push('-');
     items.push({ label: t('Clear chat history'), danger: true, action: () => confirmClear(conv) });
     if (kind === 'group') items.push({ label: t('Leave group'), danger: true, action: () => confirmLeave(conv.slice(2)) });
@@ -887,6 +916,9 @@ function renderMessages(scrollToEnd, keepOffset) {
       group.append(el('div', 'day', `<span>${esc(fmtDay(m.ts))}</span>`));
       inner.append(group);
     }
+    if (S.unreadMark && S.unreadMark.conv === S.active && S.unreadMark.id === m.id) {
+      group.append(el('div', 'unread-divider', `<span>${esc(t(S.unreadMark.n === 1 ? '{n} new message' : '{n} new messages', { n: S.unreadMark.n }))}</span>`));
+    }
     group.append(msgNode(list, i));
   }
   box.innerHTML = '';
@@ -947,10 +979,12 @@ function msgNode(list, i) {
     else row.append(el('div', 'spacer'));
   }
 
-  const jumbo = m.kind === 'text' && !m.deleted && !m.urgent && !m.replyTo && isJumbo(m.text);
+  const jumbo = m.kind === 'text' && !m.deleted && !m.urgent && !m.replyTo && !m.fwd && isJumbo(m.text);
+  if ((m.mentions || []).includes(S.me.id) && !out) row.classList.add('mentioned');
   const bubble = el('div', `bubble${jumbo ? ' jumbo' : ''}${m.urgent ? ' urgent' : ''}${m.kind === 'poll' ? ' poll-bubble' : ''}${m.kind === 'game' ? ' game-bubble' : ''}`);
   let html = '';
   if (showSender) html += `<div class="sender" style="color:${senderColor(m.from)}">${esc(m.fromName || peerName(m.from))}</div>`;
+  if (m.fwd && !m.deleted) html += `<div class="fwd">↪ ${esc(t('Forwarded from {name}', { name: m.fwd.name }))}</div>`;
   if (m.replyTo && !m.deleted) {
     html += `<div class="quote" data-act="jump" data-id="${esc(m.replyTo.id)}"><b>${esc(m.replyTo.from === S.me.id ? t('You') : m.replyTo.fromName)}</b><span>${esc(m.replyTo.preview === '🎤' ? `🎤 ${t('Voice message')}` : m.replyTo.preview)}</span></div>`;
   }
@@ -965,10 +999,11 @@ function msgNode(list, i) {
   } else if (m.kind === 'file') {
     html += m.file.voice ? Voice.bubbleHtml(m, out) : fileHtml(m, out);
   } else {
-    html += `<div class="text">${linkify(m.text)}</div>`;
+    html += `<div class="text">${mentionify(linkify(m.text), m)}</div>`;
   }
   const edited = m.edited && !m.deleted ? `<span class="edited">${esc(t('edited'))}</span>` : '';
-  html += `<span class="meta">${edited}${fmtTime(m.ts)}${out && !m.deleted ? ticks(m) : ''}</span>`;
+  const star = S.saved.has(`${S.active}|${m.id}`) ? `<span class="saved-star" title="${esc(t('Saved'))}">★</span>` : '';
+  html += `<span class="meta">${star}${edited}${fmtTime(m.ts)}${out && !m.deleted ? ticks(m) : ''}</span>`;
   bubble.innerHTML = html;
 
   const reacts = Object.entries(m.reactions || {}).filter(([, ids]) => ids.length);
@@ -1245,6 +1280,19 @@ function msgMenu(m, x, y) {
     items.push({ label: t('Reply'), action: () => startReply(m) });
     items.push({ label: t('React…'), action: () => emojiPicker({ left: x, right: x, top: y, bottom: y }, (e) => call(api.react(conv, m.id, e))) });
   }
+  if (!m.deleted && ((m.kind === 'text' && !m.urgent) || (m.kind === 'file' && m.file.path))) items.push({ label: t('Forward…'), action: () => forwardModal(conv, m) });
+  if (!m.deleted && m.kind !== 'game') {
+    const key = `${conv}|${m.id}`;
+    items.push({
+      label: S.saved.has(key) ? t('Remove from saved') : t('Save message'),
+      action: async () => {
+        const on = await call(api.toggleSaved(conv, m.id));
+        if (on) S.saved.add(key); else S.saved.delete(key);
+        refreshMsgDom(conv, m.id);
+        toast(on ? t('Saved. Find it under your name → Saved messages.') : t('Removed from saved'));
+      },
+    });
+  }
   if (sel) items.push({ label: t('Copy selection'), action: () => api.copyText(sel) });
   if (m.kind === 'text' && !m.deleted) items.push({ label: t('Copy text'), action: () => api.copyText(m.text) });
   if (mine && m.kind === 'text' && !m.deleted && !m.urgent) items.push({ label: t('Edit'), action: () => startEdit(m) });
@@ -1297,8 +1345,10 @@ function upsertMessage(conv, msg, isNew) {
     if (node) node.replaceWith(msgNode(list, idx));
     if ((S.convs.get(conv)?.pins || []).some((p) => p.id === msg.id)) renderPinBar();
   } else {
+    const up = !isAtBottom($('#messages'));
     renderMessages(msg.from === S.me.id);
     if (isNew) $(`#messages [data-id="${CSS.escape(msg.id)}"]`)?.classList.add('msg-enter');
+    if (isNew && up && msg.from !== S.me.id) { S.newBelow++; updateJumpButton(); }
   }
 }
 
@@ -1394,9 +1444,14 @@ async function sendCurrent() {
     return undefined;
   }
   const opts = S.replyTo ? { replyTo: S.replyTo.id } : {};
+  const mentions = mentionsIn(text);
+  if (mentions.length) opts.mentions = mentions;
   input.value = '';
   autoGrow();
   cancelReply();
+  delete S.drafts[S.active];
+  saveDrafts();
+  hideMentionPicker();
   await call(api.sendText(S.active, text, opts));
 }
 
@@ -1541,6 +1596,8 @@ function statusMenu() {
       action: async () => { S.me = await call(api.setProfile({ status: s })) || S.me; renderMe(); },
     })),
     '-',
+    { label: `★ ${t('Saved messages')}`, action: savedModal },
+    { label: `🔒 ${t('Lock')} (Ctrl+L)`, action: () => api.lockNow() },
     { label: t('Edit profile and settings…'), action: settingsModal },
   ], r.left, r.bottom + 4);
 }
@@ -2007,6 +2064,184 @@ function selectRow(key, title, sub, options, { disabled = false } = {}) {
 function toggleRow(key, title, sub) {
   return `<label class="toggle-row"><div class="tl"><div>${esc(title)}</div>${sub ? `<div>${esc(sub)}</div>` : ''}</div>
     <span class="switch"><input type="checkbox" data-set="${key}" ${S.settings[key] ? 'checked' : ''}><span></span></span></label>`;
+}
+
+// ------------------------------------------------------------------ @mentions, mute, forward, saved, drafts
+// The names a message mentions, highlighted in its text (yours stronger).
+function mentionify(html, m) {
+  if (!m.mentions || !m.mentions.length) return html;
+  let out = html;
+  for (const id of m.mentions) {
+    const name = esc(id === S.me.id ? S.me.name : peerName(id));
+    if (!name) continue;
+    out = out.split(`@${name}`).join(`<span class="mention${id === S.me.id ? ' me' : ''}">@${name}</span>`);
+  }
+  return out;
+}
+
+// Group members whose "@Name" is in the text.
+function mentionsIn(text) {
+  if (!S.active || !S.active.startsWith('g:')) return [];
+  const g = S.groups.get(S.active.slice(2));
+  if (!g) return [];
+  return g.members.filter((id) => id !== S.me.id && text.includes(`@${peerName(id)}`));
+}
+
+// Typing "@" in a group shows its members to pick from.
+let mentionPick = null; // { start, list, i }
+function updateMentionPicker() {
+  const input = $('#input');
+  if (!S.active || !S.active.startsWith('g:')) return hideMentionPicker();
+  const before = input.value.slice(0, input.selectionStart);
+  const m = /(^|\s)@([^\s@]{0,30})$/u.exec(before);
+  if (!m) return hideMentionPicker();
+  const q = m[2].toLowerCase();
+  const g = S.groups.get(S.active.slice(2));
+  const list = (g ? g.members : []).filter((id) => id !== S.me.id).map((id) => ({ id, name: peerName(id) }))
+    .filter((p) => !q || p.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 8);
+  if (!list.length) return hideMentionPicker();
+  mentionPick = { start: before.length - m[2].length - 1, list, i: mentionPick ? Math.min(mentionPick.i, list.length - 1) : 0 };
+  let box = $('#mentionBox');
+  if (!box) { box = el('div', 'mention-box'); box.id = 'mentionBox'; $('#composer').append(box); }
+  box.innerHTML = list.map((p, i) => `<button class="mention-opt${i === mentionPick.i ? ' on' : ''}" data-i="${i}">${avatarHtml('direct', p.id, p.name, S.peers.get(p.id)?.online ? S.peers.get(p.id).status : 'offline', 'sm')}<span>${esc(p.name)}</span></button>`).join('');
+  box.onmousedown = (e) => { const b = e.target.closest('[data-i]'); if (b) { e.preventDefault(); pickMention(Number(b.dataset.i)); } };
+  return undefined;
+}
+function hideMentionPicker() {
+  mentionPick = null;
+  const box = $('#mentionBox');
+  if (box) box.remove();
+}
+function pickMention(i) {
+  if (!mentionPick) return;
+  const p = mentionPick.list[i];
+  const input = $('#input');
+  const end = input.selectionStart;
+  input.value = `${input.value.slice(0, mentionPick.start)}@${p.name} ${input.value.slice(end)}`;
+  const pos = mentionPick.start + p.name.length + 2;
+  input.setSelectionRange(pos, pos);
+  hideMentionPicker();
+  autoGrow();
+  input.focus();
+}
+// Arrow keys, Enter and Tab work in the list while it is open.
+function mentionKey(e) {
+  if (!mentionPick) return false;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    mentionPick.i = (mentionPick.i + (e.key === 'ArrowDown' ? 1 : -1) + mentionPick.list.length) % mentionPick.list.length;
+    updateMentionPicker();
+  } else if (e.key === 'Enter' || e.key === 'Tab') pickMention(mentionPick.i);
+  else if (e.key === 'Escape') hideMentionPicker();
+  else return false;
+  e.preventDefault();
+  return true;
+}
+
+function convMuted(conv) {
+  const c = S.convs.get(conv);
+  return !!c && (c.muteUntil === -1 || (c.muteUntil || 0) > Date.now());
+}
+function muteItems(conv) {
+  if (convMuted(conv)) {
+    const c = S.convs.get(conv);
+    return [{ label: `🔔 ${t('Unmute')}${c.muteUntil > 0 ? ` (${t('muted until {time}', { time: fmtWhen(c.muteUntil) })})` : ''}`, action: () => call(api.muteConv(conv, 0)) }];
+  }
+  const h = 3600000;
+  return [
+    { label: `🔕 ${t('Mute for 1 hour')}`, action: () => call(api.muteConv(conv, Date.now() + h)) },
+    { label: `🔕 ${t('Mute for 8 hours')}`, action: () => call(api.muteConv(conv, Date.now() + 8 * h)) },
+    { label: `🔕 ${t('Mute until I unmute')}`, action: () => call(api.muteConv(conv, -1)) },
+  ];
+}
+
+// Send a message or file on to another chat.
+function forwardModal(fromConv, m) {
+  const chats = [{ conv: 'broadcast', name: t('Everyone'), kind: 'broadcast' }];
+  for (const g of S.groups.values()) chats.push({ conv: `g:${g.id}`, name: g.name, kind: 'group' });
+  for (const p of S.peers.values()) chats.push({ conv: p.id, name: p.name, kind: 'direct', status: p.online ? p.status : 'offline' });
+  const last = (c) => S.convs.get(c.conv)?.lastTs || 0;
+  chats.sort((a, b) => last(b) - last(a) || a.name.localeCompare(b.name));
+  modal({
+    title: t('Forward to…'),
+    body: `<div class="fw-preview">${esc(msgPreview(m))}</div><input class="input" id="fwFilter" placeholder="${esc(t('Search people and chats'))}" autocomplete="off">
+      <div class="pick-list fw-list" id="fwList">${chats.map((c) => `<button class="pick fw-row" data-conv="${esc(c.conv)}" data-name="${esc(c.name.toLowerCase())}">${avatarHtml(c.kind, c.conv, c.name, c.status || null, 'sm')}<div class="pname"><div>${esc(c.name)}</div></div></button>`).join('')}</div>`,
+    onOpen: (box, close) => {
+      $('#fwFilter', box).addEventListener('input', (e) => {
+        const f = e.target.value.trim().toLowerCase();
+        for (const r of box.querySelectorAll('.fw-row')) r.classList.toggle('hidden', !!f && !r.dataset.name.includes(f));
+      });
+      $('#fwList', box).addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-conv]');
+        if (!b) return;
+        close();
+        const r = await call(api.forwardMessage(fromConv, m.id, b.dataset.conv));
+        if (r) toast(t('Forwarded to {name}', { name: convName(b.dataset.conv) }));
+      });
+    },
+  });
+}
+
+// ★ Saved messages, newest first.
+async function savedModal() {
+  const list = await call(api.savedMessages()) || [];
+  modal({
+    title: `★ ${t('Saved messages')}`,
+    wide: true,
+    body: list.length ? `<div class="saved-list">${list.map((s) => `<div class="saved-row" data-conv="${esc(s.conv)}" data-id="${esc(s.msg.id)}">
+        <div class="saved-head"><b>${esc(s.msg.from === S.me.id ? t('You') : s.msg.fromName || peerName(s.msg.from))}</b><span>${esc(s.convTitle)} · ${esc(fmtWhen(s.msg.ts))}</span>
+        <button class="icon-btn" data-unsave title="${esc(t('Remove from saved'))}">${ICONS.close}</button></div>
+        <div class="saved-text">${esc(msgPreview(s.msg))}</div></div>`).join('')}</div>`
+      : `<div class="empty-note">${esc(t('Nothing saved yet. Right-click a message and choose “Save message”.'))}</div>`,
+    onOpen: (box, close) => {
+      box.addEventListener('click', async (e) => {
+        const row = e.target.closest('.saved-row');
+        if (!row) return;
+        if (e.target.closest('[data-unsave]')) {
+          await call(api.toggleSaved(row.dataset.conv, row.dataset.id));
+          S.saved.delete(`${row.dataset.conv}|${row.dataset.id}`);
+          row.remove();
+          refreshMsgDom(row.dataset.conv, row.dataset.id);
+          return;
+        }
+        close();
+        jumpTo(row.dataset.conv, row.dataset.id);
+      });
+    },
+  });
+}
+
+// Drafts: what you started typing stays with each chat (on this PC, per account).
+const draftKey = () => `lanmsg.drafts.${S.me ? S.me.id : ''}`;
+function loadDrafts() {
+  try { S.drafts = JSON.parse(localStorage.getItem(draftKey()) || '{}') || {}; } catch { S.drafts = {}; }
+}
+let draftTimer = 0;
+function saveDrafts() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => { try { localStorage.setItem(draftKey(), JSON.stringify(S.drafts)); } catch { /* full */ } }, 300);
+}
+function saveDraft() {
+  if (!S.active || S.editing) return;
+  const v = $('#input').value;
+  if (v.trim()) S.drafts[S.active] = v; else delete S.drafts[S.active];
+  saveDrafts();
+}
+
+// "↓ 3 new" while you read older messages; click to jump to the newest.
+function updateJumpButton() {
+  let b = $('#jumpNew');
+  if (!b) {
+    b = el('button', 'jump-new hidden');
+    b.id = 'jumpNew';
+    b.addEventListener('click', () => { const box = $('#messages'); box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' }); S.newBelow = 0; updateJumpButton(); });
+    $('#chat').append(b);
+  }
+  const box = $('#messages');
+  const show = !!S.active && !isAtBottom(box) && box.scrollHeight > box.clientHeight + 200;
+  b.innerHTML = `↓${S.newBelow ? ` <b>${S.newBelow}</b>` : ''}`;
+  b.title = S.newBelow ? t(S.newBelow === 1 ? '{n} new message' : '{n} new messages', { n: S.newBelow }) : t('Go to the newest message');
+  b.classList.toggle('hidden', !show);
+  b.classList.toggle('has-new', !!S.newBelow);
 }
 
 // ------------------------------------------------------------------ PIN, lock screen, backup
@@ -2513,8 +2748,10 @@ function wire() {
   });
 
   const input = $('#input');
-  input.addEventListener('input', onInput);
+  input.addEventListener('input', () => { onInput(); updateMentionPicker(); if (S.active && !S.editing) { const v = input.value; if (v.trim()) S.drafts[S.active] = v; else delete S.drafts[S.active]; saveDrafts(); } });
+  input.addEventListener('blur', () => setTimeout(hideMentionPicker, 150));
   input.addEventListener('keydown', (e) => {
+    if (mentionKey(e)) return;
     if (e.key === 'Escape' && (S.editing || S.replyTo)) {
       e.preventDefault();
       if (S.editing) cancelEdit(); else cancelReply();
@@ -2543,6 +2780,10 @@ function wire() {
   });
 
   const box = $('#messages');
+  box.addEventListener('scroll', () => {
+    if (isAtBottom(box)) S.newBelow = 0;
+    updateJumpButton();
+  }, { passive: true });
   box.addEventListener('scroll', async () => {
     if (box.scrollTop > 60 || !S.active || !S.hasMore.get(S.active) || box.dataset.loading) return;
     const conv = S.active;
@@ -2710,6 +2951,8 @@ async function boot() {
   renderList();
   renderUpdateBanner();
   VoiceRooms.bind();
+  loadDrafts();
+  api.savedIds().then((ids) => { S.saved = new Set(ids || []); }).catch(() => {});
   if (st.locked) showLock(true);
 }
 
