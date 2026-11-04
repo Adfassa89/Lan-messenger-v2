@@ -296,11 +296,15 @@ const Game = (() => {
       if (open.promo) {
         open.promo = null;
         render();
+      } else if (open.premove) {
+        open.premove = null;
+        render();
       } else close();
     }
   }
 
   function close() {
+    dropGhosts();
     if (!open) return;
     clearInterval(open.ticker);
     EndFx.close();
@@ -404,6 +408,7 @@ const Game = (() => {
         </div>
         <div class="cc-panel">
           <div class="cc-status${myTurn ? ' turn' : ''}${over ? ' over' : ''}">${esc(statusText(msg, r))}</div>
+          ${open.premove ? `<div class="cc-premove"><span>⏳ ${esc(t('Premove: {move}', { move: `${Games.RULES.chess.squareName(open.premove.from)} → ${Games.RULES.chess.squareName(open.premove.to)}` }))}</span><button class="cc-btn" data-action="cancel-premove" title="${esc(t('Right-click the board or press Esc to cancel'))}">✕ ${esc(t('Cancel'))}</button></div>` : ''}
           ${offerFromOther ? `<div class="cc-offer"><span>½ ${esc(t('Accept the draw?'))}</span><button class="cc-btn green" data-draw="accept">${esc(t('Accept'))}</button><button class="cc-btn" data-draw="decline">${esc(t('Decline'))}</button></div>` : ''}
           <div class="cc-moves">${movesHtml(r)}</div>
           <div class="cc-actions">
@@ -540,6 +545,13 @@ const Game = (() => {
       }
       if (s === null) return;
       if (open.selected !== null && open.selected !== s && tryMove(open.selected, s)) return;
+      // A left click on an empty or enemy square drops a queued premove, as on chess.com.
+      if (open.premove && !mine(s)) {
+        open.premove = null;
+        open.selected = null;
+        render();
+        return;
+      }
       if (!mine(s)) {
         open.selected = null;
         showTargets(board, r, null);
@@ -562,6 +574,7 @@ const Game = (() => {
       if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 4) return;
       if (!drag.moved) {
         drag.moved = true;
+        open.dragging = true;
         document.body.append(drag.ghost);
         drag.piece.style.opacity = '0';
       }
@@ -602,6 +615,23 @@ const Game = (() => {
       d.ghost.remove();
       d.piece.style.opacity = '';
       board.querySelectorAll('.sq.hover').forEach((x) => x.classList.remove('hover'));
+      if (open) open.dragging = false;
+      // A move arrived during the drag: show it now (the drop is checked against the new position).
+      if (open && open.pending) {
+        open.pending = false;
+        const s = d.moved && e.type === 'pointerup' ? sqAt(e.clientX, e.clientY) : null;
+        render();
+        if (s !== null && s !== d.from) {
+          const nm = current();
+          const nr = nm && result(nm);
+          if (nr && !nr.status.over && nr.status.turn === myIndex(nm) && pieceMoves(nm, nr, d.from).some((mv) => mv.to === s)) {
+            const legal = pieceMoves(nm, nr, d.from).filter((mv) => mv.to === s);
+            const m = { from: C.squareName(d.from), to: C.squareName(s) };
+            if (legal[0].promo) { open.promo = m; render(); } else move(m);
+          }
+        }
+        return;
+      }
       if (d.moved) {
         const s = e.type === 'pointerup' ? sqAt(e.clientX, e.clientY) : null;
         if (s !== null && s !== d.from && tryMove(d.from, s)) return;
@@ -613,6 +643,8 @@ const Game = (() => {
     };
     board.addEventListener('pointerup', finish);
     board.addEventListener('pointercancel', finish);
+    // The mouse was let go somewhere the board could not see (another window, a lost capture).
+    board.addEventListener('lostpointercapture', (e) => { if (drag) finish({ ...e, type: 'pointercancel', button: 0 }); });
   }
 
   // ------------------------------------------------------------------ checkers window
@@ -790,9 +822,17 @@ const Game = (() => {
     call(api.createGame(conv, msg.game.type, options)).then((g) => { if (g) show(conv, g.id); });
   }
 
+  // A dragged piece follows the mouse as a separate picture on the page; never leave one behind.
+  function dropGhosts() {
+    for (const g of document.querySelectorAll('body > .ghost')) g.remove();
+  }
+
   function render() {
     const msg = current();
+    dropGhosts();
     if (!open) return;
+    open.dragging = false;
+    open.pending = false;
     if (!msg) return close();
     const r = result(msg);
     reactToChange(msg, r);
@@ -859,6 +899,12 @@ const Game = (() => {
     }
     const b = e.target.closest('[data-cell],[data-col],[data-promo],[data-draw],[data-action]');
     if (!b || !r) return;
+    if (b.dataset.action === 'cancel-premove') {
+      open.premove = null;
+      Sfx.play('premove');
+      render();
+      return undefined;
+    }
     if (b.dataset.action === 'settings') {
       open.settings = !open.settings;
       render();
@@ -877,7 +923,11 @@ const Game = (() => {
   }
 
   function onMessage(conv, msg) {
-    if (open && open.id === msg.id) render();
+    if (!open || open.id !== msg.id) return;
+    // A move that arrives while a piece is being dragged waits for the drop,
+    // so the board is not rebuilt under the mouse.
+    if (open.dragging) { open.pending = true; return; }
+    render();
   }
 
   // Secret games, started only by typing a command: /tetris here, /13 in app.js.

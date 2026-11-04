@@ -495,6 +495,8 @@
     "Only the two players can open this match": "Энэ тоглолтыг зөвхөн хоёр тоглогч нээнэ",
     "Choose who to play with": "Хэнтэй тоглохоо сонгоно уу",
     "Games can be played in group and private chats": "Тоглоомыг бүлэг болон хувийн чатад тоглоно",
+    "Premove: {move}": "Урьдчилсан нүүдэл: {move}",
+    "Right-click the board or press Esc to cancel": "Цуцлахын тулд самбар дээр баруун товшиж эсвэл Esc дарна уу",
     "Mouse wheel zooms.": "Хулганы дугуйгаар ойртуулж холдуулна.",
     "3D graphics are not available on this PC.": "Энэ компьютер дээр 3D график ажиллахгүй байна.",
     "FIGHT!": "ТУЛАЛДААН!",
