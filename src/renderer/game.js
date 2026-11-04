@@ -930,21 +930,28 @@ const Game = (() => {
     render();
   }
 
-  // Secret games, started only by typing a command: /tetris here, /13 in app.js.
-  const SECRET = ['tetris'];
-  let secretFlow = false;
   // "/tetris": in a private chat straight to the match length; in a group, pick the opponent first.
-  function tetrisCommand(conv) {
+  // A game started by typing its command (/chess, /tetris, ...): in a group, pick
+  // the opponent first; then the game's own settings, or straight to the invite.
+  function gameCommand(conv, type) {
     opponent = null;
-    secretFlow = true;
     const back = el('div', 'modal-back');
     back.innerHTML = '<div class="modal"></div>';
     const done = () => leave(back);
     back.addEventListener('mousedown', (e) => { if (e.target === back) done(); });
-    $('#modalRoot').append(back);
     const m = back.querySelector('.modal');
-    if (conv.startsWith('g:')) pickOpponent(back, conv, 'tetris', done, () => tetrisSetup(m, conv, done));
-    else tetrisSetup(m, conv, done);
+    const go = async () => {
+      if (type === 'chess' || type === 'checkers' || type === 'tetris') return setupView(back, conv, type, done);
+      done();
+      const g = await call(api.createGame(conv, type, { opponent }));
+      if (g) setTimeout(() => show(conv, g.id), 50);
+      return undefined;
+    };
+    if (conv.startsWith('g:')) { $('#modalRoot').append(back); pickOpponent(back, conv, type, done, go); return; }
+    if (type === 'ttt' || type === 'c4') { go(); return; }
+    $('#modalRoot').append(back);
+    go();
+    void m;
   }
 
   // In a group: who to play against (two-player games). The rest of the group can watch.
@@ -959,49 +966,14 @@ const Game = (() => {
       <div class="modal-body game-setup"><div class="gs-label">${esc(t('Play against'))}</div>
         <div class="gs-people">${members.map((id) => `<button class="gs-person${online(id) ? ' on' : ''}" data-opp="${esc(id)}"><span class="dot"></span>${esc(peerName(id))}</button>`).join('') || `<div class="hint">${esc(t('Nobody else is in this group'))}</div>`}</div>
         <div class="gs-note">${esc(t('The rest of the group can watch the game.'))}</div></div>
-      <div class="modal-foot"><button class="btn" data-back>${esc(t('Back'))}</button></div>`;
+      <div class="modal-foot"><button class="btn" data-back>${esc(t('Cancel'))}</button></div>`;
     m.querySelector('[data-close]').onclick = done;
     m.onclick = (e) => {
       const b = e.target.closest('button');
       if (!b) return;
-      if (b.dataset.back !== undefined) { done(); if (!secretFlow) newGameModal(conv); return; }
+      if (b.dataset.back !== undefined) { done(); return; }
       if (b.dataset.opp) { opponent = b.dataset.opp; next(); }
     };
-  }
-
-  async function newGameModal(conv) {
-    opponent = null;
-    secretFlow = false;
-    const isGroup = conv.startsWith('g:');
-    const back = el('div', 'modal-back');
-    back.innerHTML = `<div class="modal"><div class="modal-head"><h2>${esc(t('Play a game'))}</h2><button class="icon-btn" data-close>✕</button></div>
-      <div class="modal-body"><div class="game-picker">${Games.TYPES.filter((type) => !SECRET.includes(type)).map((type) => `<button class="game-pick" data-type="${type}">
-        <span class="gp-icon">${ICONS[type]}</span><b>${esc(t(TITLES[type]))}</b></button>`).join('')}</div>
-</div></div>`;
-    const done = () => leave(back);
-    back.addEventListener('mousedown', (e) => { if (e.target === back) done(); });
-    back.querySelector('[data-close]').onclick = done;
-    back.querySelector('.game-picker').onclick = async (e) => {
-      const b = e.target.closest('[data-type]');
-      if (!b) return;
-      const type = b.dataset.type;
-      if (type === 'thirteen') {
-        done();
-        const g = await call(api.createWarlock(conv, type));
-        if (g) call(api.openWarlock(conv, g.id));
-        return undefined;
-      }
-      const go = async () => {
-        if (type === 'chess' || type === 'checkers' || type === 'tetris') return setupView(back, conv, type, done);
-        done();
-        const g = await call(api.createGame(conv, type, { opponent }));
-        if (g) setTimeout(() => show(conv, g.id), 50);
-        return undefined;
-      };
-      if (isGroup) return pickOpponent(back, conv, type, done, go);
-      return go();
-    };
-    $('#modalRoot').append(back);
   }
 
   // Second step: time control and side for chess and checkers, match
@@ -1021,7 +993,7 @@ const Game = (() => {
           <div class="gs-label">${esc(t('I play as'))}</div>
           <div class="gs-sides">${sides.map(([k, icon, label]) => `<button class="gs-side${prefs.side === k ? ' on' : ''}" data-side="${k}">${icon}<span>${esc(label)}</span></button>`).join('')}</div>
         </div>
-        <div class="modal-foot"><button class="btn" data-back>${esc(t('Back'))}</button><button class="btn primary" data-go>${esc(t('Send invite'))}</button></div>`;
+        <div class="modal-foot"><button class="btn" data-back>${esc(t('Cancel'))}</button><button class="btn primary" data-go>${esc(t('Send invite'))}</button></div>`;
       m.querySelector('[data-close]').onclick = done;
     };
     draw();
@@ -1038,7 +1010,6 @@ const Game = (() => {
         draw();
       } else if (b.dataset.back !== undefined) {
         done();
-        if (!secretFlow) newGameModal(conv);
       } else if (b.dataset.go !== undefined) {
         done();
         const options = { side: prefs.side, clock: clockFromKey(prefs[clockPref(type)]), opponent };
@@ -1056,7 +1027,7 @@ const Game = (() => {
           <div class="gs-sides five">${Games.BEST_OF.map((n) => `<button class="gs-side${prefs.bestOf === n ? ' on' : ''}" data-bo="${n}">
             <b class="gs-bo">${n}</b><span>${esc(n === 1 ? t('One round') : t('Best of {n}', { n }))}</span><small>${esc(t('First to {n}', { n: (n + 1) / 2 }))}</small></button>`).join('')}</div>
         </div>
-        <div class="modal-foot"><button class="btn" data-back>${esc(t('Back'))}</button><button class="btn primary" data-go>${esc(t('Send invite'))}</button></div>`;
+        <div class="modal-foot"><button class="btn" data-back>${esc(t('Cancel'))}</button><button class="btn primary" data-go>${esc(t('Send invite'))}</button></div>`;
       m.querySelector('[data-close]').onclick = done;
     };
     draw();
@@ -1069,7 +1040,6 @@ const Game = (() => {
         draw();
       } else if (b.dataset.back !== undefined) {
         done();
-        if (!secretFlow) newGameModal(conv);
       } else if (b.dataset.go !== undefined) {
         done();
         const g = await call(api.createGame(conv, 'tetris', { bestOf: prefs.bestOf, opponent }));
@@ -1078,5 +1048,5 @@ const Game = (() => {
     };
   }
 
-  return { cardHtml, show, close, onMessage, newGameModal, tetrisCommand, isOpen: (id) => open && open.id === id };
+  return { cardHtml, show, close, onMessage, gameCommand, isOpen: (id) => open && open.id === id };
 })();
