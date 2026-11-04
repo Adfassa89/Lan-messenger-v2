@@ -940,6 +940,8 @@ function registerIpc() {
   h('remote-stop', () => remoteStop('local'));
   h('remote-log', () => (remote && remote.input.log ? remote.input.log.slice() : null));
   h('rtc-send', (peerId, sid, data) => messenger.sendRtc(peerId, sid, data));
+  // In a voice room the main window keeps full speed even when hidden in the tray.
+  h('voice-active', (on) => { if (win && !win.isDestroyed()) win.webContents.setBackgroundThrottling(!on); });
   h('open-viewer', (peerId, sid, name) => openViewer(peerId, sid, name));
   h('call-start', (conv, video) => startCall(conv, video));
   h('create-game', (conv, type, options) => messenger.createGame(conv, type, options || {}));

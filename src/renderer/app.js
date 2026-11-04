@@ -1,5 +1,5 @@
 'use strict';
-/* global api, EMOJI, I18N, openEditor, Voice, Share, Game */
+/* global api, EMOJI, I18N, openEditor, Voice, Share, Game, VoiceRooms */
 
 // ------------------------------------------------------------------ state
 const S = {
@@ -623,6 +623,9 @@ function convItem(i) {
     const p = i.peer;
     prev = p.online ? esc(`${statusText(p.status)}${p.dept ? ` · ${p.dept}` : ''}`) : esc(fmtAgo(p.lastSeen));
   }
+  // People talking in a group's voice rooms show in its preview.
+  const talking = i.kind === 'group' ? VoiceRooms.busyCount(i.conv.slice(2)) : 0;
+  if (talking) prev = `<span class="vr-badge">🔊 ${esc(t('{n} in voice', { n: talking }))}</span> ${prev}`;
   const status = i.kind === 'direct' ? (i.online ? i.peer.status : 'offline') : null;
   b.innerHTML = `
     ${avatarHtml(i.kind, i.conv, i.name, status)}
@@ -717,6 +720,8 @@ async function openConv(conv) {
   const switched = $('#messages').dataset.conv !== conv;
   $('#messages').dataset.conv = conv;
   renderHeader();
+  VoiceRooms.render();
+  if (switched && conv.startsWith('g:')) VoiceRooms.lookAround(conv.slice(2));
   renderMessages(true);
   if (switched) replayAnim($('#messages'), 'conv-enter');
   renderComposerState();
@@ -2379,7 +2384,8 @@ function handleEvent({ type, payload }) {
       if ($('#sUpd')) $('#sUpd').innerHTML = updateBoxHtml(payload);
       break;
     case 'rtc':
-      Share.onRtc(payload);
+      if (String((payload.data && payload.data.kind) || '').startsWith('vr-')) VoiceRooms.onRtc(payload);
+      else Share.onRtc(payload);
       break;
     default:
       break;
@@ -2606,6 +2612,7 @@ async function boot() {
   renderMe();
   renderList();
   renderUpdateBanner();
+  VoiceRooms.bind();
 }
 
 window.addEventListener('DOMContentLoaded', boot);

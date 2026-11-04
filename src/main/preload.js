@@ -63,6 +63,7 @@ const CHANNELS = {
   remoteStop: 'remote-stop',
   remoteLog: 'remote-log',
   rtcSend: 'rtc-send',
+  voiceActive: 'voice-active',
   openViewer: 'open-viewer',
   callStart: 'call-start',
   createGame: 'create-game',

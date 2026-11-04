@@ -1605,3 +1605,41 @@ body.panel-open.overlay-controls .chat-header, body.panel-open.overlay-controls 
 .list-label.fold.folded .fold-arrow { transform: rotate(-90deg); }
 .list-more { display: block; width: calc(100% - 16px); margin: 4px 8px 8px; padding: 7px 10px; border: 1px dashed var(--border); border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; }
 .list-more:hover { color: var(--text); border-color: var(--muted); }
+
+/* ---------------------------------------------------------------- voice rooms (group chats) */
+.vr-strip { flex: none; margin: 6px 14px 0; padding: 6px 8px 8px; border-radius: 12px; background: var(--panel); border: 1px solid var(--border); }
+.vr-top { display: flex; align-items: center; gap: 6px; }
+.vr-title { display: flex; flex: 1; align-items: center; gap: 7px; min-width: 0; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; cursor: pointer; padding: 2px 4px; text-align: left; }
+.vr-title .ico { width: 16px; height: 16px; }
+.vr-title em { font-style: normal; text-transform: none; letter-spacing: 0; color: var(--online); font-weight: 700; }
+.vr-title .fold-arrow { margin-left: auto; }
+.vr-add { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 7px; background: var(--panel-2); color: var(--muted); cursor: pointer; }
+.vr-add:hover { color: var(--text); }
+.vr-add .ico { width: 15px; height: 15px; }
+.vr-rooms { display: flex; gap: 8px; overflow-x: auto; padding-top: 6px; }
+.vr-room { position: relative; flex: 0 0 auto; min-width: 170px; max-width: 240px; padding: 6px; border-radius: 10px; background: var(--panel-2); border: 1px solid transparent; }
+.vr-room.busy { border-color: color-mix(in srgb, var(--online) 35%, transparent); }
+.vr-room.here { border-color: var(--online); background: color-mix(in srgb, var(--online) 10%, var(--panel-2)); }
+.vr-room-head { display: flex; align-items: center; gap: 6px; width: calc(100% - 26px); padding: 4px 6px; border: 0; border-radius: 7px; background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; text-align: left; }
+.vr-room-head:hover { background: var(--hover); }
+.vr-room-head .ico { width: 16px; height: 16px; color: var(--muted); flex: none; }
+.vr-room-head b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vr-room-head small { margin-left: auto; padding: 0 6px; border-radius: 8px; background: var(--online); color: #fff; font-weight: 700; font-size: 11px; }
+.vr-room-more { position: absolute; top: 8px; right: 6px; width: 22px; height: 22px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--faint); cursor: pointer; }
+.vr-room-more:hover { background: var(--hover); color: var(--text); }
+.vr-room-more .ico { width: 15px; height: 15px; }
+.vr-people { display: flex; flex-direction: column; gap: 2px; padding: 2px 4px 0 14px; }
+.vr-person { display: flex; align-items: center; gap: 7px; padding: 2px 0; font-size: 12.5px; }
+.vr-person .avatar { width: 22px; height: 22px; font-size: 9px; border-radius: 50%; box-shadow: 0 0 0 2px transparent; transition: box-shadow .1s; }
+.vr-person.speaking .avatar { box-shadow: 0 0 0 2px var(--online), 0 0 8px var(--online); }
+.vr-person span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vr-flag { display: grid; place-items: center; margin-left: auto; color: var(--busy); }
+.vr-flag .ico { width: 14px; height: 14px; }
+.vr-empty { font-size: 12px; color: var(--faint); }
+.vr-bar { display: flex; align-items: center; gap: 2px; margin: 0 10px 6px; padding: 6px 6px 6px 10px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--border); }
+.vr-where { flex: 1; min-width: 0; display: flex; flex-direction: column; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.vr-live { color: var(--online); font-weight: 700; font-size: 13px; }
+.vr-where small { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vr-btn.off { color: var(--busy); }
+.vr-btn.leave:hover { color: var(--busy); }
+.vr-badge { color: var(--online); font-weight: 700; }
