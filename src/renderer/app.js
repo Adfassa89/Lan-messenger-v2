@@ -992,6 +992,8 @@ function msgNode(list, i) {
     html += `<div class="text deleted">🚫 ${esc(t('This message was deleted'))}</div>`;
   } else if (m.urgent) {
     html += urgentHtml(m, out);
+  } else if (m.announce) {
+    html += announceHtml(m, out);
   } else if (m.kind === 'poll') {
     html += pollHtml(m);
   } else if (m.kind === 'game') {
@@ -1087,6 +1089,96 @@ function urgentHtml(m, out) {
   return `<div class="urgent-tag">🚨 ${esc(t('URGENT'))}</div><div class="text">${linkify(m.text)}</div>${footer}`;
 }
 
+// 📢 An announcement: its title and text; the sender sees who read and who
+// confirmed it, the others a "Read and understood" button when asked.
+function announceHtml(m, out) {
+  const a = m.announce;
+  let footer = '';
+  if (out) {
+    const total = (m.recipients || []).length;
+    const read = (m.readBy || []).filter((id) => (m.recipients || []).includes(id)).length;
+    const conf = (m.acks || []).length;
+    footer = `<button class="ann-track" data-act="ann-info"><span>👁 ${esc(t('Read by {a} of {n}', { a: read, n: total }))}</span>${a.confirm ? `<span>✔ ${esc(t('Confirmed by {a} of {n}', { a: conf, n: total }))}</span>` : ''}<i>${esc(t('Who?'))}</i></button>`;
+  } else if (a.confirm) {
+    footer = m.acked ? `<div class="ack-done">✔ ${esc(t('You confirmed this at {time}', { time: fmtTime(m.acked) }))}</div>`
+      : `<button class="fbtn ack-btn ann-btn" data-act="ack">✔ ${esc(t('Read and understood'))}</button>`;
+  }
+  return `<div class="ann-tag">📢 ${esc(t('Announcement'))}</div>${a.title ? `<div class="ann-title">${esc(a.title)}</div>` : ''}<div class="text">${linkify(m.text)}</div>${footer}`;
+}
+
+function announceInfo(m) {
+  const rows = (m.recipients || []).map((id) => {
+    const conf = (m.acks || []).includes(id);
+    const read = (m.readBy || []).includes(id);
+    const when = conf && m.ackAt && m.ackAt[id] ? fmtWhen(m.ackAt[id]) : read && m.readAt && m.readAt[id] ? fmtWhen(m.readAt[id]) : '';
+    const state = conf ? `✔ ${t('Confirmed')}` : read ? `👁 ${t('Read')}` : (m.deliveredTo || []).includes(id) ? `✉ ${t('Received, not read yet')}` : `⏳ ${t('Not delivered yet')}`;
+    return { id, rank: conf ? 0 : read ? 1 : 2, html: `<div class="ann-row">${avatarHtml('direct', id, peerName(id), null, 'sm')}<b>${esc(peerName(id))}</b><span class="st r${conf ? 0 : read ? 1 : 2}">${esc(state)}</span><small>${esc(when)}</small></div>` };
+  }).sort((a, b) => a.rank - b.rank || peerName(a.id).localeCompare(peerName(b.id)));
+  infoModal(`📢 ${m.announce.title || t('Announcement')}`, `<div class="ann-list">${rows.map((r) => r.html).join('') || '—'}</div>`);
+}
+
+// Settings → Storage: which chats take room, and removing old files.
+async function storageModal() {
+  const draw = async (m) => {
+    const list = await call(api.storageReport()) || [];
+    const sum = (k) => list.reduce((n, r) => n + r[k], 0);
+    $('#stTotal', m).innerHTML = `<div><b>${fmtSize(sum('files'))}</b><span>${esc(t('Files and pictures'))}</span></div><div><b>${fmtSize(sum('voice'))}</b><span>${esc(t('Voice messages'))}</span></div><div><b>${fmtSize(sum('history'))}</b><span>${esc(t('Messages'))}</span></div>`;
+    $('#stList', m).innerHTML = list.length ? list.slice(0, 200).map((r) => `<div class="st-row"><b>${esc(r.title)}</b>
+        <span>${esc(t('{n} messages', { n: r.messages }))} · ${fmtSize(r.history)}</span>
+        <span>${r.filesCount ? `📎 ${r.filesCount} · ${fmtSize(r.files)}` : ''}</span><span>${r.voiceCount ? `🎤 ${r.voiceCount} · ${fmtSize(r.voice)}` : ''}</span>
+        ${r.files + r.voice ? `<button class="btn small" data-clean="${esc(r.conv)}">${esc(t('Remove files'))}</button>` : '<span></span>'}</div>`).join('')
+      : `<div class="empty-note">${esc(t('Nothing stored yet.'))}</div>`;
+  };
+  const options = () => ({
+    olderThanDays: Number($('#stAge').value),
+    kinds: [...($('#stFiles').checked ? ['files'] : []), ...($('#stVoice').checked ? ['voice'] : [])],
+  });
+  const run = async (m, conv) => {
+    const o = options();
+    if (!o.kinds.length) { toast(t('Choose files or voice messages'), 'error'); return; }
+    const age = $('#stAge').selectedOptions[0].textContent;
+    confirmModal(t('Remove files from this PC?'), t('Received files, pictures and voice messages ({age}) are deleted from this PC. The messages stay, marked as removed. Files you sent from your own folders are never touched.', { age }), t('Remove'), async () => {
+      const r = await call(api.cleanStorage({ ...o, conv }));
+      if (r) toast(t('{n} files removed, {size} freed', { n: r.count, size: fmtSize(r.freed) }));
+      draw(m);
+    });
+  };
+  modal({
+    title: t('Storage'),
+    wide: true,
+    body: `<div class="st-total" id="stTotal"></div>
+      <div class="st-clean"><span>${esc(t('Remove'))}</span>
+        <label><input type="checkbox" id="stFiles" checked> ${esc(t('files and pictures'))}</label>
+        <label><input type="checkbox" id="stVoice" checked> ${esc(t('voice messages'))}</label>
+        <select class="input" id="stAge">${[[30, t('older than 1 month')], [90, t('older than 3 months')], [180, t('older than 6 months')], [365, t('older than 1 year')], [0, t('of any age')]].map(([v, l]) => `<option value="${v}"${v === 90 ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>
+        <button class="btn primary" id="stAll">${esc(t('Remove from all chats'))}</button></div>
+      <div class="st-list" id="stList"></div>`,
+    onOpen: (m) => {
+      draw(m);
+      $('#stAll', m).addEventListener('click', () => run(m, null));
+      $('#stList', m).addEventListener('click', (e) => { const b = e.target.closest('[data-clean]'); if (b) run(m, b.dataset.clean); });
+    },
+  });
+}
+
+function announceModal() {
+  modal({
+    title: `📢 ${t('Announcement')}`,
+    body: `<p class="modal-text">${esc(t('Goes to everyone in this chat (also people who are offline, when they come back). You see who has read it, and who has confirmed it if you ask them to.'))}</p>
+      <div class="field"><label>${esc(t('Title (optional)'))}</label><input class="input" id="anTitle" maxlength="120" placeholder="${esc(t('e.g. Blasting in pit 3 at 14:00'))}"></div>
+      <div class="field"><label>${esc(t('Message'))}</label><textarea class="input" id="anText" rows="5"></textarea></div>
+      <label class="check-row"><input type="checkbox" id="anConfirm" checked> ${esc(t('Ask everyone to confirm “Read and understood”'))}</label>`,
+    buttons: [{ label: t('Cancel') }, {
+      label: t('Send announcement'), cls: 'primary', action: async (m) => {
+        const text = $('#anText', m).value.trim();
+        if (!text) { toast(t('Write the announcement first'), 'error'); return false; }
+        const r = await call(api.sendAnnouncement(S.active, { title: $('#anTitle', m).value, text, confirm: $('#anConfirm', m).checked }));
+        return !!r;
+      },
+    }],
+  });
+}
+
 function pollHtml(m) {
   const p = m.poll;
   const votes = p.votes || {};
@@ -1122,7 +1214,9 @@ function fileHtml(m, out) {
   const isImg = !f.folder && IMAGE_RE.test(f.name);
   const openLabel = f.folder ? t('Open folder') : t('Open');
 
-  if (out && f.state === 'cancelled') {
+  if (f.state === 'removed') {
+    err = `<div class="ferr removed">${esc(t('Removed from this PC to save space'))}</div>`;
+  } else if (out && f.state === 'cancelled') {
     err = `<div class="ferr">${esc(t('You stopped sending this'))}</div>`;
   } else if (out) {
     const sending = prog && prog.upload && prog.done < prog.size;
@@ -1205,6 +1299,7 @@ async function onBubbleClick(e, m) {
   else if (act === 'ack') call(api.ackUrgent(conv, m.id));
   else if (act === 'game') Game.show(conv, m.id);
   else if (act === 'ack-info') ackInfo(m);
+  else if (act === 'ann-info') announceInfo(m);
   else if (act === 'seen') seenInfo(m);
   else if (act === 'play') Voice.toggle(m);
   else if (act === 'seek') Voice.seek(m, e, btn);
@@ -1346,6 +1441,9 @@ function upsertMessage(conv, msg, isNew) {
     if ((S.convs.get(conv)?.pins || []).some((p) => p.id === msg.id)) renderPinBar();
   } else {
     const up = !isAtBottom($('#messages'));
+    // A long-open busy chat keeps only its newest 400 messages in the window;
+    // older ones come back when you scroll up.
+    if (!up && list.length > 700) { list.splice(0, list.length - 400); S.hasMore.set(conv, true); }
     renderMessages(msg.from === S.me.id);
     if (isNew) $(`#messages [data-id="${CSS.escape(msg.id)}"]`)?.classList.add('msg-enter');
     if (isNew && up && msg.from !== S.me.id) { S.newBelow++; updateJumpButton(); }
@@ -1493,6 +1591,7 @@ function plusMenu() {
     { icon: ic('<path d="M6 3v12a3 3 0 0 0 3 3h12"/><path d="M3 6h12a3 3 0 0 1 3 3v12"/>'), label: t('Screenshot with drawing'), hint: 'Ctrl+Shift+S', action: screenshot },
     { icon: ic('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'), label: t('Share your screen'), action: () => Share.start(S.active) },
     { icon: ic('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'), label: t('Create a poll'), action: pollModal },
+    { icon: ic('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1zM15 8a5 5 0 0 1 0 8M18 5a9 9 0 0 1 0 14"/>'), label: t('Announcement with read tracking'), action: announceModal },
     { icon: ic('<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>'), label: t('Urgent alert'), danger: true, action: urgentModal },
     { icon: ICONS.clock, label: t('Schedule a message'), action: () => scheduleModal() },
   ], r.left, 0, { above: r.top - 8 }); // its bottom edge 8 px above the + button
@@ -2359,6 +2458,7 @@ function settingsModal() {
     ${toggleRow('enterToSend', t('Press Enter to send'), t('When off, use Ctrl + Enter to send'))}
 
     <div class="section-title">${esc(t('Files'))}</div>
+    <div class="row-inline" style="margin-bottom:10px"><button class="btn" id="sStorage">🗂 ${esc(t('Manage storage…'))}</button><small class="muted-note">${esc(t('See how much room each chat takes and remove old files.'))}</small></div>
     <div class="field"><label>${esc(t('Save received files to'))}</label>
       <div class="row-inline"><input class="input" id="sDir" readonly value="${esc(S.settings.downloadDir)}"><button class="btn" id="sDirBtn">${esc(t('Change…'))}</button></div></div>
     ${toggleRow('autoAccept', t('Receive files and folders automatically'), t('When off, every file waits until you click Download'))}
@@ -2465,6 +2565,7 @@ function settingsModal() {
         renderMe();
       });
       $('#sLock', m).addEventListener('click', () => { close(); api.lockNow(); });
+      $('#sStorage', m).addEventListener('click', () => storageModal());
       $('#sSwitch', m).addEventListener('click', () => confirmModal(t('Switch account?'), t('The app restarts on the sign-in screen. Your chats stay saved in this account.'), t('Switch account'), () => api.accSignout()));
       $('#sPin', m).addEventListener('click', () => changePinModal());
       $('#sBackup', m).addEventListener('click', () => backupModal());

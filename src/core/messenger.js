@@ -228,9 +228,14 @@ class Messenger extends EventEmitter {
     this.pingTimer = setInterval(() => this._pingAll(), PING_INTERVAL);
     this.scheduleTimer = setInterval(() => this._runScheduled(), 5000);
     // A new version of the app starts with no game history at all.
+    // After an update this runs at once; otherwise a little later, so opening
+    // every chat's history does not slow down the start.
     const updated = this.config.gamesClearedFor !== this.appVersion;
-    this.purgeGames({ all: updated });
-    if (updated) { this.config.gamesClearedFor = this.appVersion; this.store.touch('config'); }
+    if (updated) {
+      this.purgeGames({ all: true });
+      this.config.gamesClearedFor = this.appVersion;
+      this.store.touch('config');
+    } else this.purgeSoon = setTimeout(() => this.started && this.purgeGames(), 60000);
     this.purgeTimer = setInterval(() => this.purgeGames(), 10 * 60000);
     this._findClockGames();
     this.clockTimer = setInterval(() => this.clockGames.size && this._checkClocks(), 500);
@@ -247,6 +252,7 @@ class Messenger extends EventEmitter {
     clearInterval(this.scheduleTimer);
     clearInterval(this.clockTimer);
     clearInterval(this.purgeTimer);
+    clearTimeout(this.purgeSoon);
     clearTimeout(this.shareTimer);
     this.shareTimer = null;
     for (const t of this.ackTimers.values()) clearTimeout(t);
@@ -865,6 +871,7 @@ class Messenger extends EventEmitter {
     if (reply) msg.replyTo = reply;
     if (w.urgent && kind === 'text') msg.urgent = true;
     if (w.gameResult && kind === 'text') msg.gameResult = true;
+    if (w.announce && kind === 'text' && typeof w.announce === 'object') msg.announce = { title: String(w.announce.title || '').slice(0, 120), confirm: !!w.announce.confirm };
     if (Array.isArray(w.mentions) && type === 'group') msg.mentions = w.mentions.filter((x) => typeof x === 'string').slice(0, 50);
     if (w.fwd && typeof w.fwd.name === 'string') msg.fwd = { name: w.fwd.name.slice(0, 80) };
     if (kind === 'file') {
@@ -966,10 +973,12 @@ class Messenger extends EventEmitter {
         this._applyGameMove(conv, msg, peerId, w.m, w.n, Number(w.t));
         break;
       case 'uack':
-        if (msg.from !== this.id || !msg.urgent) return;
+        if (msg.from !== this.id || (!msg.urgent && !msg.announce)) return;
         msg.acks = msg.acks || [];
+        msg.ackAt = msg.ackAt || {};
         if (!msg.acks.includes(peerId)) msg.acks.push(peerId);
-        this.store.updateMessage(conv, msg.id, { acks: msg.acks });
+        if (!msg.ackAt[peerId]) msg.ackAt[peerId] = Date.now();
+        this.store.updateMessage(conv, msg.id, { acks: msg.acks, ackAt: msg.ackAt });
         this.emit('message', { conv, msg, isNew: false });
         break;
       default:
@@ -1027,6 +1036,7 @@ class Messenger extends EventEmitter {
     if (msg.urgent) wire.urgent = true;
     if (msg.gameResult) wire.gameResult = true;
     if (msg.mentions) wire.mentions = msg.mentions;
+    if (msg.announce) wire.announce = msg.announce;
     if (msg.fwd) wire.fwd = msg.fwd;
     if (msg.poll) wire.poll = { question: msg.poll.question, options: msg.poll.options, multi: msg.poll.multi };
     if (msg.game) {
@@ -1081,6 +1091,16 @@ class Messenger extends EventEmitter {
     const r = this.store.getMessage(conv, replyToId);
     if (!r) return undefined;
     return { id: r.id, from: r.from, fromName: r.from === this.id ? this.config.name : r.fromName, preview: preview(r).slice(0, 160) };
+  }
+
+  // An announcement: shows who has read it, and (if asked) who has confirmed
+  // "read and understood". Goes to everyone in the chat, also people offline.
+  sendAnnouncement(conv, { title, text, confirm } = {}) {
+    const body = String(text || '').trim();
+    if (!body) throw new Error('Message cannot be empty');
+    if (body.length > MAX_TEXT) throw new Error(`Message is too long (max ${MAX_TEXT} characters)`);
+    const fields = { kind: 'text', text: body, announce: { title: String(title || '').trim().slice(0, 120), confirm: !!confirm }, acks: [], ackAt: {} };
+    return this._sendMsg(conv, fields);
   }
 
   sendText(conv, text, { replyTo, urgent, mentions, fwd } = {}) {
@@ -1273,6 +1293,66 @@ class Messenger extends EventEmitter {
     throw new Error('This message cannot be forwarded');
   }
 
+  // ------------------------------------------------------------------ storage
+  // Which files of the chats are on this PC, and how much room each chat takes.
+  // Only files the app itself put there count as removable: received files in
+  // the download folder and the app's own copies (screenshots, voice messages).
+  _ownedFile(p) {
+    if (!p) return false;
+    const inside = (dir) => dir && path.resolve(p).toLowerCase().startsWith(path.resolve(dir).toLowerCase() + path.sep);
+    return inside(this.settings.downloadDir) || inside(path.join(this.dataDir || '', 'attachments'));
+  }
+
+  _sizeOf(p) {
+    try {
+      const st = fs.statSync(p);
+      if (!st.isDirectory()) return st.size;
+      let n = 0;
+      for (const e of walkFolder(p)) n += e.size;
+      return n;
+    } catch { return 0; }
+  }
+
+  storageReport() {
+    const chats = [];
+    for (const conv of this.store.allConversationIds()) {
+      const list = this.store.messages(conv, { limit: Infinity }) || [];
+      const r = { conv, messages: list.length, history: 0, files: 0, voice: 0, filesCount: 0, voiceCount: 0, oldest: 0 };
+      try { r.history = fs.statSync(path.join(this.store.historyDir, `${String(conv).replace(/[^a-zA-Z0-9_-]/g, '_')}.json`)).size; } catch { /* none */ }
+      for (const m of list) {
+        if (m.kind !== 'file' || !m.file || !m.file.path || !this._ownedFile(m.file.path)) continue;
+        const size = this._sizeOf(m.file.path);
+        if (!size) continue;
+        if (m.file.voice) { r.voice += size; r.voiceCount++; } else { r.files += size; r.filesCount++; }
+        if (!r.oldest || m.ts < r.oldest) r.oldest = m.ts;
+      }
+      if (r.messages || r.files || r.voice) chats.push(r);
+    }
+    return chats.sort((a, b) => (b.files + b.voice + b.history) - (a.files + a.voice + a.history));
+  }
+
+  // Removes old files from this PC (the messages stay, marked as removed).
+  // kinds: 'voice', 'files'; olderThanDays: 0 = all; conv: one chat or all.
+  cleanStorage({ olderThanDays = 90, kinds = ['voice', 'files'], conv = null } = {}) {
+    const before = Date.now() - Math.max(0, Number(olderThanDays) || 0) * 86400000;
+    let freed = 0;
+    let count = 0;
+    for (const c of conv ? [conv] : this.store.allConversationIds()) {
+      for (const m of this.store.messages(c, { limit: Infinity }) || []) {
+        if (m.kind !== 'file' || !m.file || !m.file.path || m.ts > before) continue;
+        if (!kinds.includes(m.file.voice ? 'voice' : 'files') || !this._ownedFile(m.file.path)) continue;
+        const size = this._sizeOf(m.file.path);
+        try { fs.rmSync(m.file.path, { recursive: true, force: true }); } catch { continue; }
+        freed += size;
+        count++;
+        const file = { ...m.file, path: null, state: 'removed', removedAt: Date.now() };
+        this.store.updateMessage(c, m.id, { file });
+        this.emit('message', { conv: c, msg: this.store.getMessage(c, m.id), isNew: false });
+      }
+    }
+    return { freed, count };
+  }
+
   // Saved messages (bookmarks), only on this PC.
   toggleSaved(conv, msgId) {
     const list = this.store.get('saved', []);
@@ -1448,7 +1528,7 @@ class Messenger extends EventEmitter {
 
   ackUrgent(conv, msgId) {
     const msg = this.store.getMessage(conv, msgId);
-    if (!msg || !msg.urgent || msg.from === this.id || msg.acked) return;
+    if (!msg || (!msg.urgent && !msg.announce) || msg.from === this.id || msg.acked) return;
     this.store.updateMessage(conv, msgId, { acked: Date.now() });
     this.emit('message', { conv, msg, isNew: false });
     this._enqueue(msg.from, { type: 'uack', id: msgId, ...this._scope(conv) }, uuid());

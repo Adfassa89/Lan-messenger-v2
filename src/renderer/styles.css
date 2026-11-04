@@ -1694,3 +1694,42 @@ body.panel-open.overlay-controls .chat-header, body.panel-open.overlay-controls 
 .saved-head span { color: var(--muted); }
 .saved-head .icon-btn { margin-left: auto; width: 26px; height: 26px; }
 .saved-text { margin-top: 4px; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+
+/* ---------------------------------------------------------------- announcements */
+.ann-tag { font-size: 11.5px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; opacity: .85; margin-bottom: 4px; }
+.ann-title { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.ann-track { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin-top: 8px; padding: 6px 10px; border: 0; border-radius: 9px; background: rgba(255, 255, 255, .16); color: inherit; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; text-align: left; }
+.msg.in .ann-track { background: var(--panel-2); }
+.ann-track i { font-style: normal; text-decoration: underline; opacity: .8; }
+.ann-btn { margin-top: 8px; }
+.ann-list { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; }
+.ann-row { display: grid; grid-template-columns: 32px 1fr auto; grid-template-areas: "av nm st" "av nm tm"; align-items: center; column-gap: 10px; padding: 4px 6px; border-radius: 8px; }
+.ann-row .avatar { grid-area: av; }
+.ann-row b { grid-area: nm; }
+.ann-row .st { grid-area: st; font-size: 12.5px; font-weight: 600; }
+.ann-row .st.r0 { color: var(--online); }
+.ann-row .st.r1 { color: var(--accent-text); }
+.ann-row .st.r2 { color: var(--muted); }
+.ann-row small { grid-area: tm; justify-self: end; color: var(--faint); font-size: 11px; }
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; }
+
+/* ---------------------------------------------------------------- storage */
+.st-total { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.st-total div { padding: 12px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+.st-total b { font-size: 18px; }
+.st-total span { color: var(--muted); font-size: 12px; }
+.st-clean { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 13px; }
+.st-clean label { display: flex; align-items: center; gap: 5px; }
+.st-clean select { width: auto; height: 34px; }
+.st-list { max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.st-row { display: grid; grid-template-columns: 1.5fr 1.2fr 1fr 1fr auto; gap: 10px; align-items: center; padding: 7px 8px; border-radius: 8px; font-size: 12.5px; }
+.st-row:hover { background: var(--hover); }
+.st-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.st-row span { color: var(--muted); white-space: nowrap; }
+.btn.small { height: 28px; padding: 0 10px; font-size: 12px; }
+.ferr.removed { color: var(--muted); }
+.muted-note { color: var(--muted); font-size: 12px; }
+
+/* Long chats: messages off screen are not laid out or painted. */
+.messages .day-group > .msg, .messages .day-group > .system { content-visibility: auto; contain-intrinsic-size: auto 60px; }
+.ack-btn.ann-btn { background: var(--accent); color: #fff; border-color: transparent; }

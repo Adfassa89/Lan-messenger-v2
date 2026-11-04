@@ -271,7 +271,7 @@ function notify(conv, msg) {
   const focused = win && win.isVisible() && win.isFocused();
   if (focused && activeConv === conv) return;
   const mentioned = (msg.mentions || []).includes(messenger.id);
-  if (messenger.isMuted(conv) && !mentioned) return;
+  if (messenger.isMuted(conv) && !mentioned && !msg.announce) return;
   if (win && !focused) win.flashFrame(true);
   if (!messenger.settings.notifications || messenger.config.status === 'busy') return;
   if (!Notification.isSupported()) return;
@@ -282,6 +282,7 @@ function notify(conv, msg) {
   }
   let title = conv.startsWith('g:') || conv === 'broadcast' ? `${msg.fromName} · ${convTitle(conv)}` : msg.fromName;
   if (mentioned) title = `@ ${t('{name} mentioned you', { name: msg.fromName || t('Someone') })} · ${convTitle(conv)}`;
+  if (msg.announce) title = `📢 ${msg.announce.title || t('Announcement')} · ${msg.fromName || ''}`;
   let body = preview(msg);
   if (msg.kind === 'file') body = msg.file.voice ? `🎤 ${t('Voice message')}` : `${msg.file.folder ? '📁' : '📎'} ${msg.file.name}`;
   if (msg.kind === 'game') {
@@ -933,6 +934,9 @@ function registerIpc() {
   h('forget-contact', (id) => messenger.forgetContact(id));
   h('delete-message', (conv, id) => messenger.deleteMessage(conv, id));
   h('mute-conv', (conv, until) => messenger.muteConv(conv, until));
+  h('storage-report', () => messenger.storageReport().map((r) => ({ ...r, title: convTitle(r.conv) })));
+  h('clean-storage', (opts) => messenger.cleanStorage(opts || {}));
+  h('send-announcement', (conv, opts) => messenger.sendAnnouncement(conv, opts || {}));
   h('forward-message', (from, id, to) => messenger.forward(from, id, to));
   h('toggle-saved', (conv, id) => messenger.toggleSaved(conv, id));
   h('saved-messages', () => messenger.savedMessages().map((s) => ({ ...s, convTitle: convTitle(s.conv) })));
@@ -1123,6 +1127,9 @@ async function startAccount({ id, key, name, locked: startLocked, dataDir }) {
   setupMediaPermissions();
   registerIpc();
   wireEvents();
+  // The window first, so it appears at once; networking starts behind it.
+  createWindow();
+  account.closePicker();
   updater = new Updater(messenger, {
     version: VERSION,
     onReady: (v, { manual } = {}) => {
@@ -1157,8 +1164,6 @@ async function startAccount({ id, key, name, locked: startLocked, dataDir }) {
   } catch (err) {
     dialog.showErrorBox(APP_NAME, `${t('Could not start networking')}: ${err.message}`);
   }
-  createWindow();
-  account.closePicker();
   for (const ev of ['display-removed', 'display-metrics-changed']) screen.on(ev, () => setTimeout(keepWindowsOnScreen, 300));
   createTray();
   applyLoginItem();

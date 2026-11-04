@@ -94,6 +94,7 @@ const Voice = (() => {
 
   function bubbleHtml(m, out) {
     const f = m.file;
+    if (f.state === 'removed') return `<div class="voice"><span class="vplay disabled">${ICONS.play}</span><div class="vmain"><div class="vtime">🎤 ${esc(t('Removed from this PC to save space'))}</div></div></div>`;
     if (!out && f.state !== 'done') {
       if (f.state === 'failed') {
         return `<div class="voice"><div class="ferr">${esc(f.error || t('Download failed'))}</div><button class="fbtn" data-act="download">${esc(t('Retry'))}</button></div>`;

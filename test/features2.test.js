@@ -221,3 +221,45 @@ test('@mentions, muting, forwarding and saved messages', async () => {
     await bob.stop();
   }
 });
+
+test('announcements track who read and who confirmed them', async () => {
+  const [alice, bob] = makePair();
+  await alice.start();
+  await bob.start();
+  try {
+    await waitFor(() => alice.peers.get(bob.id)?.online && bob.peers.get(alice.id)?.online, 8000, 'discovery');
+    const a = alice.sendAnnouncement('broadcast', { title: 'Blasting at 14:00', text: 'Pit 3, keep 500 m away.', confirm: true });
+    await waitFor(() => bob.loadMessages('broadcast').some((m) => m.id === a.id), 5000, 'arrived');
+    const got = bob.loadMessages('broadcast').find((m) => m.id === a.id);
+    assert.deepStrictEqual(got.announce, { title: 'Blasting at 14:00', confirm: true });
+    bob.markRead('broadcast');
+    await waitFor(() => (alice.store.getMessage('broadcast', a.id).readBy || []).includes(bob.id), 5000, 'read');
+    bob.ackUrgent('broadcast', a.id);
+    await waitFor(() => (alice.store.getMessage('broadcast', a.id).acks || []).includes(bob.id), 5000, 'confirmed');
+    assert.ok(alice.store.getMessage('broadcast', a.id).ackAt[bob.id] > 0);
+  } finally {
+    await alice.stop();
+    await bob.stop();
+  }
+});
+
+test('storage: old received files and voice messages can be removed, own files never', async () => {
+  const [alice] = makePair();
+  const dl = alice.settings.downloadDir;
+  fs.mkdirSync(dl, { recursive: true });
+  const recv = path.join(dl, 'report.xlsx');
+  fs.writeFileSync(recv, Buffer.alloc(5000));
+  const mine = path.join(alice.dir, 'my-own-plan.pdf');
+  fs.writeFileSync(mine, Buffer.alloc(3000));
+  const old = Date.now() - 200 * 86400000;
+  alice.store.addMessage('peer1', { id: 'r1', from: 'peer1', ts: old, kind: 'file', file: { name: 'report.xlsx', size: 5000, path: recv, state: 'done' } });
+  alice.store.addMessage('peer1', { id: 's1', from: alice.id, ts: old, kind: 'file', file: { name: 'my-own-plan.pdf', size: 3000, path: mine, state: 'sent' } });
+  const report = alice.storageReport();
+  assert.strictEqual(report[0].files, 5000, 'only the received file counts');
+  assert.deepStrictEqual(alice.cleanStorage({ olderThanDays: 365 }), { freed: 0, count: 0 }, 'not old enough');
+  const r = alice.cleanStorage({ olderThanDays: 90 });
+  assert.deepStrictEqual(r, { freed: 5000, count: 1 });
+  assert.ok(!fs.existsSync(recv));
+  assert.ok(fs.existsSync(mine), 'your own file stays');
+  assert.strictEqual(alice.store.getMessage('peer1', 'r1').file.state, 'removed');
+});

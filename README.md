@@ -11,6 +11,8 @@ Available in **English** and **Монгол**.
 ### Big features
 | | |
 |---|---|
+| 🔐 **Accounts and PIN** | Up to 4 accounts per PC, only inside the app (not Windows or e-mail), usable from every Windows user of the PC. Each has a 4 – 6 digit PIN, and its chats are encrypted with it: without the PIN or a backup they cannot be read or recovered. The last account signs in by itself when Windows starts (so messages keep arriving) and opens locked; **Ctrl + L**, the tray or an auto-lock after N idle minutes (off by default) lock it again, and notifications hide their text while locked. Delete an account with its PIN, or request deletion and wait 30 days. Settings → **Back up this account** saves one file locked with the PIN, which **Restore from backup** brings back on any PC. The profile from before becomes account 1 after choosing a PIN. |
+| 📢 **Announcements** | ＋ → Announcement with read tracking: a title and text for everyone in the chat (also people offline, when they come back). You see who has read it and, if you ask, who confirmed “Read and understood”, with times. It comes through even in muted chats. |
 | 👥 **People directory** | Click the online count at the bottom left for everyone online, grouped by status, with a search box; **All people** opens the full directory: everyone this PC has ever seen, with job, status or when they were last seen, and computer address. Search and filter by online / offline or job, click someone to chat, or tick several people to make a group. PCs also tell each other who else is online, so colleagues on other network sections (for example 192.168.70.x and 192.168.71.x) find each other without typing addresses. In the sidebar a long People list can be folded away, and people not seen for a month move to the directory. |
 | 🚨 **Urgent alerts** | A red pop-up with an alarm sound appears on top of everything on the other PCs (even when they are set to *Busy*) and stays until each person clicks **Acknowledge**. You see who confirmed and who hasn't. Made for blasting notices, safety warnings and breakdowns. |
 | 🔊 **Voice rooms** | Every group chat has voice rooms, like Discord's voice channels: **Ерөнхий** to start with, and anyone can add more (＋), rename or delete empty ones. Click a room to walk in; nobody is rung. Everyone in the same room hears each other, people in other rooms do not. The bar above the online list stays while you move between chats, with **mute** (microphone off), **deafen** (hear nobody, microphone off too) and **leave**. Each room shows who is in it, who is muted or deafened, and a green ring around whoever is speaking; the sidebar shows how many people are in a group's rooms. Audio goes directly PC-to-PC on the LAN and uses your microphone boost. |
@@ -31,6 +33,13 @@ Available in **English** and **Монгол**.
 ### Everyday features
 | | |
 |---|---|
+| @ **Mentions** | Type @ in a group to pick a member; they are notified even if the group is muted, and the chat shows an @ badge. |
+| 🔕 **Mute a chat** | For 1 hour, 8 hours or until you unmute (right-click the chat or ⋯): no sound or pop-up, unread count in grey and not on the taskbar. |
+| ↪️ **Forward** | Send a message or file on to another person or group; it shows who wrote it. |
+| ★ **Saved messages** | Right-click → Save message; find them all under your name → Saved messages. |
+| 📝 **Drafts** | What you started typing stays with each chat, and the sidebar shows “Draft:”. |
+| ⬇️ **Jump to unread** | A chat opens at the first unread message with an “N new messages” line; a ↓ button shows new messages while you read older ones. |
+| 🗂 **Storage** | Settings → Manage storage: how much room each chat takes, and removing received files and voice messages older than 1, 3, 6 or 12 months (the messages stay; your own files are never touched). |
 | 💬 **Private, group and "Everyone" chats** | Chat one-to-one, in groups, or post to the whole site. |
 | ✅ **Reliable delivery** | Messages to someone who is offline wait and are delivered when they're back. Ticks show *waiting → delivered → read*. |
 | ↩️ **Reply** | Hover a message and click reply to quote it. |
