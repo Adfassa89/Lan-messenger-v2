@@ -24,6 +24,9 @@ const Games = require('../shared/games');
 const OFFLINE_AFTER = 17000;
 const ACK_TIMEOUT = 20000;
 const PING_INTERVAL = 8000;
+const GOSSIP_EVERY = 7; // pings between sharing the list of online PCs (about a minute)
+const MAX_GOSSIP = 500;
+const LEARN_RETRY = 5 * 60000; // try an address learned from others at most every 5 minutes
 const REVERSE_TIMEOUT = 8000;
 const MAX_TEXT = 20000;
 const MAX_AVATAR = 96 * 1024;
@@ -163,6 +166,7 @@ class Messenger extends EventEmitter {
     this.reverseWaits = new Map(); // token -> { peerId, resolve, timer }
     this.clockGames = new Map(); // game message id -> conv, for timed chess and checkers
     this.seen = new Map(); // rid -> time, to drop duplicates
+    this.learnTried = new Map(); // "host:port" -> when we last tried an address other PCs told us about
     this.avatarAsked = new Map(); // peerId -> time
     this.files = new FileTransfers(this);
     this.broadcastEnabled = broadcast;
@@ -226,6 +230,8 @@ class Messenger extends EventEmitter {
     clearInterval(this.pingTimer);
     clearInterval(this.scheduleTimer);
     clearInterval(this.clockTimer);
+    clearTimeout(this.shareTimer);
+    this.shareTimer = null;
     for (const t of this.ackTimers.values()) clearTimeout(t);
     this.ackTimers.clear();
     for (const st of this.out.values()) {
@@ -313,6 +319,7 @@ class Messenger extends EventEmitter {
     }
     if (typeof info.av === 'string') this._checkAvatar(p.id, info.av);
     if (changed) this.emit('peers', this.listPeers());
+    if (!wasOnline) this._shareSoon();
     if (this.outbox.some((e) => e.peerId === p.id)) this._flush(p.id);
     else if (!wasOnline) this._keepLink(p);
   }
@@ -342,6 +349,10 @@ class Messenger extends EventEmitter {
     for (const st of this.out.values()) if (st.link && !st.link.closed) links.add(st.link);
     for (const l of this.inbound) if (l.key && l.purpose === 'chat') links.add(l);
     for (const l of links) l.sendJson({ type: 'ping', ...this._presence() });
+    // About once a minute, tell connected PCs who else is online and where,
+    // so PCs on other network sections (which broadcasts do not reach) find each other.
+    this.gossipTick = (this.gossipTick || 0) + 1;
+    if (this.gossipTick % GOSSIP_EVERY === 1) this._sharePeers(links);
     this._keepLinks();
     this._probeManual();
   }
@@ -374,6 +385,50 @@ class Messenger extends EventEmitter {
 
   _presence() {
     return { name: this.config.name, dept: this.config.dept, status: this.config.status, av: this.config.avatarHash || '' };
+  }
+
+  _chatLinks() {
+    const links = new Set();
+    for (const st of this.out.values()) if (st.link && !st.link.closed) links.add(st.link);
+    for (const l of this.inbound) if (l.key && l.purpose === 'chat' && !l.closed) links.add(l);
+    return links;
+  }
+
+  // Someone new came online: pass the news on soon (several arrivals share one message).
+  _shareSoon() {
+    if (this.shareTimer || !this.started) return;
+    this.shareTimer = setTimeout(() => { this.shareTimer = null; if (this.started) this._sharePeers(this._chatLinks()); }, 3000);
+  }
+
+  _sharePeers(links) {
+    const online = [...this.peers.values()].filter((p) => p.online && p.host && p.port).slice(0, MAX_GOSSIP);
+    if (!online.length) return;
+    for (const l of links) {
+      const to = l.peer && l.peer.id;
+      const list = online.filter((p) => p.id !== to).map((p) => [p.id, p.host, p.port]);
+      if (list.length) l.sendJson({ type: 'peers', list });
+    }
+  }
+
+  // Someone told us about PCs we may not see ourselves: try to reach the ones we do not know yet.
+  _learnPeers(from, list) {
+    if (!Array.isArray(list)) return;
+    const now = Date.now();
+    let tries = 0;
+    for (const e of list.slice(0, MAX_GOSSIP)) {
+      if (!Array.isArray(e) || tries >= 20) break;
+      const [id, host, port] = e;
+      if (typeof id !== 'string' || id === this.id || id === from || typeof host !== 'string') continue;
+      if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || !Number.isInteger(port) || port < 1 || port > 65535) continue;
+      const known = this.peers.get(id);
+      if (known && known.online && this._liveLink(id)) continue;
+      const key = `${host}:${port}`;
+      if (now - (this.learnTried.get(key) || 0) < LEARN_RETRY) continue;
+      this.learnTried.set(key, now);
+      tries++;
+      this.discovery.ping(host);
+      this.probe(host, port);
+    }
   }
 
   // Manually added hosts are also tried over TCP, in case UDP is blocked.
@@ -680,6 +735,8 @@ class Messenger extends EventEmitter {
         return;
       case 'avatar':
         return this._onAvatar(peerId, obj);
+      case 'peers':
+        return this._learnPeers(peerId, obj.list);
       case 'dial-back':
         return this._dialBack(peerId, obj.token);
       case 'rtc':

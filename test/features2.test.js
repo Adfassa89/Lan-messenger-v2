@@ -107,3 +107,26 @@ test('two members of a group can play a game; the others watch', async () => {
     await bob.stop();
   }
 });
+
+test('PCs pass on who else is online, so PCs that cannot hear each other still meet', async () => {
+  const [alice, bob] = makePair();
+  const { Messenger } = require('../src/core/messenger');
+  const { tmpDir, nextPort } = require('./helpers');
+  const dir = tmpDir('Carol');
+  const carol = new Messenger({ dataDir: dir, downloadDir: path.join(dir, 'downloads'), tcpPort: nextPort(), udpPort: nextPort(), broadcast: false, defaultName: 'Carol' });
+  // Carol only knows Bob; Alice only knows Bob.
+  carol.config.manualPeers = [`127.0.0.1:${bob.ports.udp}`];
+  bob.config.manualPeers.push(`127.0.0.1:${carol.udpPort}`);
+  await alice.start();
+  await bob.start();
+  await carol.start();
+  try {
+    await waitFor(() => alice.peers.get(carol.id)?.online && carol.peers.get(alice.id)?.online, 20000, 'Alice and Carol meet through Bob');
+    const msg = alice.sendText(carol.id, 'Hello from the other subnet');
+    await waitFor(() => carol.loadMessages(alice.id).some((m) => m.id === msg.id), 8000, 'message delivered');
+  } finally {
+    await alice.stop();
+    await bob.stop();
+    await carol.stop();
+  }
+});

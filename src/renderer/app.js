@@ -87,6 +87,7 @@ const ICONS = {
   pause: '<svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>',
   clock: '<svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   close: '<svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  search: '<svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>',
 };
 
 function avatarHtml(kind, id, name, status, size = '') {
@@ -391,18 +392,121 @@ function renderNet() {
     <span class="net-text"><b><span class="net-dot${changed ? ' ping' : ''}"></span>${esc(t('{n} online', { n }))}</b><small>${esc(t('on your network'))}</small></span>`;
 }
 
+// Bottom-left list of everyone online, grouped by status, with a search box
+// (it used to stop at 20 people).
 function netMenu() {
-  const online = [...S.peers.values()].filter((p) => p.online).sort((a, b) => a.name.localeCompare(b.name));
+  const pop = $('#popover');
+  pop.className = 'popover net-pop';
+  pop.onclick = null;
+  const total = S.peers.size;
+  pop.innerHTML = `<div class="np-search">${ICONS.search || ''}<input id="npFilter" type="text" autocomplete="off" spellcheck="false" placeholder="${esc(t('Search people'))}"></div>
+    <div class="np-list" id="npList"></div>
+    <button class="np-all" id="npAll">${esc(t('All people ({n})', { n: total }))}</button>`;
+  const draw = () => {
+    const f = $('#npFilter').value.trim().toLowerCase();
+    const online = [...S.peers.values()].filter((p) => p.online && (!f || `${p.name} ${p.dept || ''}`.toLowerCase().includes(f)))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const groups = [['online', t('Available')], ['away', t('Away')], ['busy', t('Busy')]];
+    let html = '';
+    for (const [st, label] of groups) {
+      const list = online.filter((p) => (p.status || 'online') === st || (st === 'online' && !['away', 'busy'].includes(p.status)));
+      if (!list.length) continue;
+      html += `<div class="np-head">${esc(label)} · ${list.length}</div>${list.map((p) => `<button class="menu-item np-row" data-open="${esc(p.id)}">${avatarHtml('direct', p.id, p.name, p.status, 'net-face')}<span>${esc(p.name)}</span><span class="hint">${esc(p.dept || '')}</span></button>`).join('')}`;
+    }
+    if (!html) {
+      html = `<div class="np-empty">${esc(f ? t('Nobody matches your search.') : t('Nobody else is online yet'))}</div>`
+        + (f ? '' : `<button class="menu-item" data-add>${esc(t('Add a computer by IP address…'))}</button>`);
+    }
+    $('#npList').innerHTML = html;
+  };
+  draw();
+  $('#npFilter').addEventListener('input', draw);
+  $('#npList').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-open]');
+    if (b) { hidePopover(); openConv(b.dataset.open); return; }
+    if (e.target.closest('[data-add]')) { hidePopover(); settingsModal(); }
+  });
+  $('#npAll').addEventListener('click', () => { hidePopover(); peopleDirectory(); });
+  pop.style.left = '0px';
+  pop.style.top = '0px';
+  pop.classList.remove('hidden');
   const r = $('#netInfo').getBoundingClientRect();
-  const items = online.slice(0, 20).map((p) => ({
-    icon: avatarHtml('direct', p.id, p.name, p.status, 'net-face'),
-    label: p.name,
-    hint: p.dept || statusText(p.status),
-    action: () => openConv(p.id),
-  }));
-  if (online.length > 20) items.push({ label: t('…and {n} more', { n: online.length - 20 }), action: () => {} });
-  if (!online.length) items.push({ label: t('Add a computer by IP address…'), action: settingsModal });
-  showMenu(items, r.left, r.top - Math.min(items.length, 21) * 40 - 16);
+  pop.style.left = `${Math.max(8, r.left)}px`;
+  pop.style.top = `${Math.max(8, r.top - pop.offsetHeight - 8)}px`;
+  setTimeout(() => $('#npFilter')?.focus(), 30);
+}
+
+// Everyone this PC has ever seen: search, filter by online / offline and
+// department, open a chat, or tick people to make a group.
+function peopleDirectory() {
+  const prefsKey = 'lanmsg.people.v1';
+  let view = { show: 'all', dept: '' };
+  try { view = { ...view, ...JSON.parse(localStorage.getItem(prefsKey) || '{}') }; } catch { /* defaults */ }
+  const picked = new Set();
+  const depts = [...new Set([...S.peers.values()].map((p) => (p.dept || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  modal({
+    title: t('People'),
+    wide: true,
+    cls: 'people-dir',
+    body: `<div class="pd-tools">
+        <div class="pd-search">${ICONS.search || ''}<input id="pdFilter" type="text" autocomplete="off" spellcheck="false" placeholder="${esc(t('Search by name, job or computer'))}"></div>
+        <div class="seg-mini" id="pdShow">${[['all', t('All')], ['online', t('Online')], ['offline', t('Offline')]].map(([k, l]) => `<button data-show="${k}">${esc(l)}</button>`).join('')}</div>
+        ${depts.length ? `<select class="input pd-dept" id="pdDept"><option value="">${esc(t('All jobs'))}</option>${depts.map((d) => `<option value="${esc(d)}">${esc(d)}</option>`).join('')}</select>` : ''}
+      </div>
+      <div class="pd-count" id="pdCount"></div>
+      <div class="pd-list" id="pdList"></div>`,
+    buttons: [
+      { label: t('Close') },
+      {
+        label: t('New group'), cls: 'primary', action: () => {
+          if (!picked.size) { toast(t('Tick the people to put in the group'), 'error'); return false; }
+          setTimeout(() => newGroupModal(new Set(picked)), 0);
+          return true;
+        },
+      },
+    ],
+    onOpen: (m, close) => {
+      let counts = '';
+      const drawCount = () => { $('#pdCount', m).textContent = `${counts}${picked.size ? ` · ${t('{n} ticked', { n: picked.size })}` : ''}`; };
+      const draw = () => {
+        const f = $('#pdFilter', m).value.trim().toLowerCase();
+        for (const b of m.querySelectorAll('[data-show]')) b.classList.toggle('on', b.dataset.show === view.show);
+        if ($('#pdDept', m)) $('#pdDept', m).value = depts.includes(view.dept) ? view.dept : '';
+        const all = [...S.peers.values()];
+        const list = all.filter((p) => (view.show === 'all' || (view.show === 'online') === !!p.online)
+          && (!view.dept || (p.dept || '').trim() === view.dept)
+          && (!f || `${p.name} ${p.dept || ''} ${p.host || ''}`.toLowerCase().includes(f)))
+          .sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
+        const on = all.filter((p) => p.online).length;
+        counts = `${t('{n} people', { n: all.length })} · ${t('{n} online', { n: on })}${list.length !== all.length ? ` · ${t('{n} shown', { n: list.length })}` : ''}`;
+        drawCount();
+        const box = $('#pdList', m);
+        const keep = box.scrollTop; // a redraw (someone came online) keeps your place in the list
+        box.innerHTML = list.length ? list.map((p) => `<div class="pd-row${p.online ? '' : ' off'}">
+            <button class="pd-open" data-open="${esc(p.id)}" title="${esc(t('Open chat'))}">${avatarHtml('direct', p.id, p.name, p.online ? p.status : 'offline', 'sm')}
+              <span class="pd-name"><b>${esc(p.name)}</b><small>${esc(p.dept || '')}</small></span></button>
+            <span class="pd-state">${esc(p.online ? statusText(p.status) : fmtAgo(p.lastSeen))}${p.host ? `<small>${esc(p.host)}</small>` : ''}</span>
+            <label class="pd-tick" title="${esc(t('Add to a new group'))}"><input type="checkbox" value="${esc(p.id)}"${picked.has(p.id) ? ' checked' : ''}></label>
+          </div>`).join('') : `<div class="empty-note">${esc(t('Nobody matches your search.'))}</div>`;
+        box.scrollTop = keep;
+      };
+      const save = () => { try { localStorage.setItem(prefsKey, JSON.stringify(view)); } catch { /* ignore */ } };
+      $('#pdFilter', m).addEventListener('input', draw);
+      $('#pdShow', m).addEventListener('click', (e) => { const b = e.target.closest('[data-show]'); if (b) { view.show = b.dataset.show; save(); draw(); } });
+      if ($('#pdDept', m)) $('#pdDept', m).addEventListener('change', (e) => { view.dept = e.target.value; save(); draw(); });
+      $('#pdList', m).addEventListener('change', (e) => {
+        if (e.target.type !== 'checkbox') return;
+        if (e.target.checked) picked.add(e.target.value); else picked.delete(e.target.value);
+        drawCount();
+      });
+      $('#pdList', m).addEventListener('click', (e) => {
+        const b = e.target.closest('[data-open]');
+        if (b) { close(); openConv(b.dataset.open); }
+      });
+      m.peopleDraw = draw;
+      draw();
+    },
+  });
 }
 
 function renderUpdateBanner() {
@@ -441,7 +545,11 @@ function renderListNow() {
   }
 
   const recent = items.filter((i) => !i.pinned && i.meta && i.meta.lastTs).sort((a, b) => b.meta.lastTs - a.meta.lastTs);
-  const others = items.filter((i) => !i.pinned && !(i.meta && i.meta.lastTs))
+  // People you have not chatted with. Those not seen for a month stay out of the
+  // sidebar (they are still in the People directory) unless you search for them.
+  const MONTH = 30 * 86400000;
+  const allOthers = items.filter((i) => !i.pinned && !(i.meta && i.meta.lastTs));
+  const others = allOthers.filter((i) => f || i.online || !i.peer || Date.now() - (i.peer.lastSeen || 0) < MONTH)
     .sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
 
   const list = $('#convList');
@@ -453,8 +561,33 @@ function renderListNow() {
     for (const i of recent) list.append(convItem(i));
   }
   if (others.length) {
-    list.append(el('div', 'list-label', esc(recent.length ? t('People') : t('People on your network'))));
-    for (const i of others) list.append(convItem(i));
+    // A long People list folds away (click the heading); searching always shows it.
+    const many = others.length > 12;
+    let folded = false;
+    // Folded by default only when there are recent chats to show above it.
+    let saved = null;
+    try { saved = localStorage.getItem('lanmsg.peopleFolded'); } catch { /* ignore */ }
+    folded = many && (saved === null ? recent.length > 0 : saved === '1');
+    if (f) folded = false;
+    const row = el('div', 'list-label-row');
+    const head = el('button', `list-label fold${folded ? ' folded' : ''}`,
+      `<span class="fold-arrow">▾</span><span>${esc(t('People'))} · ${others.length}</span>`);
+    head.title = many ? t('Show or hide') : '';
+    head.addEventListener('click', () => {
+      try { localStorage.setItem('lanmsg.peopleFolded', folded ? '0' : '1'); } catch { /* ignore */ }
+      renderListNow();
+    });
+    const all = el('button', 'list-all', esc(t('All people')));
+    all.addEventListener('click', () => peopleDirectory());
+    row.append(head, all);
+    list.append(row);
+    if (!folded) for (const i of others) list.append(convItem(i));
+    const hidden = allOthers.length - others.length;
+    if (!folded && hidden > 0) {
+      const more = el('button', 'list-more', esc(t('{n} not seen for a month: all people…', { n: hidden })));
+      more.addEventListener('click', () => peopleDirectory());
+      list.append(more);
+    }
   }
   if (!items.length) {
     list.append(el('div', 'empty-note', f
@@ -1469,21 +1602,29 @@ function confirmLeave(groupId) {
   });
 }
 
-function peopleChecklist(exclude = new Set()) {
+function peopleChecklist(exclude = new Set(), checked = new Set()) {
   const peers = [...S.peers.values()].filter((p) => !exclude.has(p.id))
     .sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
   if (!peers.length) return `<div class="empty-note">${esc(t('No one else is available to add yet.'))}</div>`;
-  return `<div class="pick-list">${peers.map((p) => `
+  return `${peers.length > 8 ? `<input class="input pick-filter" type="text" autocomplete="off" spellcheck="false" placeholder="${esc(t('Search people'))}">` : ''}<div class="pick-list">${peers.map((p) => `
     <label class="pick">${avatarHtml('direct', p.id, p.name, p.online ? p.status : 'offline', 'sm')}
       <div class="pname"><div>${esc(p.name)}</div><div>${esc(p.online ? statusText(p.status) : t('Offline'))}${p.dept ? ` · ${esc(p.dept)}` : ''}</div></div>
-      <input type="checkbox" value="${esc(p.id)}"></label>`).join('')}</div>`;
+      <input type="checkbox" value="${esc(p.id)}"${checked.has(p.id) ? ' checked' : ''}></label>`).join('')}</div>`;
 }
 
-function newGroupModal() {
+// Typing in a people list's search box hides the names that do not match.
+document.addEventListener('input', (e) => {
+  if (!e.target.matches || !e.target.matches('.pick-filter')) return;
+  const f = e.target.value.trim().toLowerCase();
+  const list = e.target.nextElementSibling;
+  if (list) for (const row of list.querySelectorAll('.pick')) row.classList.toggle('hidden', !!f && !row.textContent.toLowerCase().includes(f));
+});
+
+function newGroupModal(preselected = new Set()) {
   modal({
     title: t('New group'),
     body: `<div class="field"><label>${esc(t('Group name'))}</label><input class="input" id="gName" maxlength="80" placeholder="${esc(t('e.g. Planning team'))}"></div>
-      <div class="field"><label>${esc(t('Members'))}</label>${peopleChecklist()}</div>`,
+      <div class="field"><label>${esc(t('Members'))}</label>${peopleChecklist(new Set(), preselected)}</div>`,
     buttons: [
       { label: t('Cancel') },
       {
@@ -2140,6 +2281,7 @@ function handleEvent({ type, payload }) {
     case 'peers': {
       S.peers = new Map(payload.map((p) => [p.id, p]));
       renderList();
+      document.querySelector('.people-dir')?.peopleDraw?.();
       if (S.active) { renderHeader(); renderComposerState(); }
       break;
     }
