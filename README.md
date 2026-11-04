@@ -18,18 +18,12 @@ Available in **English** and **Монгол**.
 | 🔊 **Voice rooms** | Every group chat has voice rooms, like Discord's voice channels: **Ерөнхий** to start with, and anyone can add more (＋), rename or delete empty ones. Click a room to walk in; nobody is rung. Everyone in the same room hears each other, people in other rooms do not. The bar above the online list stays while you move between chats, with **mute** (microphone off), **deafen** (hear nobody, microphone off too) and **leave**. Each room shows who is in it, who is muted or deafened, and a green ring around whoever is speaking; the sidebar shows how many people are in a group's rooms. Audio goes directly PC-to-PC on the LAN and uses your microphone boost. |
 | 📞 **Voice and video calls** | Call a colleague or a whole group (up to about 6 people) from the chat header. Calls go directly PC-to-PC over the network, with no internet or server. Incoming calls pop up with a ringtone; you can mute, switch the camera on or off, and choose microphone, camera and speaker. Missed calls appear in the chat with a **Call back** button. |
 | ⚡ **Call tuning** | Voice uses Opus with error correction (sound survives dropped packets on Wi-Fi) and sends almost nothing while you are silent, at about 32 kbps. Video quality steps down as people join (720p for two, ~480p up to four, ~360p beyond), H.264 is preferred so most PCs encode on the graphics chip, and nobody is sent video while their call window is hidden. Each person's tile (and each voice-room member) shows connection quality: delay in ms and a green / yellow / red dot, with packet loss and jitter on hover. |
-| ♟️ **Games in chats** | All games are secret: they start only by typing a command in a private or group chat (in a group you then pick who to play against, and the rest of the group can watch): `/chess` (`/шатар`), `/checkers` (`/даам`), `/ttt` (`/xo`), `/c4`, `/tetris`, `/13`, `/warlock`, `/pudge`, and `/tank` (private chats only). Chess has a chess.com-style board and clocks. Turn-based moves are delivered like messages, so a game can run across shifts; each PC checks every move against the rules. |
-| 🧹 **Games clean up after themselves** | Game invites, boards and arena results are removed from every chat 6 hours after the game was last played (a game whose window is open is kept), and all of them are cleared when the app is updated to a new version, so chats keep only real conversation. |
-| ♟️ **Chess like chess.com** | Choose your side (White, Black or random) and a time control (bullet, blitz, rapid or no limit; checkers has clocks too). Premoves, right-click marks and arrows, and you can look at your pieces' moves while waiting. Every game has sound effects and the same win / lose screen. |
-| 🃏 **13 (Big 2)** | The Mongolian card game for 2 – 4 players: a secret game: type `/13` in a group or private chat. Everyone sees the others' names and profile pictures around a green card table, with dealing and playing animations. Mongolian rules: ♦ < ♣ < ♥ < ♠, no 2 in a straight, 3♦ starts, 13 different cards win at once, cards left score points (×2 from 10 cards, ×3 with all 13). The host picks a point limit (players are knocked out) or a play time (lowest points wins; ties go to most wins, then a deciding game), an optional tugrik rate per point with a who-pays-whom table at the end, and a turn timer. |
-| 🪖 **Tank** | A 3D tank game for two people: a secret game: type `/tank` in a private chat (it is not in the game list and does not start in groups). **Co-op:** defend your base together against waves of enemy tanks (scouts, troopers, heavies that lose armour plates, rocket tanks) over 50 levels that get a little harder each time, with power-ups (shield, power shells, rapid fire, ricochet, freeze, fortify, airstrike, extra life). **1 v 1:** each player has a base; destroy the other one or have the most kills when the time runs out, with neutral drones, power-ups in the middle and brick walls you can build. Pick a look before starting: Classic, Mine site or Toy tanks. Bricks break, steel needs full power, water blocks, bushes hide you, ice slides, teleporters link in pairs. |
-| 🧱 **Tetris Battle** | A secret game: type `/tetris` in a private chat, or in a group and pick who to play against. A live head-to-head match in the style of TETR.IO, as one round or best of 3, 5, 7 or 9: both players get the same pieces, and clearing lines sends garbage rows to the opponent, with line-clear, attack and K.O. effects and sounds. Controls can be changed like in old Facebook Tetris Battle: rebind every key, pick the *Classic* or *Modern* preset, and adjust the sliding delay, sliding speed and soft-drop speed. |
 | 🖥️ **Screen sharing** | Show your screen (or one window) live to a colleague or a whole group. It goes directly PC-to-PC over the network. Viewers only watch unless you allow remote help. |
 | 🛠️ **Remote help** | Someone watching your shared screen can click **Request control**. If you click **Allow control**, their mouse and keyboard work on your PC so they can fix a problem without walking over. A red bar shows who is in control; **Take back control** or `Ctrl + Alt + End` stops it at any time. Works when the entire screen is shared, on Windows. |
 | ✏️ **Screenshot with drawing** | `Ctrl + Shift + S` (or **＋ → Screenshot with drawing**) takes a screenshot. Crop it, add arrows, boxes, highlights and text, then send. Pasted pictures can be drawn on too. |
 | 🇲🇳 **Mongolian / English** | Switch language in **Settings → Language**. Every screen is translated. |
 | 🔄 **Automatic updates** | When one PC gets a newer version, the others download it from that PC and offer a **Restart**. PCs with internet access also get new versions from GitHub. **Settings → Check for updates** shows what is happening and updates on demand. Updates are digitally signed, so nobody can push fake software. If an update ever fails to start, the PC goes back to the previous version automatically. |
-| 🔁 **Installs by itself** | A downloaded update installs without anyone pressing a button: the app restarts when nobody is using the PC (2 minutes without mouse or keyboard, or 30 seconds while it is in the tray), and comes back in the tray and unlocked if it was. Never during a call, a voice room, a game or remote help, and never while a file is being sent or received (it waits for the transfer to finish). A PC in use for hours gets a 60-second notice with “Later (1 hour)”. A newer version on any colleague's PC is picked up within a minute. Settings → Install updates by themselves (on by default). |
+| 🔁 **Installs by itself** | A downloaded update installs without anyone pressing a button: the app restarts when nobody is using the PC (2 minutes without mouse or keyboard, or 30 seconds while it is in the tray), and comes back in the tray and unlocked if it was. Never during a call, a voice room or remote help, and never while a file is being sent or received (it waits for the transfer to finish). A PC in use for hours gets a 60-second notice with “Later (1 hour)”. A newer version on any colleague's PC is picked up within a minute. Settings → Install updates by themselves (on by default). |
 
 ### Everyday features
 | | |
@@ -101,7 +95,7 @@ Without the secret, everything else works normally; builds just won't pass thems
 
 - Make sure LAN Messenger 2 is running on both PCs.
 - Make sure the firewall allows **LAN Messenger 2**: **Settings → Network → Windows Firewall** shows whether it does and has an **Allow through Windows Firewall** button (Windows asks for permission; on some PCs an administrator password). IT can open **UDP port 50100** and **TCP port 50101**.
-  If only one of two PCs blocks the app, chat, games and file transfers still work (the open PC is used for both directions), but people appear more slowly. If **both** PCs block it, they cannot reach each other at all.
+  If only one of two PCs blocks the app, chat and file transfers still work (the open PC is used for both directions), but people appear more slowly. If **both** PCs block it, they cannot reach each other at all.
 - If the PCs are on different network segments (different subnets/VLANs), open **Settings → Network → Add a computer by IP address** and type the other PC's IP. The other PC's IP is shown in its own Settings → Network.
 
 ## Where data is stored
@@ -140,9 +134,6 @@ src/main/        Electron main process
 src/renderer/    user interface (HTML/CSS/JS, no build step)
   app.js         chat UI · editor.js screenshot drawing · voice.js · share.js
   call.html      voice/video call window · ring.html incoming call pop-up
-  game.js        game cards and boards (rules in src/shared/games.js)
-  tetris.html    Tetris Battle window (engine in src/shared/tetris.js,
-                 key settings in tetris-controls.js)
   alert.html     urgent alert window · viewer.html screen-share viewer
 src/shared/      i18n.js translations (English text is the key)
 build/           icons, installer firewall rule, after-pack update signing
@@ -188,19 +179,19 @@ Third-party parts keep their own licenses (see Credits).
 
 ## Credits
 
-- Chess pieces: Colin M.L. Burnett ("Cburnett") and Rfc1394, from Wikimedia Commons, licensed
+- Board pieces: Colin M.L. Burnett ("Cburnett") and Rfc1394, from Wikimedia Commons, licensed
   [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), taken from
   [cm-chessboard](https://github.com/shaack/cm-chessboard). Source: `build/third-party/chess-pieces-cburnett.svg`;
   `scripts/make-pieces.py` turns it into `src/renderer/pieces.css`.
 - 3D graphics: [three.js](https://threejs.org) by the three.js authors, licensed MIT
   (`src/renderer/vendor/three`, copied by `scripts/vendor-three.js`).
-- Warlock hero model and animations: ["red_super_wizard"](https://sketchfab.com/3d-models/red-super-wizard-26193351377c48d59ef5e2dddf4f8596)
+- 3D character model and animations: ["red_super_wizard"](https://sketchfab.com/3d-models/red-super-wizard-26193351377c48d59ef5e2dddf4f8596)
   by [letmetankher](https://sketchfab.com/letmetankher), licensed
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (`src/renderer/models`).
-- Pudge Wars hero model and animations: "Dota 2 | Pudge animated", uploaded to Sketchfab by FimoZov
-  (labelled CC BY 4.0 by the uploader). Pudge and its artwork belong to Valve Corporation (Dota 2).
-- Pudge Wars rules follow the open-source Dota 2 custom game
-  [PudgeWars](https://github.com/CaioBrighenti/PudgeWars) (re-implemented, no code copied).
-- Spell and item icon shapes: [Game-icons.net](https://game-icons.net) by Lorc, Delapouite and contributors,
+- 3D character model and animations: "Dota 2 | Pudge animated", uploaded to Sketchfab by FimoZov
+  (labelled CC BY 4.0 by the uploader). The character and its artwork belong to Valve Corporation (Dota 2).
+- Some rules follow the open-source custom game [PudgeWars](https://github.com/CaioBrighenti/PudgeWars)
+  (re-implemented, no code copied).
+- Icon shapes: [Game-icons.net](https://game-icons.net) by Lorc, Delapouite and contributors,
   licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) (`src/renderer/vendor/game-icons.js`);
-  painted in-app by `src/renderer/warlock-icons.js`.
+  painted in-app.
