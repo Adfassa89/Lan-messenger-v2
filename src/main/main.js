@@ -957,7 +957,7 @@ function registerIpc() {
   h('warlock-result', (conv, id, text) => {
     const msg = messenger.store.getMessage(conv, id);
     if (!isArena(msg) || msg.game.host !== messenger.id) return null;
-    return messenger.sendText(conv, String(text || '').slice(0, 2000));
+    return messenger.sendGameResult(conv, text);
   });
   h('tetris-info', (conv, id) => tetrisInfo(conv, id));
   h('call-info', (sid) => callInfo(sid));
@@ -1018,6 +1018,11 @@ function wireEvents() {
   messenger.on('peers', (peers) => send('peers', peers));
   messenger.on('groups', (groups) => send('groups', groups));
   messenger.on('conv', (c) => send('conv', c));
+  messenger.on('purged', (list) => send('purged', list));
+  messenger.gameInUse = (id) => {
+    const w = warlockWindows.get(id) || tetrisWindows.get(id);
+    return !!(w && !w.isDestroyed());
+  };
   messenger.on('typing', (e) => send('typing', e));
   messenger.on('file-progress', (p) => send('file-progress', p));
   messenger.on('avatar', (a) => send('avatar', a));

@@ -130,3 +130,57 @@ test('PCs pass on who else is online, so PCs that cannot hear each other still m
     await carol.stop();
   }
 });
+
+test('game invites and results are cleared 6 hours after the game was last played', async () => {
+  const [alice, bob] = makePair();
+  await alice.start();
+  await bob.start();
+  try {
+    await waitFor(() => alice.peers.get(bob.id)?.online && bob.peers.get(alice.id)?.online, 8000, 'discovery');
+    const chat = alice.sendText(bob.id, 'Shift report attached');
+    const g = alice.createGame(bob.id, 'ttt');
+    const arena = alice.createWarlock(bob.id, 'thirteen');
+    const result = alice.sendGameResult(bob.id, '🃏 13 – Bob wins!');
+    await waitFor(() => bob.loadMessages(alice.id).length === 4, 5000, 'all arrived');
+    assert.ok(bob.loadMessages(alice.id).find((m) => m.id === result.id).gameResult, 'result marked on the other PC');
+    // Five hours later nothing has gone; a move resets the clock.
+    const t0 = Date.now();
+    assert.strictEqual(alice.purgeGames({ now: t0 + 5 * 3600000 }).length, 0);
+    let purged = null;
+    alice.once('purged', (list) => { purged = list; });
+    const out = alice.purgeGames({ now: t0 + 6 * 3600000 + 1000 });
+    assert.strictEqual(out.length, 1);
+    assert.deepStrictEqual(new Set(out[0].ids), new Set([g.id, arena.id, result.id]));
+    assert.ok(purged);
+    assert.deepStrictEqual(alice.loadMessages(bob.id).map((m) => m.id), [chat.id]);
+    assert.strictEqual(alice.convs[bob.id].lastText, 'Shift report attached');
+  } finally {
+    await alice.stop();
+    await bob.stop();
+  }
+});
+
+test('a new version of the app clears all game history at start', async () => {
+  const [alice, bob] = makePair();
+  alice.appVersion = '9.0.0';
+  await alice.start();
+  await bob.start();
+  try {
+    await waitFor(() => alice.peers.get(bob.id)?.online, 8000, 'discovery');
+    alice.createGame(bob.id, 'c4');
+    alice.sendText(bob.id, '🔥 Warlock – Alice wins!'); // an old-style result
+    alice.sendText(bob.id, 'Keep this');
+    await alice.stop();
+    alice.appVersion = '9.0.1';
+    await alice.start();
+    assert.deepStrictEqual(alice.loadMessages(bob.id).map((m) => m.text), ['Keep this']);
+    // Restarting the same version leaves new games alone.
+    alice.createGame(bob.id, 'c4');
+    await alice.stop();
+    await alice.start();
+    assert.strictEqual(alice.loadMessages(bob.id).filter((m) => m.kind === 'game').length, 1);
+  } finally {
+    await alice.stop();
+    await bob.stop();
+  }
+});

@@ -2290,6 +2290,15 @@ function handleEvent({ type, payload }) {
       renderList();
       if (S.active && convKind(S.active) === 'group') renderHeader();
       break;
+    case 'purged':
+      // Old game messages were cleared: drop them from the open chats too.
+      for (const { conv, ids } of payload) {
+        const gone = new Set(ids);
+        if (S.msgs.has(conv)) S.msgs.set(conv, S.msgs.get(conv).filter((m) => !gone.has(m.id)));
+        for (const id of ids) if (Game.isOpen(id)) Game.close();
+        if (conv === S.active) renderMessages(false, true);
+      }
+      break;
     case 'conv':
       S.convs.set(payload.id, payload);
       if (payload.id === S.active) {

@@ -3,6 +3,12 @@
 // Group arena games: one PC runs the game, everyone in the group can join.
 const ARENA_GAMES = ['warlock', 'pudgewars', 'thirteen', 'tank'];
 const DIRECT_ONLY = ['tank']; // two-player games: private chats only
+// Game invites, boards and results are cleared from every chat this long after
+// the game was last played, and all of them when the app is updated.
+const GAME_KEEP = 6 * 3600000;
+// Results posted by the arena games before they were marked as such.
+const GAME_RESULT_RE = /^(🔥 Warlock|🪝 Pudge Wars|🃏 13|🪖 (Tank|Танк)) – /u;
+const isGameMsg = (m) => !!m && (m.kind === 'game' || m.gameResult || (m.kind === 'text' && GAME_RESULT_RE.test(m.text || '')));
 // The heart of the app: keeps track of people on the network, delivers
 // messages reliably (queued until the other PC confirms it received them)
 // and stores history. It has no user interface and no Electron dependency,
@@ -166,6 +172,8 @@ class Messenger extends EventEmitter {
     this.reverseWaits = new Map(); // token -> { peerId, resolve, timer }
     this.clockGames = new Map(); // game message id -> conv, for timed chess and checkers
     this.seen = new Map(); // rid -> time, to drop duplicates
+    // Set by the app: true while a game's window is open, so it is not cleared mid-game.
+    this.gameInUse = () => false;
     this.learnTried = new Map(); // "host:port" -> when we last tried an address other PCs told us about
     this.avatarAsked = new Map(); // peerId -> time
     this.files = new FileTransfers(this);
@@ -216,6 +224,11 @@ class Messenger extends EventEmitter {
     this.sweepTimer = setInterval(() => this._sweep(), 3000);
     this.pingTimer = setInterval(() => this._pingAll(), PING_INTERVAL);
     this.scheduleTimer = setInterval(() => this._runScheduled(), 5000);
+    // A new version of the app starts with no game history at all.
+    const updated = this.config.gamesClearedFor !== this.appVersion;
+    this.purgeGames({ all: updated });
+    if (updated) { this.config.gamesClearedFor = this.appVersion; this.store.touch('config'); }
+    this.purgeTimer = setInterval(() => this.purgeGames(), 10 * 60000);
     this._findClockGames();
     this.clockTimer = setInterval(() => this.clockGames.size && this._checkClocks(), 500);
     this.started = true;
@@ -230,6 +243,7 @@ class Messenger extends EventEmitter {
     clearInterval(this.pingTimer);
     clearInterval(this.scheduleTimer);
     clearInterval(this.clockTimer);
+    clearInterval(this.purgeTimer);
     clearTimeout(this.shareTimer);
     this.shareTimer = null;
     for (const t of this.ackTimers.values()) clearTimeout(t);
@@ -847,6 +861,7 @@ class Messenger extends EventEmitter {
     const reply = cleanReply(w.replyTo);
     if (reply) msg.replyTo = reply;
     if (w.urgent && kind === 'text') msg.urgent = true;
+    if (w.gameResult && kind === 'text') msg.gameResult = true;
     if (kind === 'file') {
       if (!w.file || typeof w.file.tid !== 'string') return;
       msg.file = { tid: w.file.tid, name: String(w.file.name || 'file'), size: Number(w.file.size) || 0, state: 'offered' };
@@ -1004,6 +1019,7 @@ class Messenger extends EventEmitter {
     }
     if (msg.replyTo) wire.replyTo = msg.replyTo;
     if (msg.urgent) wire.urgent = true;
+    if (msg.gameResult) wire.gameResult = true;
     if (msg.poll) wire.poll = { question: msg.poll.question, options: msg.poll.options, multi: msg.poll.multi };
     if (msg.game) {
       wire.game = { type: msg.game.type, players: msg.game.players };
@@ -1208,6 +1224,39 @@ class Messenger extends EventEmitter {
   deleteMessage(conv, id) {
     this.store.deleteMessage(conv, id);
     this._refreshPreview(conv);
+  }
+
+  // The results an arena game posts to its chat (removed with the other game messages).
+  sendGameResult(conv, text) {
+    const t = String(text || '').trim().slice(0, 2000);
+    if (!t) return null;
+    return this._sendMsg(conv, { kind: 'text', text: t, gameResult: true });
+  }
+
+  // Removes game invites, boards and results from this PC's chats: those not
+  // played for GAME_KEEP, or all of them. Only this PC's copy changes.
+  purgeGames({ all = false, now = Date.now() } = {}) {
+    const removed = [];
+    for (const conv of this.store.allConversationIds()) {
+      const list = this.store.messages(conv, { limit: Infinity }) || [];
+      const ids = list.filter((m) => isGameMsg(m) && !this.gameInUse(m.id)
+        && (all || now - Math.max(m.ts || 0, (m.game && m.game.at) || 0) >= GAME_KEEP)).map((m) => m.id);
+      if (!ids.length) continue;
+      for (const id of ids) {
+        this.store.deleteMessage(conv, id);
+        this.clockGames.delete(id);
+      }
+      const gone = new Set(ids);
+      const before = this.outbox.length;
+      this.outbox = this.outbox.filter((e) => !gone.has(e.rid) && !(e.wire && gone.has(e.wire.id)));
+      if (this.outbox.length !== before) this.store.set('outbox', this.outbox);
+      const c = this.convs[conv];
+      if (c && c.pins) c.pins = c.pins.filter((id) => !gone.has(id));
+      this._refreshPreview(conv);
+      removed.push({ conv, ids });
+    }
+    if (removed.length) this.emit('purged', removed);
+    return removed;
   }
 
   clearConversation(conv) {
