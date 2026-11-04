@@ -67,6 +67,27 @@ class Session {
     } catch { return null; }
   }
 
+  // An update restart: a one-time ticket (protected like the remembered key,
+  // valid for 3 minutes) lets the app come back unlocked if it was unlocked.
+  resumeTicket(locked) {
+    if (!this.current) return;
+    const data = JSON.stringify({ id: this.current.id, until: Date.now() + 180000, locked: !!locked });
+    let blob = null;
+    if (this._canProtect()) blob = safeStorage.encryptString(data).toString('base64');
+    else if (!app.isPackaged) blob = `plain:${data}`;
+    if (blob) try { fs.writeFileSync(path.join(app.getPath('userData'), 'resume.json'), JSON.stringify({ blob })); } catch { /* not fatal */ }
+  }
+  _takeTicket() {
+    const f = path.join(app.getPath('userData'), 'resume.json');
+    try {
+      const { blob } = JSON.parse(fs.readFileSync(f, 'utf8'));
+      fs.rmSync(f, { force: true });
+      const json = blob.startsWith('plain:') ? (app.isPackaged ? null : blob.slice(6)) : safeStorage.decryptString(Buffer.from(blob, 'base64'));
+      const d = JSON.parse(json);
+      return d && d.until > Date.now() ? d : null;
+    } catch { return null; }
+  }
+
   // An old profile (from before accounts) waits in this Windows user's folder.
   legacyName() {
     try {
@@ -83,7 +104,9 @@ class Session {
       try {
         this.accounts.claim(r.id);
         const acc = this.accounts.list().find((a) => a.id === r.id);
-        return this._start({ id: r.id, key: r.key, name: acc.name, locked: true });
+        const ticket = this._takeTicket();
+        const locked = ticket && ticket.id === r.id ? ticket.locked : true;
+        return this._start({ id: r.id, key: r.key, name: acc.name, locked });
       } catch { /* in use elsewhere: pick another */ }
     }
     this.showPicker();

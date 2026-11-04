@@ -65,6 +65,7 @@ function defaultSettings(downloadDir) {
     textSize: 100,
     micBoost: 100,
     autoLockMinutes: 0, // lock the window after this many idle minutes (0 = never)
+    autoRestart: true, // install a downloaded update by itself when the PC is not in use
     downloadsClearedAt: 0,
   };
 }

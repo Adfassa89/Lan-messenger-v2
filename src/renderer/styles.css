@@ -1733,3 +1733,5 @@ body.panel-open.overlay-controls .chat-header, body.panel-open.overlay-controls 
 /* Long chats: messages off screen are not laid out or painted. */
 .messages .day-group > .msg, .messages .day-group > .system { content-visibility: auto; contain-intrinsic-size: auto 60px; }
 .ack-btn.ann-btn { background: var(--accent); color: #fff; border-color: transparent; }
+
+.upd-count { margin: 6px auto 0; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; font-weight: 800; background: var(--accent-soft); color: var(--accent-text); }

@@ -2369,6 +2369,29 @@ function wipeModal(closeSettings) {
   });
 }
 
+// The PC has been in use for hours with an update waiting: a short countdown
+// that can be postponed by an hour.
+function updateCountdown({ version, seconds }) {
+  let left = seconds;
+  let timer = 0;
+  modal({
+    title: t('Updating to version {v}', { v: version }),
+    body: `<p class="modal-text">${esc(t('LAN Messenger restarts to install the new version. Your chats and drafts are kept.'))}</p><div class="upd-count" id="updCount">${left}</div>`,
+    onOpen: (m, close) => {
+      timer = setInterval(() => {
+        left--;
+        if ($('#updCount', m)) $('#updCount', m).textContent = String(left);
+        if (left <= 0) { clearInterval(timer); saveDraft(); api.restartUpdate(); close(); }
+      }, 1000);
+    },
+    onClose: () => clearInterval(timer),
+    buttons: [
+      { label: t('Later (1 hour)'), action: () => { clearInterval(timer); api.updateLater(); return true; } },
+      { label: t('Update now'), cls: 'primary', action: () => { clearInterval(timer); saveDraft(); api.restartUpdate(); return true; } },
+    ],
+  });
+}
+
 function changePinModal() {
   modal({
     title: t('Change PIN'),
@@ -2493,6 +2516,7 @@ function settingsModal() {
     ${toggleRow('minimizeToTray', t('Keep running in the tray when closed'), t('So you never miss a message'))}
     ${toggleRow('autoAway', t('Set me as Away when idle'), t('After 5 minutes without mouse or keyboard activity'))}
     ${toggleRow('autoUpdate', t('Check for updates automatically'), t('New versions come from other PCs on the network or from GitHub, and are digitally signed'))}
+    ${toggleRow('autoRestart', t('Install updates by themselves'), t('The app restarts to the new version when nobody is using the PC (never during a call, a voice room, a game or a file transfer)'))}
     ${selectRow('updateEvery', t('How often'), t('You get a notification when a new version is ready'), [
     ['hour', t('Every hour')], ['12h', t('Every 12 hours')], ['day', t('Daily')], ['week', t('Weekly')], ['month', t('Monthly')],
   ], { disabled: !S.settings.autoUpdate })}
@@ -2829,6 +2853,8 @@ function handleEvent({ type, payload }) {
     case 'play-sound':
       playSound();
       break;
+    case 'update-countdown': updateCountdown(payload); break;
+    case 'update-waiting': toast(t('The update installs as soon as the file transfers have finished')); break;
     case 'update-ready':
       S.updateReady = payload;
       renderUpdateBanner();
@@ -3083,6 +3109,11 @@ async function boot() {
   renderUpdateBanner();
   VoiceRooms.bind();
   loadDrafts();
+  try {
+    const seen = localStorage.getItem('lanmsg.lastVersion');
+    if (seen && seen !== S.version) setTimeout(() => toast(t('Updated to version {v}', { v: S.version })), 1500);
+    localStorage.setItem('lanmsg.lastVersion', S.version);
+  } catch { /* fine */ }
   api.savedIds().then((ids) => { S.saved = new Set(ids || []); }).catch(() => {});
   if (st.locked) showLock(true);
 }

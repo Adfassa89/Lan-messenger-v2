@@ -29,6 +29,7 @@ Available in **English** and **Монгол**.
 | ✏️ **Screenshot with drawing** | `Ctrl + Shift + S` (or **＋ → Screenshot with drawing**) takes a screenshot. Crop it, add arrows, boxes, highlights and text, then send. Pasted pictures can be drawn on too. |
 | 🇲🇳 **Mongolian / English** | Switch language in **Settings → Language**. Every screen is translated. |
 | 🔄 **Automatic updates** | When one PC gets a newer version, the others download it from that PC and offer a **Restart**. PCs with internet access also get new versions from GitHub. **Settings → Check for updates** shows what is happening and updates on demand. Updates are digitally signed, so nobody can push fake software. If an update ever fails to start, the PC goes back to the previous version automatically. |
+| 🔁 **Installs by itself** | A downloaded update installs without anyone pressing a button: the app restarts when nobody is using the PC (2 minutes without mouse or keyboard, or 30 seconds while it is in the tray), and comes back in the tray and unlocked if it was. Never during a call, a voice room, a game or remote help, and never while a file is being sent or received (it waits for the transfer to finish). A PC in use for hours gets a 60-second notice with “Later (1 hour)”. A newer version on any colleague's PC is picked up within a minute. Settings → Install updates by themselves (on by default). |
 
 ### Everyday features
 | | |

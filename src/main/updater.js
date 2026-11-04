@@ -88,6 +88,10 @@ class Updater {
 
   _tick() {
     if (!this.m.settings.autoUpdate) return;
+    // A colleague on the network already has a newer version: take it now (it
+    // costs nothing to look). The schedule only decides how often the
+    // internet is asked.
+    if (!this.busy && app.isPackaged && this._candidate(false)) { this._fromPeer(this._candidate(false)); return; }
     if (Date.now() - (this.m.config.updateCheckedAt || 0) < this._every()) return;
     this.check();
   }

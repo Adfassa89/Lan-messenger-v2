@@ -720,7 +720,63 @@ function attachmentPath(prefix, ext) {
   return path.join(dir, `${prefix} ${stamp}.${ext}`);
 }
 
-function restartForUpdate() {
+// ------------------------------------------------------------------ installing updates by themselves
+// A downloaded update is installed without anyone pressing a button: the app
+// restarts when nobody is using the PC (no mouse or keyboard for 2 minutes,
+// or 30 seconds while the window is hidden), never during a call, a voice
+// room, a game, remote help or a file transfer. If the PC is in use all the
+// time, after 4 hours a 60-second notice offers "Later".
+let voiceActive = false;
+let updateLaterUntil = 0;
+let updateReadyAt = 0;
+let updateNoticeAt = 0;
+function transfersRunning() {
+  return !!(messenger && messenger.files && (messenger.files.uploads.size || messenger.files.downloads.size));
+}
+function busyForUpdate() {
+  if (inCall() || voiceActive || remote) return true;
+  if (warlockWindows.size || tetrisWindows.size) return true;
+  return transfersRunning();
+}
+function checkAutoInstall() {
+  if (!updateReady || !messenger || messenger.settings.autoRestart === false) return;
+  if (!updateReadyAt) updateReadyAt = Date.now();
+  if (busyForUpdate() || Date.now() < updateLaterUntil) return;
+  const idle = powerMonitor.getSystemIdleTime();
+  const hidden = !win || win.isDestroyed() || !win.isVisible() || win.isMinimized();
+  if (idle >= 120 || (hidden && idle >= 30)) { restartForUpdate({ quiet: true }); return; }
+  // In use all the time: ask once, with a countdown the user can postpone.
+  if (Date.now() - updateReadyAt > 4 * 3600000 && Date.now() - updateNoticeAt > 3600000) {
+    updateNoticeAt = Date.now();
+    send('update-countdown', { version: updateReady, seconds: 60 });
+  }
+}
+
+let restartWaiting = null;
+function restartForUpdate({ quiet = false } = {}) {
+  // A file still being sent or received is never cut off: the restart waits
+  // until every transfer has finished (whoever asked for it).
+  if (transfersRunning()) {
+    if (!restartWaiting) {
+      send('update-waiting', true);
+      restartWaiting = setInterval(() => {
+        if (transfersRunning()) return;
+        clearInterval(restartWaiting);
+        restartWaiting = null;
+        restartForUpdate({ quiet });
+      }, 2000);
+    }
+    return;
+  }
+  // Comes back as it was: in the tray if the window was hidden, unlocked if it was unlocked.
+  if (account) account.resumeTicket(locked);
+  const hidden = !win || win.isDestroyed() || !win.isVisible();
+  if (quiet && hidden) {
+    quitting = true;
+    app.relaunch({ args: [...process.argv.slice(1).filter((a) => a !== '--hidden'), '--hidden'] });
+    app.quit();
+    return;
+  }
   quitting = true;
   app.relaunch();
   app.quit();
@@ -973,7 +1029,8 @@ function registerIpc() {
   h('remote-log', () => (remote && remote.input.log ? remote.input.log.slice() : null));
   h('rtc-send', (peerId, sid, data) => messenger.sendRtc(peerId, sid, data));
   // In a voice room the main window keeps full speed even when hidden in the tray.
-  h('voice-active', (on) => { if (win && !win.isDestroyed()) win.webContents.setBackgroundThrottling(!on); });
+  h('voice-active', (on) => { voiceActive = !!on; if (win && !win.isDestroyed()) win.webContents.setBackgroundThrottling(!on); });
+  h('update-later', () => { updateLaterUntil = Date.now() + 3600000; });
   h('open-viewer', (peerId, sid, name) => openViewer(peerId, sid, name));
   h('call-start', (conv, video) => startCall(conv, video));
   h('create-game', (conv, type, options) => messenger.createGame(conv, type, options || {}));
@@ -1175,6 +1232,7 @@ async function startAccount({ id, key, name, locked: startLocked, dataDir }) {
   applyLoginItem();
   setInterval(checkIdle, 30000);
   setInterval(checkAutoLock, 15000);
+  setInterval(checkAutoInstall, 30000);
   powerMonitor.on('resume', () => messenger.discovery && messenger.discovery.query());
 }
 

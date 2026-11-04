@@ -106,6 +106,7 @@ const CHANNELS = {
   callEnded: 'call-ended',
   openConv: 'open-conv',
   restartUpdate: 'restart-update',
+  updateLater: 'update-later',
   updateStatus: 'update-status',
   firewallStatus: 'firewall-status',
   firewallAllow: 'firewall-allow',
