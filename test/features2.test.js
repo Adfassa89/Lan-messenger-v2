@@ -288,3 +288,12 @@ test('deleting all chat history empties every chat but keeps people and groups',
     await bob.stop();
   }
 });
+
+test('sections: personal sorting of people, one section each, cleaned of unknown sections', () => {
+  const [alice] = makePair();
+  const r = alice.setSections({ list: [{ id: 's1', name: ' Геологич ' }, { id: 's2', name: 'Төлөвлөгч' }], members: { p1: 's1', p2: 's2', p3: 'gone' } });
+  assert.deepStrictEqual(r.list.map((s) => s.name), ['Геологич', 'Төлөвлөгч']);
+  assert.deepStrictEqual(r.members, { p1: 's1', p2: 's2' }, 'a person in a section that does not exist is dropped');
+  alice.store.flush();
+  assert.deepStrictEqual(alice.getSections(), r);
+});

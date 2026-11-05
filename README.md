@@ -28,6 +28,7 @@ Available in **English** and **Монгол**.
 ### Everyday features
 | | |
 |---|---|
+| 📁 **Sections** | Sort people in the sidebar your own way, like the old LAN Messenger: **＋ Хэсэг** creates a section (e.g. Геологич, Төлөвлөгч); drag people onto it or right-click a person → Move to. Each section folds open or closed and shows who is online (3/5); unsorted people stay under Others. Sections are personal (only on your PC, in your account) and are not group chats. ⋯ on a section: message everyone in it (each gets it in their private chat with you), rename, reorder, delete. The People directory can filter by section. |
 | @ **Mentions** | Type @ in a group to pick a member; they are notified even if the group is muted, and the chat shows an @ badge. |
 | 🔕 **Mute a chat** | For 1 hour, 8 hours or until you unmute (right-click the chat or ⋯): no sound or pop-up, unread count in grey and not on the taskbar. |
 | ↪️ **Forward** | Send a message or file on to another person or group; it shows who wrote it. |

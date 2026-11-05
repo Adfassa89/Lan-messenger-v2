@@ -990,6 +990,8 @@ function registerIpc() {
   h('forget-contact', (id) => messenger.forgetContact(id));
   h('delete-message', (conv, id) => messenger.deleteMessage(conv, id));
   h('mute-conv', (conv, until) => messenger.muteConv(conv, until));
+  h('get-sections', () => messenger.getSections());
+  h('set-sections', (data) => messenger.setSections(data));
   // Needs the account's PIN, like deleting the account.
   h('clear-all-history', (pin) => {
     try { account.accounts.check(account.current.id, pin); } catch (err) { return { ok: false, error: err.message, waitUntil: err.waitUntil || 0 }; }

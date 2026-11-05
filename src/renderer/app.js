@@ -23,6 +23,7 @@ const S = {
   editing: null, // message being edited
   updateReady: null,
   saved: new Set(), // "conv|msgId" of saved messages
+  sections: { list: [], members: {} }, // your own sorting of people: [{ id, name }], peerId -> section id
   drafts: {}, // conv -> unsent text
   unreadMark: null, // { conv, id, n }: where "new messages" starts in the open chat
   newBelow: 0, // messages that arrived while scrolled up
@@ -455,6 +456,7 @@ function peopleDirectory() {
     body: `<div class="pd-tools">
         <div class="pd-search">${ICONS.search || ''}<input id="pdFilter" type="text" autocomplete="off" spellcheck="false" placeholder="${esc(t('Search by name, job or computer'))}"></div>
         <div class="seg-mini" id="pdShow">${[['all', t('All')], ['online', t('Online')], ['offline', t('Offline')]].map(([k, l]) => `<button data-show="${k}">${esc(l)}</button>`).join('')}</div>
+        ${S.sections.list.length ? `<select class="input pd-dept" id="pdSec"><option value="">${esc(t('All sections'))}</option>${S.sections.list.map((s) => `<option value="${esc(s.id)}">📁 ${esc(s.name)}</option>`).join('')}<option value="-">${esc(t('Not in a section'))}</option></select>` : ''}
         ${depts.length ? `<select class="input pd-dept" id="pdDept"><option value="">${esc(t('All jobs'))}</option>${depts.map((d) => `<option value="${esc(d)}">${esc(d)}</option>`).join('')}</select>` : ''}
       </div>
       <div class="pd-count" id="pdCount"></div>
@@ -474,11 +476,13 @@ function peopleDirectory() {
       const drawCount = () => { $('#pdCount', m).textContent = `${counts}${picked.size ? ` · ${t('{n} ticked', { n: picked.size })}` : ''}`; };
       const draw = () => {
         const f = $('#pdFilter', m).value.trim().toLowerCase();
+        const secPick = $('#pdSec', m) ? $('#pdSec', m).value : '';
         for (const b of m.querySelectorAll('[data-show]')) b.classList.toggle('on', b.dataset.show === view.show);
         if ($('#pdDept', m)) $('#pdDept', m).value = depts.includes(view.dept) ? view.dept : '';
         const all = [...S.peers.values()];
         const list = all.filter((p) => (view.show === 'all' || (view.show === 'online') === !!p.online)
           && (!view.dept || (p.dept || '').trim() === view.dept)
+          && (!secPick || (secPick === '-' ? !S.sections.members[p.id] : S.sections.members[p.id] === secPick))
           && (!f || `${p.name} ${p.dept || ''} ${p.host || ''}`.toLowerCase().includes(f)))
           .sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
         const on = all.filter((p) => p.online).length;
@@ -498,6 +502,7 @@ function peopleDirectory() {
       $('#pdFilter', m).addEventListener('input', draw);
       $('#pdShow', m).addEventListener('click', (e) => { const b = e.target.closest('[data-show]'); if (b) { view.show = b.dataset.show; save(); draw(); } });
       if ($('#pdDept', m)) $('#pdDept', m).addEventListener('change', (e) => { view.dept = e.target.value; save(); draw(); });
+      if ($('#pdSec', m)) $('#pdSec', m).addEventListener('change', () => draw());
       $('#pdList', m).addEventListener('change', (e) => {
         if (e.target.type !== 'checkbox') return;
         if (e.target.checked) picked.add(e.target.value); else picked.delete(e.target.value);
@@ -552,7 +557,8 @@ function renderListNow() {
   // People you have not chatted with. Those not seen for a month stay out of the
   // sidebar (they are still in the People directory) unless you search for them.
   const MONTH = 30 * 86400000;
-  const allOthers = items.filter((i) => !i.pinned && !(i.meta && i.meta.lastTs));
+  const inSection = (i) => i.kind === 'direct' && S.sections.list.some((s) => s.id === S.sections.members[i.conv]);
+  const allOthers = items.filter((i) => !i.pinned && !(i.meta && i.meta.lastTs) && !inSection(i));
   const others = allOthers.filter((i) => f || i.online || !i.peer || Date.now() - (i.peer.lastSeen || 0) < MONTH)
     .sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
 
@@ -564,7 +570,31 @@ function renderListNow() {
     list.append(el('div', 'list-label', esc(t('Recent chats'))));
     for (const i of recent) list.append(convItem(i));
   }
-  if (others.length) {
+  // Sections: your own sorting of people, each folds open or closed.
+  for (const sec of S.sections.list) {
+    const people = items.filter((i) => i.kind === 'direct' && S.sections.members[i.conv] === sec.id)
+      .sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
+    if (f && !people.length) continue;
+    let folded = false;
+    try { folded = localStorage.getItem(`lanmsg.secFolded.${sec.id}`) === '1'; } catch { /* ignore */ }
+    if (f) folded = false;
+    const on = people.filter((i) => i.online).length;
+    const row = el('div', 'list-label-row section-row');
+    row.dataset.section = sec.id;
+    const head = el('button', `list-label fold${folded ? ' folded' : ''}`, `<span class="fold-arrow">▾</span><span>${esc(sec.name)} · ${on}/${people.length}</span>`);
+    head.addEventListener('click', () => { try { localStorage.setItem(`lanmsg.secFolded.${sec.id}`, folded ? '0' : '1'); } catch { /* ignore */ } renderListNow(); });
+    head.addEventListener('contextmenu', (e) => { e.preventDefault(); sectionMenu(sec, e.clientX, e.clientY); });
+    const more = el('button', 'list-all sec-more', '⋯');
+    more.title = t('More');
+    more.addEventListener('click', (e) => { const r = e.currentTarget.getBoundingClientRect(); sectionMenu(sec, r.left, r.bottom + 4); });
+    row.append(head, more);
+    dropTarget(row, sec.id);
+    list.append(row);
+    if (!folded) for (const i of people) list.append(convItem(i));
+    if (!folded && !people.length) list.append(el('div', 'section-empty', esc(t('Drag people here, or right-click a person → Move to section'))));
+  }
+  // With sections the Others heading always shows: it holds "+ Section" and "All people".
+  if (others.length || (S.sections.list.length && !f)) {
     // A long People list folds away (click the heading); searching always shows it.
     const many = others.length > 12;
     let folded = false;
@@ -575,7 +605,7 @@ function renderListNow() {
     if (f) folded = false;
     const row = el('div', 'list-label-row');
     const head = el('button', `list-label fold${folded ? ' folded' : ''}`,
-      `<span class="fold-arrow">▾</span><span>${esc(t('People'))} · ${others.length}</span>`);
+      `<span class="fold-arrow">▾</span><span>${esc(S.sections.list.length ? t('Others') : t('People'))} · ${others.length}</span>`);
     head.title = many ? t('Show or hide') : '';
     head.addEventListener('click', () => {
       try { localStorage.setItem('lanmsg.peopleFolded', folded ? '0' : '1'); } catch { /* ignore */ }
@@ -583,7 +613,11 @@ function renderListNow() {
     });
     const all = el('button', 'list-all', esc(t('All people')));
     all.addEventListener('click', () => peopleDirectory());
-    row.append(head, all);
+    const add = el('button', 'list-all', `＋ ${esc(t('Section'))}`);
+    add.title = t('New section: sort people your own way, e.g. Planners, Geologists');
+    add.addEventListener('click', () => sectionNameModal());
+    row.append(head, add, all);
+    dropTarget(row, null);
     list.append(row);
     if (!folded) for (const i of others) list.append(convItem(i));
     const hidden = allOthers.length - others.length;
@@ -641,6 +675,10 @@ function convItem(i) {
       <div class="row"><span class="preview">${prev}</span>${convMuted(i.conv) ? `<span class="muted-ico" title="${esc(t('Muted'))}">🔕</span>` : ''}${i.meta?.mention ? '<span class="badge at">@</span>' : ''}${i.meta?.unread ? `<span class="badge${convMuted(i.conv) ? ' quiet' : ''}">${i.meta.unread > 99 ? '99+' : i.meta.unread}</span>` : ''}</div>
     </div>`;
   b.addEventListener('click', () => openConv(i.conv));
+  if (i.kind === 'direct') {
+    b.draggable = true;
+    b.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/lm-peer', i.conv); e.dataTransfer.effectAllowed = 'move'; });
+  }
   b.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     convMenu(i, e.clientX, e.clientY);
@@ -669,6 +707,12 @@ function convMenu(i, x, y) {
   const items = [{ label: t('Open chat'), action: () => openConv(i.conv) }];
   items.push({ label: t('Export chat…'), action: () => exportModal(i.conv) });
   items.push(...muteItems(i.conv));
+  if (i.kind === 'direct') {
+    const cur = S.sections.members[i.conv];
+    for (const sec of S.sections.list) if (sec.id !== cur) items.push({ label: `📁 ${t('Move to {name}', { name: sec.name })}`, action: () => moveToSection(i.conv, sec.id) });
+    items.push({ label: `📁 ${t('New section…')}`, action: () => sectionNameModal(null, i.conv) });
+    if (cur && S.sections.list.some((s) => s.id === cur)) items.push({ label: t('Remove from section'), action: () => moveToSection(i.conv, null) });
+  }
   items.push('-');
   items.push({ label: t('Clear chat history'), danger: true, action: () => confirmClear(i.conv) });
   if (i.kind === 'group') items.push({ label: t('Leave group'), danger: true, action: () => confirmLeave(i.conv.slice(2)) });
@@ -2267,6 +2311,96 @@ function muteItems(conv) {
   ];
 }
 
+// ------------------------------------------------------------------ sections (sorting people)
+async function saveSections(next) {
+  const r = await call(api.setSections(next));
+  if (r) S.sections = r;
+  renderList();
+}
+function moveToSection(peerId, sectionId) {
+  const members = { ...S.sections.members };
+  if (sectionId) members[peerId] = sectionId; else delete members[peerId];
+  return saveSections({ list: S.sections.list, members });
+}
+// A section heading takes people dropped on it (Others: out of their section).
+function dropTarget(row, sectionId) {
+  row.addEventListener('dragover', (e) => { if ([...e.dataTransfer.types].includes('text/lm-peer')) { e.preventDefault(); row.classList.add('drop-on'); } });
+  row.addEventListener('dragleave', () => row.classList.remove('drop-on'));
+  row.addEventListener('drop', (e) => {
+    row.classList.remove('drop-on');
+    const peer = e.dataTransfer.getData('text/lm-peer');
+    if (peer) { e.preventDefault(); moveToSection(peer, sectionId); }
+  });
+}
+// New or renamed section; with addPeer, that person goes straight in.
+function sectionNameModal(sec = null, addPeer = null) {
+  modal({
+    title: sec ? t('Rename section') : t('New section'),
+    body: `<p class="modal-text">${esc(t('Sections sort people in your list (only on your PC). They are not group chats.'))}</p>
+      <div class="field"><label>${esc(t('Section name'))}</label><input class="input" id="secName" maxlength="60" value="${esc(sec ? sec.name : '')}" placeholder="${esc(t('e.g. Geologists'))}"></div>`,
+    buttons: [{ label: t('Cancel') }, {
+      label: sec ? t('Save') : t('Create'), cls: 'primary', action: async (m) => {
+        const name = $('#secName', m).value.trim();
+        if (!name) { toast(t('Please give the section a name'), 'error'); return false; }
+        const list = S.sections.list.map((s) => ({ ...s }));
+        const members = { ...S.sections.members };
+        if (sec) list.find((s) => s.id === sec.id).name = name;
+        else {
+          const id = `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+          list.push({ id, name });
+          if (addPeer) members[addPeer] = id;
+        }
+        await saveSections({ list, members });
+        return true;
+      },
+    }],
+  });
+}
+function sectionMenu(sec, x, y) {
+  const idx = S.sections.list.findIndex((s) => s.id === sec.id);
+  const move = (d) => {
+    const list = S.sections.list.slice();
+    const [s] = list.splice(idx, 1);
+    list.splice(idx + d, 0, s);
+    saveSections({ list, members: S.sections.members });
+  };
+  const items = [
+    { label: `✉ ${t('Message everyone in this section…')}`, action: () => sectionMessageModal(sec) },
+    { label: t('Rename section…'), action: () => sectionNameModal(sec) },
+  ];
+  if (idx > 0) items.push({ label: `↑ ${t('Move up')}`, action: () => move(-1) });
+  if (idx < S.sections.list.length - 1) items.push({ label: `↓ ${t('Move down')}`, action: () => move(1) });
+  items.push('-', {
+    label: t('Delete section'), danger: true, action: () => confirmModal(t('Delete the section “{name}”?', { name: sec.name }), t('The people in it move to Others. No chats are deleted.'), t('Delete'), () => {
+      const members = {};
+      for (const [p, s] of Object.entries(S.sections.members)) if (s !== sec.id) members[p] = s;
+      saveSections({ list: S.sections.list.filter((s) => s.id !== sec.id), members });
+    }),
+  });
+  showMenu(items, x, y);
+}
+// One message to everyone in a section: each gets it in their private chat with you.
+function sectionMessageModal(sec) {
+  const people = Object.entries(S.sections.members).filter(([, s]) => s === sec.id).map(([p]) => p).filter((p) => S.peers.has(p));
+  if (!people.length) { toast(t('There is nobody in this section yet'), 'error'); return; }
+  modal({
+    title: `✉ ${sec.name}`,
+    body: `<p class="modal-text">${esc(t('Each of the {n} people gets this in their private chat with you.', { n: people.length }))}</p>
+      <div class="sec-to">${people.map((p) => `<span>${avatarHtml('direct', p, peerName(p), null, 'sm')}${esc(peerName(p))}</span>`).join('')}</div>
+      <div class="field"><textarea class="input" id="secMsg" rows="5" style="min-height:120px;resize:vertical" placeholder="${esc(t('Write a message…'))}"></textarea></div>`,
+    buttons: [{ label: t('Cancel') }, {
+      label: t('Send to {n} people', { n: people.length }), cls: 'primary', action: async (m) => {
+        const text = $('#secMsg', m).value.trim();
+        if (!text) { toast(t('Write the message first'), 'error'); return false; }
+        let sent = 0;
+        for (const p of people) if (await call(api.sendText(p, text))) sent++;
+        toast(t('Sent to {n} people', { n: sent }));
+        return true;
+      },
+    }],
+  });
+}
+
 // Send a message or file on to another chat.
 function forwardModal(fromConv, m) {
   const chats = [{ conv: 'broadcast', name: t('Everyone'), kind: 'broadcast' }];
@@ -3122,6 +3256,7 @@ async function boot() {
   renderUpdateBanner();
   VoiceRooms.bind();
   loadDrafts();
+  api.getSections().then((d) => { if (d) { S.sections = d; renderList(); } }).catch(() => {});
   try {
     const seen = localStorage.getItem('lanmsg.lastVersion');
     if (seen && seen !== S.version) setTimeout(() => toast(t('Updated to version {v}', { v: S.version })), 1500);

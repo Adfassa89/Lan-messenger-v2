@@ -1354,6 +1354,26 @@ class Messenger extends EventEmitter {
     return { freed, count };
   }
 
+  // ------------------------------------------------------------------ sections
+  // Your own way of sorting people in the sidebar ("Геологич", "Төлөвлөгч"…).
+  // Personal: only on this PC, in this account; one section per person.
+  getSections() {
+    const d = this.store.get('sections', null) || {};
+    return { list: Array.isArray(d.list) ? d.list : [], members: d.members && typeof d.members === 'object' ? d.members : {} };
+  }
+
+  setSections(data) {
+    const list = (Array.isArray(data && data.list) ? data.list : [])
+      .filter((s) => s && typeof s.id === 'string' && s.id.length <= 40)
+      .map((s) => ({ id: s.id, name: String(s.name || '').trim().slice(0, 60) || 'Section' }))
+      .slice(0, 50);
+    const ids = new Set(list.map((s) => s.id));
+    const members = {};
+    for (const [peer, sec] of Object.entries((data && data.members) || {})) if (ids.has(sec) && typeof peer === 'string') members[peer] = sec;
+    this.store.set('sections', { list, members });
+    return { list, members };
+  }
+
   // Saved messages (bookmarks), only on this PC.
   toggleSaved(conv, msgId) {
     const list = this.store.get('saved', []);
