@@ -1747,3 +1747,4 @@ body.panel-open.overlay-controls .chat-header, body.panel-open.overlay-controls 
 .sec-to { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .sec-to span { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 3px; border-radius: 12px; background: var(--panel-2); font-size: 12.5px; }
 .sec-to .avatar { width: 20px !important; height: 20px !important; font-size: 8.5px !important; }
+.fold-badge { margin-left: auto; font-size: 10.5px; }

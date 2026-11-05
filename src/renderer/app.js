@@ -567,8 +567,18 @@ function renderListNow() {
   const pinned = items.find((i) => i.pinned);
   if (pinned) list.append(convItem(pinned));
   if (recent.length) {
-    list.append(el('div', 'list-label', esc(t('Recent chats'))));
-    for (const i of recent) list.append(convItem(i));
+    // Recent chats fold open or closed like the sections (searching always opens them).
+    let folded = false;
+    try { folded = localStorage.getItem('lanmsg.recentFolded') === '1'; } catch { /* ignore */ }
+    if (f) folded = false;
+    const unread = recent.filter((i) => i.meta && i.meta.unread && (!convMuted(i.conv) || i.meta.mention)).length;
+    const head = el('button', `list-label fold${folded ? ' folded' : ''}`,
+      `<span class="fold-arrow">▾</span><span>${esc(t('Recent chats'))} · ${recent.length}</span>${folded && unread ? `<span class="badge fold-badge">${unread}</span>` : ''}`);
+    head.title = t('Show or hide');
+    head.addEventListener('click', () => { try { localStorage.setItem('lanmsg.recentFolded', folded ? '0' : '1'); } catch { /* ignore */ } renderListNow(); });
+    list.append(head);
+    // Folded, the heading shows how many chats have unread messages.
+    if (!folded) for (const i of recent) list.append(convItem(i));
   }
   // Sections: your own sorting of people, each folds open or closed.
   for (const sec of S.sections.list) {
@@ -601,12 +611,12 @@ function renderListNow() {
     // Folded by default only when there are recent chats to show above it.
     let saved = null;
     try { saved = localStorage.getItem('lanmsg.peopleFolded'); } catch { /* ignore */ }
-    folded = many && (saved === null ? recent.length > 0 : saved === '1');
+    folded = saved === null ? many && recent.length > 0 : saved === '1';
     if (f) folded = false;
     const row = el('div', 'list-label-row');
     const head = el('button', `list-label fold${folded ? ' folded' : ''}`,
       `<span class="fold-arrow">▾</span><span>${esc(S.sections.list.length ? t('Others') : t('People'))} · ${others.length}</span>`);
-    head.title = many ? t('Show or hide') : '';
+    head.title = t('Show or hide');
     head.addEventListener('click', () => {
       try { localStorage.setItem('lanmsg.peopleFolded', folded ? '0' : '1'); } catch { /* ignore */ }
       renderListNow();
