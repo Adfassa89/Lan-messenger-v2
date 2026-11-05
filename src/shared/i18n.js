@@ -716,6 +716,8 @@
     "Sent to {n} people": "{n} хүнд илгээлээ",
     "All sections": "Бүх хэсэг",
     "Not in a section": "Хэсэгт ороогүй",
+    "Windows has run out of network resources for new connections. Restarting the PC fixes this. If it keeps happening, another program on this PC may be holding too many connections.": "Windows шинэ холболт үүсгэх сүлжээний нөөцгүй болсон байна. Компьютерээ дахин асаавал засагдана. Дахин давтагдвал энэ компьютер дээрх өөр нэг программ хэт олон холболт барьж байж магадгүй.",
+    "LAN Messenger keeps trying every minute.": "LAN Messenger минут тутамд дахин оролдоно.",
     "Mouse wheel zooms.": "Хулганы дугуйгаар ойртуулж холдуулна.",
     "3D graphics are not available on this PC.": "Энэ компьютер дээр 3D график ажиллахгүй байна.",
     "FIGHT!": "ТУЛАЛДААН!",

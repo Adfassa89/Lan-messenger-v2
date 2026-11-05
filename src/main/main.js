@@ -1224,11 +1224,7 @@ async function startAccount({ id, key, name, locked: startLocked, dataDir }) {
   } catch (err) {
     console.warn('Updater:', err);
   }
-  try {
-    await messenger.start();
-  } catch (err) {
-    dialog.showErrorBox(APP_NAME, `${t('Could not start networking')}: ${err.message}`);
-  }
+  await startNetworking();
   for (const ev of ['display-removed', 'display-metrics-changed']) screen.on(ev, () => setTimeout(keepWindowsOnScreen, 300));
   createTray();
   applyLoginItem();
@@ -1236,6 +1232,24 @@ async function startAccount({ id, key, name, locked: startLocked, dataDir }) {
   setInterval(checkAutoLock, 15000);
   setInterval(checkAutoInstall, 30000);
   powerMonitor.on('resume', () => messenger.discovery && messenger.discovery.query());
+}
+
+// Starts the network side; if Windows refuses (e.g. ENOBUFS: out of network
+// buffers), says what to do once and keeps trying every minute.
+let netTold = false;
+async function startNetworking() {
+  try {
+    await messenger.start();
+  } catch (err) {
+    if (messenger.server) try { messenger.server.close(); } catch { /* not open */ }
+    if (!netTold) {
+      netTold = true;
+      const hint = ['ENOBUFS', 'EADDRNOTAVAIL', 'ENOMEM', 'EMFILE'].includes(err.code)
+        ? `\n\n${t('Windows has run out of network resources for new connections. Restarting the PC fixes this. If it keeps happening, another program on this PC may be holding too many connections.')}` : '';
+      dialog.showMessageBox({ type: 'error', title: APP_NAME, message: `${t('Could not start networking')}: ${err.message}${hint}\n\n${t('LAN Messenger keeps trying every minute.')}` }).catch(() => {});
+    }
+    setTimeout(() => startNetworking(), 60000);
+  }
 }
 
 // ------------------------------------------------------------------ lock

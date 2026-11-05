@@ -196,11 +196,20 @@ class Messenger extends EventEmitter {
     this.server = net.createServer((socket) => this._onInbound(socket));
     this.server.on('error', (err) => this.emit('warning', `Server: ${err.message}`));
     this.port = await new Promise((resolve, reject) => {
+      // Windows briefly out of network buffers (ENOBUFS, e.g. another program
+      // holding thousands of connections) or the network not up yet: wait and
+      // try again, about half a minute in all, before giving up.
+      const TRANSIENT = ['ENOBUFS', 'EADDRNOTAVAIL', 'ENETDOWN', 'ENOMEM', 'EMFILE'];
+      let waits = 0;
       const tryListen = (port, fallback) => {
         const onError = (err) => {
           // Port taken, or reserved by Windows (EACCES): let the system pick one.
           if (fallback && (err.code === 'EADDRINUSE' || err.code === 'EACCES')) tryListen(0, false);
-          else reject(err);
+          else if (TRANSIENT.includes(err.code) && waits < 6) {
+            const delay = 1000 * 2 ** Math.min(waits++, 4);
+            this.emit('warning', `Network not ready (${err.code}), trying again in ${delay / 1000} s`);
+            setTimeout(() => tryListen(port, fallback), delay);
+          } else reject(err);
         };
         this.server.once('error', onError);
         this.server.listen(port, '0.0.0.0', () => {
