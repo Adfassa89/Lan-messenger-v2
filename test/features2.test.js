@@ -297,3 +297,31 @@ test('sections: personal sorting of people, one section each, cleaned of unknown
   alice.store.flush();
   assert.deepStrictEqual(alice.getSections(), r);
 });
+
+test('a duplicate contact can be merged into the right one, and stays hidden', async () => {
+  const [alice, bob] = makePair();
+  await alice.start();
+  await bob.start();
+  try {
+    await waitFor(() => alice.peers.get(bob.id)?.online && bob.peers.get(alice.id)?.online, 8000, 'discovery');
+    // An old account of Bob's, with an old chat.
+    alice.peers.set('old-bob', { id: 'old-bob', name: 'Bob (old)', host: '127.0.0.1', online: false });
+    alice.store.addMessage('old-bob', { id: 'o1', from: 'old-bob', ts: 1000, kind: 'text', text: 'old chat' });
+    alice.convs['old-bob'] = { id: 'old-bob', type: 'direct', unread: 2, lastTs: 1000 };
+    const n = alice.mergeContact('old-bob', bob.id);
+    assert.strictEqual(n, 1);
+    assert.ok(alice.loadMessages(bob.id).some((m) => m.text === 'old chat'));
+    assert.strictEqual(alice.loadMessages('old-bob').length, 0);
+    assert.ok(!alice.listPeers().some((p) => p.id === 'old-bob'), 'hidden from the lists');
+    assert.strictEqual(alice.convs[bob.id].unread, 2);
+    // Hiding someone online: they come back when they write.
+    alice.hideContact(bob.id);
+    assert.ok(!alice.listPeers().some((p) => p.id === bob.id));
+    const m = bob.sendText(alice.id, 'hi again');
+    await waitFor(() => alice.loadMessages(bob.id).some((x) => x.id === m.id), 5000, 'arrived');
+    assert.ok(alice.listPeers().some((p) => p.id === bob.id), 'back after a message');
+  } finally {
+    await alice.stop();
+    await bob.stop();
+  }
+});

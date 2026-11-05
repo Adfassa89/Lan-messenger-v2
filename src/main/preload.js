@@ -46,6 +46,8 @@ const CHANNELS = {
   forgetContact: 'forget-contact',
   deleteMessage: 'delete-message',
   muteConv: 'mute-conv',
+  mergeContact: 'merge-contact',
+  hideContact: 'hide-contact',
   getSections: 'get-sections',
   setSections: 'set-sections',
   clearAllHistory: 'clear-all-history',

@@ -240,7 +240,7 @@ function updateTray() {
       label: statusLabel(s),
       type: 'radio',
       checked: status === s,
-      click: () => { autoAway = false; messenger.setProfile({ status: s }); },
+      click: () => { setAutoAway(false); messenger.setProfile({ status: s }); },
     })),
     { type: 'separator' },
     { label: t('Exit'), click: () => { quitting = true; app.quit(); } },
@@ -678,15 +678,24 @@ function setupMediaPermissions() {
 }
 
 // ------------------------------------------------------------------ misc helpers
+// Away after 5 idle minutes, back to Available on the next use. Whether the
+// app set Away by itself is saved, so it still comes back after a restart
+// (an update restart happens exactly while the PC is idle).
+function setAutoAway(on) {
+  autoAway = on;
+  messenger.config.autoAwaySet = on;
+  messenger.store.touch('config');
+}
 function checkIdle() {
   if (!messenger.settings.autoAway) return;
   const idle = powerMonitor.getSystemIdleTime();
   const status = messenger.config.status;
+  if (messenger.config.autoAwaySet && !autoAway) autoAway = true;
   if (idle >= 300 && status === 'online') {
-    autoAway = true;
+    setAutoAway(true);
     messenger.setProfile({ status: 'away' });
   } else if (idle < 30 && autoAway && status === 'away') {
-    autoAway = false;
+    setAutoAway(false);
     messenger.setProfile({ status: 'online' });
   }
 }
@@ -946,7 +955,7 @@ function registerIpc() {
   h('typing', (conv) => messenger.sendTyping(conv));
   h('active-conv', (conv) => { activeConv = conv; });
   h('set-profile', (p) => {
-    autoAway = false;
+    if (p && p.status) setAutoAway(false);
     messenger.setProfile(p);
     updateTray();
     return messenger.getState().me;
@@ -988,6 +997,8 @@ function registerIpc() {
   h('add-peer', (entry) => messenger.addManualPeer(entry));
   h('remove-peer', (entry) => messenger.removeManualPeer(entry));
   h('forget-contact', (id) => messenger.forgetContact(id));
+  h('merge-contact', (from, into) => messenger.mergeContact(from, into));
+  h('hide-contact', (id) => messenger.hideContact(id));
   h('delete-message', (conv, id) => messenger.deleteMessage(conv, id));
   h('mute-conv', (conv, until) => messenger.muteConv(conv, until));
   h('get-sections', () => messenger.getSections());
@@ -1113,6 +1124,7 @@ function wireEvents() {
   messenger.on('conv', (c) => send('conv', c));
   messenger.on('purged', (list) => send('purged', list));
   messenger.on('purged-all', () => send('purged-all'));
+  messenger.on('convs-changed', () => send('reload-chats'));
   messenger.gameInUse = (id) => {
     const w = warlockWindows.get(id) || tetrisWindows.get(id);
     return !!(w && !w.isDestroyed());
@@ -1229,6 +1241,7 @@ async function startAccount({ id, key, name, locked: startLocked, dataDir }) {
   createTray();
   applyLoginItem();
   setInterval(checkIdle, 30000);
+  setTimeout(checkIdle, 3000); // right after a start: Away set by the app goes back if someone is here
   setInterval(checkAutoLock, 15000);
   setInterval(checkAutoInstall, 30000);
   powerMonitor.on('resume', () => messenger.discovery && messenger.discovery.query());

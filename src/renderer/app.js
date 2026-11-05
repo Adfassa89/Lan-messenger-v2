@@ -558,7 +558,7 @@ function renderListNow() {
   // sidebar (they are still in the People directory) unless you search for them.
   const MONTH = 30 * 86400000;
   const inSection = (i) => i.kind === 'direct' && S.sections.list.some((s) => s.id === S.sections.members[i.conv]);
-  const allOthers = items.filter((i) => !i.pinned && !(i.meta && i.meta.lastTs) && !inSection(i));
+  const allOthers = items.filter((i) => !i.pinned && i.kind !== 'group' && !(i.meta && i.meta.lastTs) && !inSection(i));
   const others = allOthers.filter((i) => f || i.online || !i.peer || Date.now() - (i.peer.lastSeen || 0) < MONTH)
     .sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
 
@@ -579,6 +579,25 @@ function renderListNow() {
     list.append(head);
     // Folded, the heading shows how many chats have unread messages.
     if (!folded) for (const i of recent) list.append(convItem(i));
+  }
+  // Every group chat, below Recent chats (folds open or closed).
+  const groups = items.filter((i) => i.kind === 'group').sort((a, b) => a.name.localeCompare(b.name));
+  if (groups.length) {
+    let folded = false;
+    try { folded = localStorage.getItem('lanmsg.groupsFolded') === '1'; } catch { /* ignore */ }
+    if (f) folded = false;
+    const unread = groups.filter((i) => i.meta && i.meta.unread && (!convMuted(i.conv) || i.meta.mention)).length;
+    const row = el('div', 'list-label-row');
+    const head = el('button', `list-label fold${folded ? ' folded' : ''}`,
+      `<span class="fold-arrow">▾</span><span>${esc(t('Groups'))} · ${groups.length}</span>${folded && unread ? `<span class="badge fold-badge">${unread}</span>` : ''}`);
+    head.title = t('Show or hide');
+    head.addEventListener('click', () => { try { localStorage.setItem('lanmsg.groupsFolded', folded ? '0' : '1'); } catch { /* ignore */ } renderListNow(); });
+    const add = el('button', 'list-all', `＋ ${esc(t('Group'))}`);
+    add.title = t('New group');
+    add.addEventListener('click', () => newGroupModal());
+    row.append(head, add);
+    list.append(row);
+    if (!folded) for (const i of groups) list.append(convItem(i));
   }
   // Sections: your own sorting of people, each folds open or closed.
   for (const sec of S.sections.list) {
@@ -604,7 +623,7 @@ function renderListNow() {
     if (!folded && !people.length) list.append(el('div', 'section-empty', esc(t('Drag people here, or right-click a person → Move to section'))));
   }
   // With sections the Others heading always shows: it holds "+ Section" and "All people".
-  if (others.length || (S.sections.list.length && !f)) {
+  if (others.length || !f) {
     // A long People list folds away (click the heading); searching always shows it.
     const many = others.length > 12;
     let folded = false;
@@ -726,11 +745,13 @@ function convMenu(i, x, y) {
   items.push('-');
   items.push({ label: t('Clear chat history'), danger: true, action: () => confirmClear(i.conv) });
   if (i.kind === 'group') items.push({ label: t('Leave group'), danger: true, action: () => confirmLeave(i.conv.slice(2)) });
-  if (i.kind === 'direct' && !i.online) {
+  if (i.kind === 'direct') {
+    items.push({ label: `🔀 ${t('Merge with another person…')}`, action: () => mergeModal(i.conv) });
     items.push({
       label: t('Remove from list'), danger: true, action: async () => {
-        await call(api.forgetContact(i.conv));
+        await call(i.online ? api.hideContact(i.conv) : api.forgetContact(i.conv));
         if (S.active === i.conv) closeConv();
+        if (i.online) toast(t('Removed. They come back to the list if they send you a message.'));
       },
     });
   }
@@ -2411,6 +2432,39 @@ function sectionMessageModal(sec) {
   });
 }
 
+// Two entries for one person (an old account): move the old chat into the
+// other one and keep the old entry out of the list for good.
+function mergeModal(fromId) {
+  const from = S.peers.get(fromId);
+  const host = from && from.host;
+  const others = [...S.peers.values()].filter((p) => p.id !== fromId)
+    .sort((a, b) => (Number(b.host === host) - Number(a.host === host)) || (b.online - a.online) || a.name.localeCompare(b.name));
+  modal({
+    title: t('Merge {name} with…', { name: peerName(fromId) }),
+    body: `<p class="modal-text">${esc(t('For two entries of the same person (for example an old account). The chat with {name} moves into the chat with the person you pick, and {name} disappears from your lists, also when it comes online again. Only on your PC.', { name: peerName(fromId) }))}</p>
+      <input class="input" id="mgFilter" placeholder="${esc(t('Search people'))}" autocomplete="off">
+      <div class="pick-list fw-list" id="mgList">${others.map((p) => `<button class="pick fw-row" data-id="${esc(p.id)}" data-name="${esc(p.name.toLowerCase())}">${avatarHtml('direct', p.id, p.name, p.online ? p.status : 'offline', 'sm')}<div class="pname"><div>${esc(p.name)}</div><div>${esc(p.host || '')}${p.host && p.host === host ? ` · ${esc(t('same PC'))}` : ''}</div></div></button>`).join('')}</div>`,
+    onOpen: (box, close) => {
+      $('#mgFilter', box).addEventListener('input', (e) => {
+        const f = e.target.value.trim().toLowerCase();
+        for (const r of box.querySelectorAll('.fw-row')) r.classList.toggle('hidden', !!f && !r.dataset.name.includes(f));
+      });
+      $('#mgList', box).addEventListener('click', (e) => {
+        const b = e.target.closest('[data-id]');
+        if (!b) return;
+        const into = b.dataset.id;
+        confirmModal(t('Merge into {name}?', { name: peerName(into) }), t('{a} disappears from your list and its messages move into the chat with {b}.', { a: peerName(fromId), b: peerName(into) }), t('Merge'), async () => {
+          const n = await call(api.mergeContact(fromId, into));
+          if (n === undefined) return;
+          close();
+          toast(t('Merged: {n} messages moved', { n }));
+          openConv(into);
+        });
+      });
+    },
+  });
+}
+
 // Send a message or file on to another chat.
 function forwardModal(fromConv, m) {
   const chats = [{ conv: 'broadcast', name: t('Everyone'), kind: 'broadcast' }];
@@ -2925,6 +2979,11 @@ function handleEvent({ type, payload }) {
       S.groups = new Map(payload.map((g) => [g.id, g]));
       renderList();
       if (S.active && convKind(S.active) === 'group') renderHeader();
+      break;
+    case 'reload-chats':
+      S.msgs.clear();
+      if (S.active && convKind(S.active) === 'direct' && !S.peers.has(S.active)) closeConv(); else if (S.active) openConv(S.active);
+      renderList();
       break;
     case 'purged-all':
       // Every chat was emptied: forget what is loaded and show the empty chat.

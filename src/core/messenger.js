@@ -315,7 +315,8 @@ class Messenger extends EventEmitter {
   }
 
   listPeers() {
-    return [...this.peers.values()].map((p) => ({
+    const hidden = this.config.hiddenPeers || {};
+    return [...this.peers.values()].filter((p) => !hidden[p.id]).map((p) => ({
       id: p.id, name: p.name, dept: p.dept || '', host: p.host, port: p.port,
       online: !!p.online, status: p.online ? p.status : 'offline', lastSeen: p.lastSeen || 0,
       app: p.app || '',
@@ -499,6 +500,41 @@ class Messenger extends EventEmitter {
   removeManualPeer(entry) {
     this.config.manualPeers = this.config.manualPeers.filter((e) => e !== entry);
     this.store.touch('config');
+  }
+
+  // A duplicate of someone (e.g. an old account of the same person): its chat
+  // moves into the other one's, and it stays out of every list for good, also
+  // when it comes online again. Its new messages arrive in the other chat.
+  mergeContact(fromId, intoId) {
+    if (!fromId || !intoId || fromId === intoId || fromId === this.id) throw new Error('Choose another person');
+    const moved = this.store.messages(fromId, { limit: Infinity }) || [];
+    for (const m of moved) if (!this.store.hasMessage(intoId, m.id)) this.store.addMessage(intoId, { ...m, mergedFrom: fromId });
+    this.store.clearHistory(fromId);
+    const old = this.convs[fromId];
+    if (old) {
+      const c = this.convs[intoId] || { id: intoId, type: 'direct', unread: 0 };
+      c.unread = (c.unread || 0) + (old.unread || 0);
+      if ((old.lastTs || 0) > (c.lastTs || 0)) Object.assign(c, { lastTs: old.lastTs, lastText: old.lastText, lastFrom: old.lastFrom });
+      this.convs[intoId] = c;
+      delete this.convs[fromId];
+      this.store.touch('conversations');
+      this.emit('conv', c);
+    }
+    this.config.hiddenPeers = { ...(this.config.hiddenPeers || {}), [fromId]: intoId };
+    this.store.touch('config');
+    this.outbox = this.outbox.filter((e) => e.peerId !== fromId);
+    this.store.set('outbox', this.outbox);
+    this.emit('peers', this.listPeers());
+    this.emit('convs-changed');
+    return moved.length;
+  }
+
+  // Remove someone from the lists, also while they are online; they come
+  // back if they send you a message.
+  hideContact(id) {
+    this.config.hiddenPeers = { ...(this.config.hiddenPeers || {}), [id]: true };
+    this.store.touch('config');
+    this.emit('peers', this.listPeers());
   }
 
   forgetContact(id) {
@@ -849,7 +885,13 @@ class Messenger extends EventEmitter {
 
   _onMsg(peerId, w) {
     const kind = ['text', 'file', 'system', 'poll', 'game'].includes(w.kind) ? w.kind : 'text';
-    let conv = peerId;
+    const hidden = (this.config.hiddenPeers || {})[peerId];
+    let conv = typeof hidden === 'string' && !w.broadcast && !w.group ? hidden : peerId;
+    if (hidden === true && !w.broadcast && !w.group) {
+      delete this.config.hiddenPeers[peerId];
+      this.store.touch('config');
+      this.emit('peers', this.listPeers());
+    }
     let type = 'direct';
     if (w.broadcast) {
       conv = 'broadcast';
