@@ -748,6 +748,7 @@ async function openConv(conv) {
     // Opens at the first unread message when there is more than a screenful of them.
     if (d && box.scrollHeight - (d.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop) > box.clientHeight) {
       box.scrollTop = d.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 48;
+      atEnd = false;
     }
   }
   updateJumpButton();
@@ -885,6 +886,16 @@ function renderScheduledStrip() {
   strip.onclick = () => scheduledModal(S.active);
 }
 
+// While you are at the newest message, stay there when the messages grow
+// (pictures loading, off-screen messages getting their real height, a big
+// window showing more of them).
+let atEnd = true;
+const contentWatch = new ResizeObserver(() => { const box = $('#messages'); if (atEnd && box) box.scrollTop = box.scrollHeight; });
+function watchContent(inner) {
+  contentWatch.disconnect();
+  contentWatch.observe(inner);
+}
+
 function isAtBottom(box) {
   return box.scrollHeight - box.scrollTop - box.clientHeight < 80;
 }
@@ -919,12 +930,15 @@ function renderMessages(scrollToEnd, keepOffset) {
     if (S.unreadMark && S.unreadMark.conv === S.active && S.unreadMark.id === m.id) {
       group.append(el('div', 'unread-divider', `<span>${esc(t(S.unreadMark.n === 1 ? '{n} new message' : '{n} new messages', { n: S.unreadMark.n }))}</span>`));
     }
-    group.append(msgNode(list, i));
+    const node = msgNode(list, i);
+    // The newest messages are always laid out for real, so "the bottom" is exact.
+    if (i >= list.length - 40) node.classList.add('recent');
+    group.append(node);
   }
   box.innerHTML = '';
   box.append(inner);
-  if (scrollToEnd || atBottom) box.scrollTop = box.scrollHeight;
-  else if (keepOffset) box.scrollTop = box.scrollHeight - prevHeight + prevTop;
+  watchContent(inner);
+  if (scrollToEnd || atBottom) { box.scrollTop = box.scrollHeight; atEnd = true; } else if (keepOffset) box.scrollTop = box.scrollHeight - prevHeight + prevTop;
   else box.scrollTop = prevTop;
 }
 
@@ -3014,7 +3028,6 @@ function wire() {
   // chat; if you were at the newest message, stay there.
   {
     const mbox = $('#messages');
-    let atEnd = true;
     mbox.addEventListener('scroll', () => { atEnd = isAtBottom(mbox); }, { passive: true });
     new ResizeObserver(() => { if (atEnd) mbox.scrollTop = mbox.scrollHeight; }).observe(mbox);
   }
