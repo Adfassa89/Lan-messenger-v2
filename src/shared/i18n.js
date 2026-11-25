@@ -729,6 +729,8 @@
     "Merge": "Нэгтгэх",
     "Merged: {n} messages moved": "Нэгтгэлээ: {n} мессеж шилжлээ",
     "Choose another person": "Өөр хүн сонгоно уу",
+    "Move my old chats ({name})": "Хуучин чатаа шилжүүлэх ({name})",
+    "Use an existing account": "Байгаа бүртгэлээр нэвтрэх",
     "Mouse wheel zooms.": "Хулганы дугуйгаар ойртуулж холдуулна.",
     "3D graphics are not available on this PC.": "Энэ компьютер дээр 3D график ажиллахгүй байна.",
     "FIGHT!": "ТУЛАЛДААН!",

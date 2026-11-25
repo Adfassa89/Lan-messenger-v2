@@ -8,6 +8,7 @@ const t = (k, v) => I18N.translate(lang, k, v);
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 let state = { accounts: [], full: false, legacy: null };
+let skipLegacy = false; // "Use an existing account" on the move-your-chats screen
 
 function color(id) {
   let h = 0;
@@ -49,7 +50,8 @@ const okPin = (p) => /^\d{4,6}$/.test(p);
 // ------------------------------------------------------------------ views
 function home() {
   const v = $('view');
-  if (state.legacy !== null && state.legacy !== undefined) return migrateView();
+  const legacyWaiting = state.legacy !== null && state.legacy !== undefined;
+  if (legacyWaiting && !skipLegacy) return migrateView();
   const tiles = state.accounts.map((a) => `
     <button class="acc" data-acc="${esc(a.id)}">
       <span class="more" data-more="${esc(a.id)}" title="${esc(t('More'))}">⋯</span>
@@ -59,7 +61,7 @@ function home() {
   v.innerHTML = `<h2>${esc(state.accounts.length ? t('Who is using LAN Messenger?') : t('Create your account'))}</h2>
     <p class="sub">${esc(state.accounts.length ? t('Pick your account and type your PIN.') : t('Accounts belong to this app only (not Windows or e-mail). Up to 4 people can have one on this PC.'))}</p>
     <div class="accounts">${tiles}${state.full ? '' : `<button class="acc add" data-new><div class="av">+</div><b>${esc(t('New account'))}</b><small>${esc(t('{n} of 4', { n: state.accounts.length }))}</small></button>`}</div>
-    <div class="row"><span class="grow"></span>${state.full ? '' : `<button class="btn" data-restore>${esc(t('Restore from backup'))}</button>`}</div>`;
+    <div class="row">${legacyWaiting && !state.full ? `<button class="btn" data-legacy>${esc(t('Move my old chats ({name})', { name: (state.legacy || '').trim() || '…' }))}</button>` : ''}<span class="grow"></span>${state.full ? '' : `<button class="btn" data-restore>${esc(t('Restore from backup'))}</button>`}</div>`;
   $('note').textContent = t('Your chats are encrypted with your PIN. Without the PIN or a backup they cannot be recovered.');
   v.onclick = (e) => {
     const more = e.target.closest('[data-more]');
@@ -68,6 +70,7 @@ function home() {
     if (a) return signInView(state.accounts.find((x) => x.id === a.dataset.acc));
     if (e.target.closest('[data-new]')) return createView();
     if (e.target.closest('[data-restore]')) return restoreView();
+    if (e.target.closest('[data-legacy]')) { skipLegacy = false; return migrateView(); }
     return undefined;
   };
 }
@@ -133,10 +136,11 @@ function migrateView() {
   v.innerHTML = `<h2>${esc(name ? t('Welcome back, {name}', { name }) : t('Welcome back'))}</h2>
     <p class="sub">${esc(t('LAN Messenger now has accounts. Your chats, groups and photo stay; choose a PIN to protect them. You will type it to unlock the app or switch account.'))}</p>
     ${state.full ? `<div class="err">${esc(t('This PC already has 4 accounts. Delete one before your chats can be moved.'))}</div>` : pinPairHtml()}
-    <div class="row"><span class="grow"></span>${state.full ? '' : `<button class="btn primary" data-go>${esc(t('Protect my chats'))}</button>`}</div>`;
+    <div class="row">${state.accounts.length ? `<button class="btn" data-skip>${esc(t('Use an existing account'))}</button>` : ''}<span class="grow"></span>${state.full ? '' : `<button class="btn primary" data-go>${esc(t('Protect my chats'))}</button>`}</div>`;
   $('note').textContent = t('Your chats are encrypted with your PIN. Without the PIN or a backup they cannot be recovered.');
   digitsOnly(v);
   v.onclick = async (e) => {
+    if (e.target.closest('[data-skip]')) { skipLegacy = true; home(); return; }
     if (!e.target.closest('[data-go]')) return;
     const pin = readPinPair();
     if (!pin) return;

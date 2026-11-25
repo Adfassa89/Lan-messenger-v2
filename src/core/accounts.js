@@ -104,6 +104,9 @@ class Accounts {
 
   get full() { return this._read().accounts.length >= MAX_ACCOUNTS; }
 
+  // An account already made from the old profile with this id?
+  hasLegacy(legacyId) { return !!legacyId && this._read().accounts.some((a) => a.legacyId === legacyId); }
+
   create(name, pin, { id } = {}) {
     if (!validPin(pin)) throw new Error('The PIN must be 4 to 6 digits');
     const d = this._read();
@@ -229,7 +232,14 @@ class Accounts {
   // Copies the old folder's chats and settings into the new account, encrypted,
   // then removes the plain copies.
   migrate(legacyDir, name, pin) {
+    let legacyId = null;
+    try { legacyId = JSON.parse(fs.readFileSync(path.join(legacyDir, 'config.json'), 'utf8')).id || null; } catch { /* none */ }
     const { id, key } = this.create(name, pin);
+    if (legacyId) {
+      const d = this._read();
+      this._find(d, id).legacyId = legacyId;
+      this._write(d);
+    }
     const dest = this.dir(id);
     const cipher = cipherFor(key);
     const moved = [];

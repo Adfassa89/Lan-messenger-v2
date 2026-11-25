@@ -124,3 +124,13 @@ test('an account in use by another program cannot be claimed or deleted', () => 
   acc.claim(id);
   acc.release(id);
 });
+
+test('an account remembers the old profile it was made from', () => {
+  const legacy = tmpDir('legacy');
+  fs.writeFileSync(path.join(legacy, 'config.json'), JSON.stringify({ id: 'old-1', name: 'Tem' }));
+  const acc = new Accounts(tmpDir('acc'));
+  assert.ok(!acc.hasLegacy('old-1'));
+  acc.migrate(legacy, 'Tem', '1234');
+  assert.ok(acc.hasLegacy('old-1'));
+  assert.ok(!acc.hasLegacy('someone-else'));
+});

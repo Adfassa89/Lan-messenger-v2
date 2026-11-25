@@ -91,15 +91,23 @@ class Session {
   // An old profile (from before accounts) waits in this Windows user's folder.
   legacyName() {
     try {
-      const c = JSON.parse(fs.readFileSync(path.join(this.legacyDir, 'config.json'), 'utf8'));
-      return c && typeof c === 'object' ? String(c.name || '') || ' ' : null;
+      const file = path.join(this.legacyDir, 'config.json');
+      const c = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!c || typeof c !== 'object') return null;
+      // Already moved into an account (a copy left behind): clear it away.
+      if (c.id && this.accounts.hasLegacy(c.id)) {
+        try { fs.rmSync(file, { force: true }); } catch { /* not ours to remove */ }
+        return null;
+      }
+      return String(c.name || '') || ' ';
     } catch { return null; }
   }
 
   // ---- start ----
   async begin() {
     this._ipc();
-    const r = this.legacyName() === null ? this._remembered() : null;
+    // The account last used here signs in even if an old profile still waits to be moved.
+    const r = this._remembered();
     if (r) {
       try {
         this.accounts.claim(r.id);
