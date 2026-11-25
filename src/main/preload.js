@@ -81,8 +81,6 @@ const CHANNELS = {
   accMigrate: 'acc-migrate',
   accSignin: 'acc-signin',
   accDelete: 'acc-delete',
-  accRequestDelete: 'acc-request-delete',
-  accCancelDelete: 'acc-cancel-delete',
   accRestore: 'acc-restore',
   accCheck: 'acc-check',
   accChangePin: 'acc-change-pin',

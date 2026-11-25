@@ -8,8 +8,8 @@
 // stored only wrapped (encrypted) with the PIN, so without the PIN or a backup
 // the chats cannot be read, and there is no way to recover them.
 //
-// Deleting an account needs its PIN, or a deletion request that has waited a
-// full 30 days.
+// Any account can be deleted from the sign-in screen at once (after a
+// confirmation), so a PC with 4 accounts always has room again.
 
 const fs = require('fs');
 const path = require('path');
@@ -17,7 +17,6 @@ const crypto = require('crypto');
 const zlib = require('zlib');
 
 const MAX_ACCOUNTS = 4;
-const DELETE_WAIT = 30 * 86400000;
 const MAGIC = Buffer.from('LME1');
 const BACKUP_MAGIC = Buffer.from('LMBK1');
 const KDF = { N: 2 ** 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
@@ -95,9 +94,6 @@ class Accounts {
     const now = Date.now();
     return this._read().accounts.map((a) => ({
       id: a.id, name: a.name, avatar: a.avatar || null, created: a.created,
-      deleteRequestedAt: a.deleteRequestedAt || 0,
-      deletableAt: a.deleteRequestedAt ? a.deleteRequestedAt + DELETE_WAIT : 0,
-      canDeleteNow: !!a.deleteRequestedAt && now >= a.deleteRequestedAt + DELETE_WAIT,
       waitUntil: a.lockUntil && a.lockUntil > now ? a.lockUntil : 0,
     }));
   }
@@ -179,27 +175,10 @@ class Accounts {
     this._write(d);
   }
 
-  // Without the PIN: ask, then wait 30 days.
-  requestDelete(id) {
-    const d = this._read();
-    const a = this._find(d, id);
-    if (!a.deleteRequestedAt) a.deleteRequestedAt = Date.now();
-    this._write(d);
-    return a.deleteRequestedAt + DELETE_WAIT;
-  }
 
-  cancelDelete(id) {
-    const d = this._read();
-    delete this._find(d, id).deleteRequestedAt;
-    this._write(d);
-  }
-
-  // With the PIN at once, or without it once the 30 days are over.
-  remove(id, pin, { now = Date.now() } = {}) {
-    const d = this._read();
-    const a = this._find(d, id);
-    const waited = a.deleteRequestedAt && now >= a.deleteRequestedAt + DELETE_WAIT;
-    if (!waited) this.unlock(id, pin);
+  // Deletes the account and its chats at once (only not while it is signed in).
+  remove(id) {
+    this._find(this._read(), id);
     if (this.inUseBy(id)) throw new Error('This account is signed in on this PC right now');
     fs.rmSync(this.dir(id), { recursive: true, force: true });
     const after = this._read();
@@ -304,4 +283,4 @@ class Accounts {
   }
 }
 
-module.exports = { Accounts, cipherFor, validPin, MAX_ACCOUNTS, DELETE_WAIT };
+module.exports = { Accounts, cipherFor, validPin, MAX_ACCOUNTS };

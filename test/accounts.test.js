@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { Accounts, cipherFor, validPin, DELETE_WAIT } = require('../src/core/accounts');
+const { Accounts, cipherFor, validPin } = require('../src/core/accounts');
 const { Store } = require('../src/core/store');
 const { tmpDir } = require('./helpers');
 
@@ -57,26 +57,15 @@ test('changing the PIN keeps the chats', () => {
   assert.ok(acc.unlock(id, '246810').equals(key));
 });
 
-test('delete with the PIN at once, or without it only after 30 days', () => {
+test('an account is deleted at once, without its PIN, so a full PC has room again', () => {
   const acc = new Accounts(tmpDir('acc'));
-  const a = acc.create('Anna', '1234');
-  const b = acc.create('Bat', '5678');
-  assert.throws(() => acc.remove(a.id, '0000'), /Wrong PIN/);
-  acc.remove(a.id, '1234');
-  assert.ok(!fs.existsSync(acc.dir(a.id)));
-  const until = acc.requestDelete(b.id);
-  assert.ok(until - Date.now() > DELETE_WAIT - 5000);
-  assert.throws(() => acc.remove(b.id, '', { now: Date.now() + 29 * 86400000 }));
-  acc.remove(b.id, '', { now: Date.now() + DELETE_WAIT + 1000 });
-  assert.strictEqual(acc.list().length, 0);
-});
-
-test('signing in with the PIN cancels a deletion request', () => {
-  const acc = new Accounts(tmpDir('acc'));
-  const { id } = acc.create('Anna', '1234');
-  acc.requestDelete(id);
-  acc.unlock(id, '1234');
-  assert.strictEqual(acc.list()[0].deleteRequestedAt, 0);
+  const ids = ['1111', '2222', '3333', '4444'].map((p, i) => acc.create(`User ${i}`, p).id);
+  assert.ok(acc.full);
+  acc.remove(ids[1]);
+  assert.ok(!fs.existsSync(acc.dir(ids[1])), 'its chats are gone');
+  assert.ok(!acc.full);
+  acc.create('New person', '5555');
+  assert.deepStrictEqual(acc.list().map((a) => a.name), ['User 0', 'User 2', 'User 3', 'New person']);
 });
 
 test('the old profile becomes account 1, encrypted, with nothing left in plain text', () => {

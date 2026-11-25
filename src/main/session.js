@@ -184,9 +184,7 @@ class Session {
       const acc = this.accounts.list().find((a) => a.id === id);
       return this._start({ id, key, name: acc.name, locked: false });
     });
-    h('acc-delete', (id, pin) => this.accounts.remove(id, pin));
-    h('acc-request-delete', (id) => this.accounts.requestDelete(id));
-    h('acc-cancel-delete', (id) => this.accounts.cancelDelete(id));
+    h('acc-delete', (id) => this.accounts.remove(id));
     h('acc-restore', async (pin) => {
       if (this.accounts.full) throw new Error('This PC already has 4 accounts');
       const r = await dialog.showOpenDialog(this.win || undefined, { title: 'Restore', filters: [{ name: 'LAN Messenger backup', extensions: ['lmbackup'] }], properties: ['openFile'] });

@@ -731,6 +731,7 @@
     "Choose another person": "Өөр хүн сонгоно уу",
     "Move my old chats ({name})": "Хуучин чатаа шилжүүлэх ({name})",
     "Use an existing account": "Байгаа бүртгэлээр нэвтрэх",
+    "The account and all its chats are deleted from this PC for good. They cannot be brought back unless a backup was made.": "Бүртгэл болон түүний бүх чат энэ компьютерээс бүрмөсөн устна. Нөөц хийгээгүй бол сэргээх боломжгүй.",
     "Mouse wheel zooms.": "Хулганы дугуйгаар ойртуулж холдуулна.",
     "3D graphics are not available on this PC.": "Энэ компьютер дээр 3D график ажиллахгүй байна.",
     "FIGHT!": "ТУЛАЛДААН!",
