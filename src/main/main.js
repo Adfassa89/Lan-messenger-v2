@@ -933,8 +933,7 @@ function registerIpc() {
   h('chat-files', (conv) => withExists(messenger.chatFiles(conv)));
   h('downloads', () => withExists(messenger.downloads()));
   h('open-download-dir', async () => {
-    const dir = messenger.settings.downloadDir;
-    fs.mkdirSync(dir, { recursive: true });
+    const dir = messenger.saveDir();
     const err = await shell.openPath(dir);
     if (err) throw new Error(err);
   });

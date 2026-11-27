@@ -133,6 +133,7 @@ class Messenger extends EventEmitter {
     super();
     this.store = new Store(dataDir, { cipher });
     this.dataDir = dataDir;
+    this.defaultDownloadDir = downloadDir; // this Windows user's own Downloads folder
     this.tcpPort = tcpPort;
     this.udpPort = udpPort;
     this.appVersion = appVersion;
@@ -1345,6 +1346,21 @@ class Messenger extends EventEmitter {
     throw new Error('This message cannot be forwarded');
   }
 
+  // Where received files go. The folder in Settings belongs to whichever
+  // Windows user set it; an account used from another Windows user of the PC
+  // may not be allowed to write there, so then this user's own Downloads is used.
+  saveDir() {
+    for (const dir of [this.settings.downloadDir, this.defaultDownloadDir]) {
+      if (!dir) continue;
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+        fs.accessSync(dir, fs.constants.W_OK);
+        return dir;
+      } catch { /* not allowed here: try the next */ }
+    }
+    return this.defaultDownloadDir;
+  }
+
   // ------------------------------------------------------------------ storage
   // Which files of the chats are on this PC, and how much room each chat takes.
   // Only files the app itself put there count as removable: received files in
@@ -1352,7 +1368,7 @@ class Messenger extends EventEmitter {
   _ownedFile(p) {
     if (!p) return false;
     const inside = (dir) => dir && path.resolve(p).toLowerCase().startsWith(path.resolve(dir).toLowerCase() + path.sep);
-    return inside(this.settings.downloadDir) || inside(path.join(this.dataDir || '', 'attachments'));
+    return inside(this.settings.downloadDir) || inside(this.defaultDownloadDir) || inside(path.join(this.dataDir || '', 'attachments'));
   }
 
   _sizeOf(p) {

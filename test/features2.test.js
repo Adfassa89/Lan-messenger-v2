@@ -325,3 +325,29 @@ test('a duplicate contact can be merged into the right one, and stays hidden', a
     await bob.stop();
   }
 });
+
+test("files still arrive when the saved download folder belongs to another Windows user", async () => {
+  const [alice, bob] = makePair();
+  await alice.start();
+  await bob.start();
+  try {
+    await waitFor(() => alice.peers.get(bob.id)?.online && bob.peers.get(alice.id)?.online, 8000, 'discovery');
+    // A folder Bob may not write to (here: "inside" a file, which can never be created).
+    const blocker = path.join(bob.dir, 'not-a-folder');
+    fs.writeFileSync(blocker, 'x');
+    bob.setSettings({ downloadDir: path.join(blocker, 'LAN Messenger 2'), autoAccept: false });
+    assert.strictEqual(bob.saveDir(), bob.defaultDownloadDir);
+    const src = path.join(alice.dir, 'East_November_Shell.PIT');
+    fs.writeFileSync(src, Buffer.alloc(50000, 3));
+    const [m] = alice.sendFiles(bob.id, [src]);
+    await waitFor(() => bob.loadMessages(alice.id).some((x) => x.id === m.id), 5000, 'offer arrived');
+    bob.files.download(alice.id, m.id);
+    await waitFor(() => bob.loadMessages(alice.id).find((x) => x.id === m.id).file.state === 'done', 10000, 'downloaded');
+    const got = bob.loadMessages(alice.id).find((x) => x.id === m.id).file;
+    assert.ok(got.path.startsWith(bob.defaultDownloadDir), got.path);
+    assert.strictEqual(fs.statSync(got.path).size, 50000);
+  } finally {
+    await alice.stop();
+    await bob.stop();
+  }
+});

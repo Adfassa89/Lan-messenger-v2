@@ -241,7 +241,7 @@ class FileTransfers {
       return this._fail(conv, msgId, 'Sender is offline. Try again when they are online.');
     }
 
-    const dir = this.m.settings.downloadDir;
+    const dir = this.m.saveDir ? this.m.saveDir() : this.m.settings.downloadDir;
     const job = { conv, link: null, cancelled: false, parts: [] };
     this.downloads.set(f.tid, job);
     this._update(conv, msgId, { state: 'downloading', error: null });
